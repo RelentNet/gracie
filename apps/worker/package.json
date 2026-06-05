@@ -1,0 +1,27 @@
+{
+  "name": "@gracie/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fastify + BullMQ worker — long-running pipeline jobs (Phase 1A: bootstrap stub).",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "boot-check": "tsx src/boot-check.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0"
+  },
+  "dependencies": {
+    "@gracie/db": "workspace:*",
+    "@gracie/shared": "workspace:*",
+    "bullmq": "^5.34.0",
+    "fastify": "^5.2.1"
+  },
+  "devDependencies": {
+    "@gracie/config": "workspace:*",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.18.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

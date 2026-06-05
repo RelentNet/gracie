@@ -1,0 +1,11 @@
+/*
+ * Typeface imports (docs/08 §3). IBM Plex Sans (headings/body) + IBM Plex Mono
+ * (code/data). Self-hosted via @fontsource so builds need no network access.
+ * Weights: Sans 400/500/600/700; Mono 400/500.
+ */
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-sans/700.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';

@@ -1,0 +1,30 @@
+{
+  "name": "@gracie/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared tooling config: tsconfig presets, ESLint base, Tailwind preset.",
+  "exports": {
+    "./eslint": "./eslint.base.mjs",
+    "./tailwind": "./tailwind.preset.mjs",
+    "./tsconfig/base.json": "./tsconfig/base.json",
+    "./tsconfig/next.json": "./tsconfig/next.json",
+    "./tsconfig/node.json": "./tsconfig/node.json"
+  },
+  "files": [
+    "eslint.base.mjs",
+    "tailwind.preset.mjs",
+    "tsconfig"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0"
+  },
+  "dependencies": {
+    "typescript-eslint": "^8.21.0",
+    "@eslint/js": "^9.18.0"
+  },
+  "peerDependencies": {
+    "eslint": "^9.18.0"
+  }
+}

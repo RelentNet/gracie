@@ -31,3 +31,6 @@ pnpm-debug.log*
 # Test / coverage
 coverage/
 .turbo/
+
+# TypeScript incremental build info
+*.tsbuildinfo

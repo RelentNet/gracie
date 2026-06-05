@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["tailwind.preset.mjs"],
+  "exclude": ["eslint.base.mjs", "eslint.config.mjs", "node_modules"]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GA App web — Next.js App Router UI + light API routes.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0"
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.1.1",
+    "@fontsource/ibm-plex-sans": "^5.1.1",
+    "@gracie/db": "workspace:*",
+    "@gracie/shared": "workspace:*",
+    "lucide-react": "^0.471.1",
+    "next": "^15.1.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@gracie/config": "workspace:*",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "eslint": "^9.18.0",
+    "eslint-config-next": "^15.1.6",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.3"
+  }
+}

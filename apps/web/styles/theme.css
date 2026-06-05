@@ -1,0 +1,91 @@
+/*
+ * Design tokens (docs/08 §2) + Tailwind CSS v4 theme.
+ *
+ * Tailwind v4 is CSS-first: the `@theme` block below defines the design tokens
+ * AND generates the matching utility classes (e.g. `bg-navy-900`, `text-slate-500`).
+ * The same tokens are exposed as plain CSS custom properties for inline-style
+ * use (typography convention, docs/08 §3) and for component color mapping.
+ */
+@import 'tailwindcss';
+
+@import './fonts.css';
+
+@theme {
+  /* --- Navy: sidebar bg, primary dark text --- */
+  --color-navy-900: #0f172a;
+  --color-navy-800: #1e293b;
+  --color-navy-700: #1e293b;
+
+  /* --- Blue: primary actions, links, in-progress --- */
+  --color-blue-500: #3b82f6;
+  --color-blue-700: #1e40af;
+  --color-blue-100: #dbeafe;
+
+  /* --- Emerald: success, complete, positive --- */
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+  --color-emerald-100: #d1fae5;
+
+  /* --- Amber: warnings, 48h flags, needs-review --- */
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #d97706;
+  --color-amber-100: #fef3c7;
+
+  /* --- Red: overdue, critical, admin-only --- */
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-red-100: #fee2e2;
+
+  /* --- Slate: secondary text, inactive, backgrounds --- */
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-100: #f1f5f9;
+
+  /* --- Typefaces (docs/08 §3) --- */
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* --- Radius (docs/08 §4) --- */
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+/*
+ * Base element styling. Typography sizes/weights/line-heights are applied via
+ * INLINE styles per docs/08 §3 — so we set only the family + sensible defaults
+ * here, not size utilities.
+ */
+:root {
+  color-scheme: light;
+  --surface: #ffffff;
+  --surface-muted: var(--color-slate-100);
+  --text-primary: var(--color-navy-900);
+  --text-secondary: var(--color-slate-500);
+  --border-subtle: #e2e8f0;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background-color: var(--surface-muted);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code,
+pre,
+.font-data {
+  font-family: var(--font-mono);
+}
+
+/* Visible focus indicator on all interactive elements (docs/08 §11, WCAG 2.2). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-blue-500);
+  outline-offset: 2px;
+}

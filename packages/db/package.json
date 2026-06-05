@@ -1,0 +1,25 @@
+{
+  "name": "@gracie/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Database access — Supabase client stubs + generated DB types (Phase 1A: stubs only).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/client.ts",
+    "./browser": "./src/client.browser.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0"
+  },
+  "dependencies": {
+    "@gracie/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@gracie/config": "workspace:*",
+    "eslint": "^9.18.0",
+    "typescript": "^5.7.3"
+  }
+}
