@@ -47,33 +47,40 @@ the app cannot start without them. Everything else can be managed in API Setting
 
 ---
 
-## 3. Supabase (Postgres + pgvector)
+## 3. Supabase (Postgres + pgvector — SELF-HOSTED on Proxmox VM) (D15)
 
 - **Purpose:** structured data + vector store.
-- **Credentials:** project URL, anon key (frontend, RLS-bound), service-role key (backend, bypasses RLS).
-- **Env vars:** `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
-- **Setup:**
-  1. Create project; enable `vector` + `pgcrypto` extensions.
-  2. Run migration generated from `docs/04-database-schema.sql`.
-  3. Configure JWT so Logto's `role`/`sub` claims are readable by `auth_role()`/`auth_uid()`.
-  4. Generate DB types (`supabase gen types`) into `packages/db`.
-- **Gotchas:** NEVER ship the service-role key to the browser. RLS is defense-in-depth; API middleware is primary. Tune the ivfflat `lists` as embeddings grow.
+- **Credentials:** API URL (internal/Tunnel), anon key (frontend, RLS-bound), service-role key (backend, bypasses RLS), JWT secret, DB password.
+- **Env vars:** `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`.
+- **Setup (self-hosted via Coolify):**
+  1. Deploy the **Supabase self-hosted stack** (Coolify has a one-click Supabase service, or use the official docker-compose). This brings up Postgres + GoTrue + PostgREST + Realtime + Storage + Kong + Studio + meta (~8 containers).
+  2. Set strong `POSTGRES_PASSWORD`, `JWT_SECRET`, dashboard creds; generate anon + service-role keys from the JWT secret.
+  3. Enable `vector` + `pgcrypto` extensions (in the SQL editor / migration).
+  4. Run migration generated from `docs/04-database-schema.sql`.
+  5. Configure JWT so Logto's `role`/`sub` claims are readable by `auth_role()`/`auth_uid()` (align `SUPABASE_JWT_SECRET` or validate Logto JWTs at the API layer and set `request.jwt.claims`).
+  6. Generate DB types (`supabase gen types` against the self-hosted instance) into `packages/db`.
+  7. Map the Postgres data volume to a SAN-backed path (Synology, NVMe-cached).
+- **Gotchas:** NEVER ship the service-role key to the browser. RLS is defense-in-depth; API middleware is primary. Tune the ivfflat `lists` as embeddings grow. **You now own backups** — schedule `pg_dump`/PITR (Phase 10), with the encrypted copy going off-site.
 - **Bootstrap (env-only):** yes — required at startup.
 
 ---
 
-## 4. Cloudflare R2 (file storage)
+## 4. MinIO (file storage — self-hosted, S3-compatible) (D16)
 
-- **Purpose:** raw file storage; S3-compatible; zero egress.
-- **Credentials:** account id, access key id, secret access key, bucket name.
-- **Env vars:** `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_ENDPOINT`.
-- **Setup:**
-  1. Create bucket `ga-app` (+ separate dev bucket).
-  2. Create scoped API token (object read/write on the bucket only).
-  3. Backend uses the S3 SDK with the R2 endpoint to issue **presigned URLs** (15-min).
-- **Bucket layout:** see `01-architecture.md` §R2 / pipeline docs.
-- **Gotchas:** credentials backend-only; frontend gets presigned URLs only. Move = copy+delete + update `documents.r2_key`.
-- **Admin → API Settings:** `service = 'r2'` (config holds bucket/endpoint; secret = access key secret).
+- **Purpose:** raw file storage on owned infra. S3-compatible — **same API and code as the R2 design**; only endpoint/credentials differ.
+- **Credentials:** endpoint URL, access key, secret key, bucket name.
+- **Env vars:** `S3_ENDPOINT` (e.g. `http://minio:9000` internal), `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET=ga-app`, `S3_REGION=us-east-1` (arbitrary for MinIO), `S3_FORCE_PATH_STYLE=true`.
+- **Setup (on the Proxmox VM via Coolify):**
+  1. Deploy MinIO container; set root user/password; create bucket `ga-app` (+ dev bucket).
+  2. Create a scoped access key (read/write on `ga-app` only) for the app.
+  3. Backend uses the **AWS S3 SDK** pointed at the MinIO endpoint with `forcePathStyle: true` to issue **presigned URLs** (15-min).
+  4. Data path on the VM maps to a volume backed by the Synology SAN (SHR + NVMe cache).
+- **Bucket layout:** unchanged — see `01-architecture.md` / `06-ai-pipeline.md` (`clients/[slug]/...`, `knowledge-base/...`).
+- **Gotchas:** credentials backend-only; frontend gets presigned URLs only. Move = copy+delete + update `documents.r2_key`. The DB column is still named `r2_key` (path string) — it is storage-agnostic; no rename needed.
+- **Disaster recovery (Phase 10):** nightly encrypted sync of `ga-app` to an off-site target (R2 or offsite Synology).
+- **Admin → API Settings:** `service = 'r2'` enum reused as the S3 credential slot (label "Object Storage (MinIO)"); config holds endpoint/bucket; secret = access key secret.
+
+> **Note:** the codebase keeps generic S3 env var names (`S3_*`) so swapping MinIO ↔ R2 ↔ any S3 provider is a config change only. Earlier `R2_*` names in `.env.example` are aliased to these.
 
 ---
 
@@ -83,8 +90,8 @@ the app cannot start without them. Everything else can be managed in API Setting
 - **Credentials:** endpoint, app id, app secret; Microsoft connector configured inside Logto.
 - **Env vars:** `LOGTO_ENDPOINT`, `LOGTO_APP_ID`, `LOGTO_APP_SECRET`, `LOGTO_COOKIE_SECRET`.
 - **Setup:**
-  1. Self-host Logto on Coolify (D4) — or Logto Cloud for first pass (confirm before Phase 1).
-  2. Add a **Microsoft/Entra** social connector in Logto (uses the GA Entra app).
+  1. **Self-host Logto on Coolify** (D4/D15) — deploy the Logto container + its Postgres; set the admin console + the app endpoints behind the Cloudflare Tunnel.
+  2. Add a **Microsoft/Entra** social connector in Logto (uses the GA Entra login app).
   3. Define roles (admin/standard/viewer) in Logto; ensure they emit as JWT `role` claim.
   4. App: configure callback `/api/auth/callback`; verify JWT in middleware.
 - **Gotchas:** role lives in JWT claims → role changes apply on next token issuance. Login (Logto→Entra) is SEPARATE from calendar access (§6).
@@ -130,15 +137,18 @@ the app cannot start without them. Everything else can be managed in API Setting
 
 ---
 
-## 9. Coolify + Cloudflare Tunnel (hosting)
+## 9. Proxmox VM + Coolify + Cloudflare Tunnel (hosting — self-hosted, D10/D15)
 
-- **Purpose:** self-hosted PaaS on Hetzner CX42; secure ingress with no open ports.
+- **Purpose:** run the full stack on owned infra; secure ingress with no open ports.
+- **Host:** Proxmox (2× Xeon E5-2660 v3, 128 GB RAM) + Synology SAN (SHR, 24 TB + redundant 2×1 TB NVMe cache, 10 GbE).
 - **Setup:**
-  1. Provision Hetzner CX42 (8 vCPU/16 GB) — confirm Hetzner vs DO before Phase 1.
-  2. Install Coolify; deploy containers: `web`, `worker`, `redis`, `n8n`, `n8n-postgres`, `logto`.
-  3. Configure Cloudflare Tunnel → route public hostnames to `web` and Logto.
-  4. Set all env vars in Coolify per-service.
-- **Gotchas:** Redis + n8n + worker + Next.js together need the CX42 headroom (D10). Set up backups (Supabase + R2 are managed; back up n8n-postgres + Coolify config).
+  1. Create a Proxmox VM: **Debian 12, 8 vCPU / 32 GB RAM / 200 GB disk** (D10). Use `virtio-scsi` + write-back caching for the disk.
+  2. Install Docker + **Coolify**.
+  3. Deploy containers: `web`, `worker`, `redis`, **`supabase` (stack)**, **`minio`**, `n8n`, `n8n-postgres`, `logto`.
+  4. Configure Cloudflare Tunnel → route public hostnames to `web` and the Logto console only; keep DB/MinIO/Redis internal.
+  5. Set all env vars in Coolify per-service.
+  6. Map data volumes (Postgres, MinIO) to SAN-backed storage.
+- **Gotchas:** the full self-hosted stack idles ~6 GB RAM — the 32 GB VM has ample headroom (D10). **You own all backups now**: Postgres (`pg_dump`/PITR), MinIO bucket, n8n-postgres, and Coolify config — schedule + send encrypted copies off-site (Phase 10, D16).
 
 ---
 
@@ -146,11 +156,12 @@ the app cannot start without them. Everything else can be managed in API Setting
 
 ```dotenv
 # --- Bootstrap (env-only, required at startup) ---
-SUPABASE_URL=
+SUPABASE_URL=                   # self-hosted instance URL
 SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_JWT_SECRET=
 APP_ENCRYPTION_KEY=             # encrypts integration_credentials secrets
-LOGTO_ENDPOINT=
+LOGTO_ENDPOINT=                 # self-hosted Logto URL
 LOGTO_APP_ID=
 LOGTO_APP_SECRET=
 LOGTO_COOKIE_SECRET=
@@ -168,11 +179,13 @@ RECALL_REGION=
 OPENAI_API_KEY=
 RESEND_API_KEY=
 RESEND_FROM=
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET=
-R2_ENDPOINT=
+# Object storage (self-hosted MinIO; S3-compatible. Same vars work for R2.)
+S3_ENDPOINT=                    # e.g. http://minio:9000 (internal)
+S3_ACCESS_KEY_ID=
+S3_SECRET_ACCESS_KEY=
+S3_BUCKET=ga-app
+S3_REGION=us-east-1
+S3_FORCE_PATH_STYLE=true
 
 # --- Worker / queue ---
 REDIS_URL=

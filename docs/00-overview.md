@@ -72,12 +72,12 @@ Genuine conflict with no clear owner    → apply judgment toward what makes sen
 | --- | --- | --- | --- | --- |
 | Frontend framework | React 18 + Vite (Figma Make) | Next.js (App Router) | **Next.js (App Router)** | Real deployable app; Figma Make env was a prototype host only |
 | Meeting capture | Otter.ai | Recall.ai | **Recall.ai** (hard-locked) | Records + transcribes; single bot per meeting |
-| File storage | Google Drive | Cloudflare R2 | **Cloudflare R2** | S3-compatible, zero egress, in-app browser |
+| File storage | Google Drive | Cloudflare R2 | **Self-hosted MinIO** (S3-compatible) | Owned-infra for compliance (D16); same S3 API as R2; R2 kept only as backup target |
 | AI provider | ChatGPT / GPT-4 | Claude (sonnet) | **OpenAI first, behind a universal provider interface** | Start OpenAI; swap/add Claude later via dropdown + per-provider auth |
 | Email | Gmail auto-send | Resend | **Resend, never auto-send** | Controlled outbound; drafts staged, never sent automatically |
 | Documents generated | 5 types | 6 types | **6 types** | Internal vs client email drafts are separate |
 | Automations | Make.com | n8n (self-hosted) | **n8n + backend cron** | Backend owns core pipeline; n8n for configurable extras |
-| Hosting | Figma Make env | Coolify on VPS | **Coolify on Hetzner CX42** | Self-hosted, full control |
+| Hosting | Figma Make env | Coolify on VPS | **Coolify on a self-hosted Proxmox VM** (Debian 12) | Owned infra for compliance/residency (D10/D15); Supabase, MinIO, Logto all self-hosted |
 | SSO | Logto + MS SSO | Logto + MS SSO | **Logto now** (MS today, Google/email later) | Abstracts identity for future resale |
 | Calendar access | Per-user OAuth connect | Per-user delegated tokens | **App-level Graph `Calendars.Read`, scoped to a security group** | Removes 8-token lifecycle; new hire = add to group |
 
@@ -97,7 +97,7 @@ Full rationale in `02-tech-decisions.md`. Summary for quick reference:
 | Backend topology | Monorepo (pnpm workspaces): `apps/web` (Next.js) + `apps/worker` (Fastify) + `packages/*` |
 | Long-running jobs | Fastify worker service + **BullMQ + Redis** |
 | Database | Supabase — Postgres + pgvector |
-| File storage | Cloudflare R2 (presigned URLs only; never exposed to frontend) |
+| File storage | Self-hosted MinIO, S3-compatible (presigned URLs only; never exposed to frontend) |
 | Auth | Logto → Microsoft Entra SSO; role claims in JWT; middleware enforcement |
 | Calendar | Microsoft Graph, **app-level** permission scoped to a security group |
 | Meeting bot | Recall.ai, one bot per deduplicated meeting |
@@ -105,7 +105,7 @@ Full rationale in `02-tech-decisions.md`. Summary for quick reference:
 | Email | Resend (no auto-send ever) |
 | Automations | n8n (self-hosted on Coolify); calls backend API only, never touches DB/R2 directly |
 | Real-time | Polling for MVP → Supabase Realtime later |
-| VPS | Hetzner CX42 (8 vCPU / 16 GB) |
+| Hosting | Self-hosted Proxmox VM — Debian 12, 8 vCPU / 32 GB / 200 GB (D10/D15) |
 
 ---
 
@@ -113,7 +113,7 @@ Full rationale in `02-tech-decisions.md`. Summary for quick reference:
 
 ```
 Layer 1 — Supabase pgvector    ← what the AI queries (semantic search)
-Layer 2 — Cloudflare R2        ← where raw files live (docs, transcripts, uploads)
+Layer 2 — MinIO (S3-compatible) ← where raw files live (docs, transcripts, uploads); self-hosted
 Layer 3 — In-app file browser  ← what humans see (Next.js, via presigned URLs)
 ```
 
@@ -143,16 +143,17 @@ Layer 3 — In-app file browser  ← what humans see (Next.js, via presigned URL
 | --- | --- |
 | **Next.js** | Frontend + light API routes |
 | **Fastify worker** | Long-running pipeline jobs (embedding, AI generation, file writes) |
-| **Supabase** | Postgres (structured data) + pgvector (embeddings) |
-| **Cloudflare R2** | Raw file storage (S3-compatible, zero egress) |
-| **Logto** | Identity abstraction layer in front of Microsoft Entra SSO |
+| **Supabase** (self-hosted) | Postgres (structured data) + pgvector (embeddings) |
+| **MinIO** (self-hosted) | Raw file storage (S3-compatible); replaces R2 (D16) |
+| **Logto** (self-hosted) | Identity abstraction layer in front of Microsoft Entra SSO |
 | **Microsoft Graph** | Read team Outlook calendars (app-level, group-scoped) |
 | **Recall.ai** | Meeting bot — records + delivers transcript |
 | **OpenAI** | Document generation + embeddings (first AI provider) |
 | **Resend** | All outbound email (daily sync, alerts) — no auto-send |
 | **n8n** | Self-hosted, configurable/custom automations only |
 | **BullMQ + Redis** | Job queue for the worker |
-| **Coolify** | Self-hosted PaaS on the VPS (deploys containers) |
+| **Coolify** | Self-hosted PaaS on the Proxmox VM (deploys containers) |
+| **Proxmox VM** | Debian 12 VM on owned hardware hosting the entire self-hosted stack (D10) |
 | **Cloudflare Tunnel** | Secure cloud→server bridge (no open ports) |
 
 ---

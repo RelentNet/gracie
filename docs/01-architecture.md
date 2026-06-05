@@ -1,7 +1,9 @@
 # 01 — Architecture
 
 > Infrastructure, the three-layer data model, the n8n boundary, and request/auth flow.
-> Decisions referenced here (D1–D14) are defined in `02-tech-decisions.md`.
+> Decisions referenced here (D1–D16) are defined in `02-tech-decisions.md`.
+> **Hosting:** self-hosted on a Proxmox VM (D10/D15). Supabase, MinIO, and Logto are
+> self-hosted; only Recall/OpenAI/Graph/Resend are external SaaS.
 
 ---
 
@@ -10,52 +12,50 @@
 ```
                           ┌──────────────────────────────────────┐
                           │            Cloudflare                 │
-   Team browsers ──HTTPS──▶│   DNS · Tunnel · R2 (file storage)   │
+   Team browsers ──HTTPS──▶│   DNS · Tunnel  (no open ports)      │
                           └───────────────┬──────────────────────┘
                                           │ Cloudflare Tunnel
                                           │ (no open inbound ports)
-                          ┌───────────────▼──────────────────────┐
-                          │        Coolify VPS (Hetzner CX42)     │
-                          │                                       │
-                          │  ┌─────────────┐   ┌───────────────┐  │
-                          │  │ apps/web     │   │ apps/worker   │  │
-                          │  │ Next.js      │──▶│ Fastify +     │  │
-                          │  │ (UI + light  │   │ BullMQ        │  │
-                          │  │  API routes) │◀──│ (pipeline)    │  │
-                          │  └─────┬───────┘   └──────┬────────┘  │
-                          │        │                  │           │
-                          │  ┌─────▼──────┐    ┌───────▼───────┐  │
-                          │  │ Redis      │    │ n8n           │  │
-                          │  │ (BullMQ)   │    │ + its Postgres│  │
-                          │  └────────────┘    └───────────────┘  │
-                          │  ┌────────────┐                       │
-                          │  │ Logto      │ (self-hosted)         │
-                          │  └────────────┘                       │
-                          └───────────────┬──────────────────────┘
-                                          │ outbound HTTPS
-        ┌─────────────┬───────────────────┼───────────────┬──────────────┐
-        ▼             ▼                   ▼               ▼              ▼
-   Supabase      Cloudflare R2     Microsoft Graph    Recall.ai      OpenAI
- (Postgres +    (raw files)        (calendars,        (meeting       (gen +
-  pgvector)                         app-level)         bot)           embeddings)
-                                          │
-                                          ▼
-                                       Resend
-                                    (outbound email)
+   ┌──────────────────────────────────────▼──────────────────────────────────┐
+   │  PROXMOX VM — Debian 12, 8 vCPU / 32 GB / 200 GB  (Coolify)               │
+   │  Host: 2× Xeon E5-2660 v3, 128 GB RAM · Synology SAN (SHR + NVMe cache)   │
+   │                                                                          │
+   │  ┌─────────────┐  ┌───────────────┐  ┌────────────┐  ┌────────────────┐  │
+   │  │ web          │  │ worker        │  │ redis      │  │ logto          │  │
+   │  │ Next.js      │─▶│ Fastify+BullMQ│  │ (BullMQ)   │  │ (identity,     │  │
+   │  │ (UI + API)   │◀─│ (pipeline)    │  │            │  │  self-hosted)  │  │
+   │  └─────┬───────┘  └──────┬────────┘  └────────────┘  └────────────────┘  │
+   │        │                 │                                                │
+   │  ┌─────▼─────────────────▼──────┐  ┌────────────┐  ┌──────────────────┐  │
+   │  │ Supabase (self-hosted)       │  │ MinIO      │  │ n8n + its        │  │
+   │  │ Postgres + pgvector +        │  │ (S3-compat │  │ Postgres         │  │
+   │  │ GoTrue/PostgREST/Storage/... │  │  files)    │  │                  │  │
+   │  └──────────────────────────────┘  └────────────┘  └──────────────────┘  │
+   └───────────────────────────────┬──────────────────────────────────────────┘
+                                   │ outbound HTTPS
+        ┌──────────────────────────┼───────────────┬──────────────┐
+        ▼                          ▼               ▼              ▼
+  Microsoft Graph             Recall.ai         OpenAI         Resend
+  (calendars, app-level)      (meeting bot)     (gen+embed)    (email)
+        ── external SaaS (unavoidable; cannot be self-hosted) ──
 ```
 
-### Coolify container inventory
+### Coolify container inventory (all on the Proxmox VM)
 
 | Container | Purpose | Notes |
 | --- | --- | --- |
 | `web` | Next.js (App Router) — UI + light/synchronous API routes | Public via Tunnel |
 | `worker` | Fastify + BullMQ — long-running pipeline jobs | Internal only |
 | `redis` | BullMQ backing store | Internal only |
+| `supabase` (stack) | Postgres + pgvector + GoTrue/PostgREST/Storage/Kong/Studio | **Self-hosted** (~8 containers); internal |
+| `minio` | S3-compatible file storage (replaces R2, D16) | Internal; presigned URLs only |
 | `n8n` | Custom/configurable automations | Internal; admin UI behind auth |
 | `n8n-postgres` | n8n workflow storage (D12) | Internal; separate from Supabase |
 | `logto` | Identity provider (in front of Entra) | Public auth endpoints via Tunnel |
 
-**External managed services** (not on the VPS): Supabase, Cloudflare R2, Recall.ai, OpenAI, Resend, Microsoft Graph.
+**External SaaS** (cannot be self-hosted — D15): Recall.ai, OpenAI, Microsoft Graph, Resend.
+
+**Storage durability:** files (MinIO) + Postgres data sit on the Synology SAN (SHR + redundant NVMe write cache). Off-site disaster-recovery backup (encrypted, to R2 or offsite Synology) added in Phase 10 (D16).
 
 ### Why Cloudflare Tunnel
 
@@ -65,9 +65,14 @@ No inbound ports are opened on the VPS firewall. Cloudflare establishes an outbo
 
 ## 2. Three-layer data architecture
 
+> **Storage note (D16):** "R2" throughout this doc now means **self-hosted MinIO**
+> (S3-compatible). The design is **identical** — same S3 API, same presigned-URL
+> pattern, same backend-only credentials. Only the endpoint/credentials differ.
+> Mentally substitute "MinIO" for "R2" below.
+
 ```
 Layer 1 — Supabase pgvector    ← what the AI queries (semantic search)
-Layer 2 — Cloudflare R2        ← where raw files live
+Layer 2 — MinIO (S3-compatible)← where raw files live (self-hosted)
 Layer 3 — In-app file browser  ← what humans see (presigned URLs)
 ```
 
@@ -223,7 +228,7 @@ Run by the worker (BullMQ repeatable jobs) — **not** n8n.
 
 | Env | Where | Purpose |
 | --- | --- | --- |
-| Local dev | developer machine | Supabase project (dev), R2 dev bucket, Logto dev tenant |
+| Local dev | developer machine | Supabase (dev), MinIO dev bucket, Logto dev tenant |
 | Production | Coolify VPS | live team usage |
 
-Staging is optional for MVP; if added, mirror prod with separate Supabase/R2/Logto instances. Each env has its own credentials and its own R2 bucket prefix.
+Staging is optional for MVP; if added, mirror prod with separate Supabase/MinIO/Logto instances. Each env has its own credentials and its own MinIO bucket prefix.

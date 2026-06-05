@@ -105,12 +105,45 @@
 
 ---
 
-## D10 — VPS sizing
+## D10 — Hosting / server (REVISED → self-hosted Proxmox)
 
-✅ **Hetzner CX42 (8 vCPU / 16 GB RAM).**
+✅ **Self-hosted on a single Proxmox VM: Debian 12, 8 vCPU / 32 GB RAM / 200 GB disk.**
 
-- **Rationale:** Must host Next.js + Fastify worker + n8n + Redis + n8n's Postgres container comfortably, with headroom for AI job bursts. CX32 (4/8) is tight once n8n + Redis + worker run together; CX42 gives breathing room at modest cost.
-- **Alternatives:** CX32 (rejected — too tight with full container set); larger (unnecessary at this scale).
+- **Context:** GA is a federal healthcare consulting firm; **data residency/compliance** is a primary driver. The client's web-company infrastructure includes a Proxmox host (2× Xeon E5-2660 v3 = 40 threads, 128 GB RAM, ~61 GB free, ~8% avg CPU) backed by a Synology SAN (SHR, 24 TB spinning + redundant 2×1 TB NVMe read/write cache, 10 GbE).
+- **Rationale:** The hardware massively exceeds this 8-user workload. Self-hosting keeps all data-bearing services on owned infrastructure (compliance win) at near-zero marginal cost. The redundant NVMe write cache makes write-back safe for Postgres; SHR + SAN covers durability. The workload is I/O/RAM-bound, not CPU-bound (AI/transcription are external APIs), so the older Xeons are more than sufficient.
+- **VM spec:** 8 vCPU / 32 GB / 200 GB is comfortable headroom for the full stack (Supabase ~8 containers + Logto + Redis + n8n + n8n-postgres + MinIO + web + worker) plus pipeline bursts; trivial load on the host.
+- **"Move later":** because it's a VM, relocating = Proxmox backup/restore or live-migrate the whole VM to other hardware (easy). Avoids the hard "migrate live data between different setups" path.
+- **Alternatives:** Hetzner CX42/CPX41 managed VPS (rejected — compliance/residency goal favors owned infra; cloud cost avoided); smaller CPX21/31 (rejected — full self-hosted stack incl. Supabase needs ~6 GB idle RAM, would OOM on first pipeline run).
+- **Override:** _______________________________________________
+
+---
+
+## D15 — Self-host everything self-hostable (NEW)
+
+✅ **Self-host every data-bearing service that can be self-hosted; use SaaS only where self-hosting is impossible.**
+
+| Self-hosted (on Proxmox VM, under Coolify) | External SaaS (unavoidable) |
+| --- | --- |
+| Supabase (Postgres + pgvector) | Recall.ai (meeting bot — SaaS-only) |
+| Logto (identity) | OpenAI (AI API — SaaS-only) |
+| Redis (BullMQ) | Microsoft Graph (calendar — Microsoft's API) |
+| n8n + its Postgres | Resend (email — SaaS) |
+| MinIO (file storage — replaces R2, see D16) | |
+| web (Next.js) + worker (Fastify) | |
+
+- **Rationale:** Compliance/data-residency. All client data at rest (DB rows, transcripts, generated docs, identity) lives on owned infrastructure. External services are unavoidable processors (cover via BAA/DPA where applicable).
+- **Override:** _______________________________________________
+
+---
+
+## D16 — File storage: self-hosted MinIO (REVISES the R2 decision)
+
+✅ **MinIO (S3-compatible) self-hosted on the Proxmox VM as PRIMARY file storage. Encrypted off-site backup (to R2 or offsite Synology) added in Phase 10 for disaster recovery.**
+
+- **Rationale:** Keeps client files (transcripts, generated documents) on owned infra — the most sensitive artifacts, consistent with D15. MinIO speaks the **same S3 API** the code already targets, so **application code is identical to the R2 design** — only the endpoint + credentials differ. Synology SHR + redundant NVMe cache provides local durability.
+- **Disaster recovery:** the one thing local storage lacks is off-site survivability (office disaster). Solved as a **backup job** (nightly encrypted sync to R2 or an offsite Synology), not by moving primary storage to the cloud. This is a Phase-10 hardening task.
+- **Note:** This intentionally re-introduces an S3-compatible self-hosted store. The earlier "MinIO removed" note from the Planning Prompt was pre-compliance; D15/D16 supersede it. Files remain backend-gated via presigned URLs (unchanged).
+- **Alternatives:** Cloudflare R2 (rejected as primary — client file bytes would leave owned infra; retained only as a backup target).
 - **Override:** _______________________________________________
 
 ---
@@ -199,9 +232,14 @@ Configure calendar / alias rules      ✅       ❌          ❌
 
 These are **not** blockers now but should be confirmed before their phase begins:
 
-1. **Coolify VPS provider** — Hetzner vs DigitalOcean (sizing fixed at CX42-equivalent). _Confirm before Phase 1 infra._
-2. **Logto self-hosted vs Logto Cloud** — leaning self-hosted (D4). _Confirm before Phase 1 auth._
+1. ~~Coolify VPS provider~~ — **RESOLVED (D10):** self-hosted Proxmox VM (Debian 12, 8 vCPU/32 GB).
+2. ~~Logto self-hosted vs Cloud~~ — **RESOLVED (D4/D15):** self-hosted on the Proxmox VM.
 3. **Resend domain/sender** — which sending domain (e.g. `@graceassociates.com` subdomain). _Confirm before Phase 7._
-4. **Recall.ai plan/region** — account tier and data residency. _Confirm before Phase 4/5._
+4. **Recall.ai plan/region** — account tier and data residency. **Flagged: Recall is usage-priced per meeting/recording hour and is often the single largest recurring cost — confirm current pricing for the client cost model.** _Confirm before Phase 4/5._
+5. **Off-site backup target** — R2 vs offsite Synology for the encrypted DR copy of MinIO + Postgres (D16). _Confirm before Phase 10._
 
-None require a decision today.
+### Resolved this session (Proxmox pivot)
+- **D10** revised: Hetzner CX42 → self-hosted Proxmox VM (Debian 12, 8 vCPU/32 GB/200 GB).
+- **D15** added: self-host every data-bearing service possible.
+- **D16** added: MinIO (self-hosted) replaces Cloudflare R2 as primary file storage; R2/Synology as backup target later.
+- **D4** confirmed: Logto self-hosted (was "leaning").
