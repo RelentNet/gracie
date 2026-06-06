@@ -21,6 +21,56 @@ managed cloud services, delivered on owned hardware at low marginal cost.
 
 ---
 
+## Current tooling spend vs GA App (the headline)
+
+### What GA's team pays today (the tools GA App replaces or overlaps)
+
+| Tool | Detail | Monthly | Annual |
+| --- | --- | --- | --- |
+| **Otter.ai** | 14 seats (10 idle), Business annual | ~$210–224 | ~$2,520–2,690 |
+| **ChatGPT Business Premium** | 9 users × $20 | **$180** | **$2,160** |
+| **Current total** | | **~$390–404** | **~$4,680–4,850** |
+
+### What GA App costs to run (self-hosted, all-in)
+
+| Line item | Monthly | Notes |
+| --- | --- | --- |
+| Recall.ai (transcription) | ~$42–84 | ~84 hrs/mo usage-based — replaces Otter |
+| OpenAI API (doc gen + embeddings + chat) | ~$30–150 | scales with meeting volume |
+| Resend (email) | ~$0–20 | low volume |
+| Microsoft Graph (calendar) | $0 | included in M365 |
+| Domain / Cloudflare | ~$0–20 | DNS + Tunnel |
+| Infrastructure (Proxmox VM + SAN) | ~$0 marginal | owned hardware, ~8% utilized |
+| **GA App total** | **~$72–274** | midpoint **~$170/mo** |
+
+### Side-by-side
+
+| | Monthly | Annual |
+| --- | --- | --- |
+| **Current tools (Otter + ChatGPT)** | ~$390–404 | ~$4,680–4,850 |
+| **GA App (self-hosted, all-in)** | **~$170** | **~$2,040** |
+| **Vs. cloud-hosted GA App** | ~$385 | ~$4,620 |
+
+### The story
+
+- **GA App self-hosted (~$170/mo) costs LESS than Otter alone today (~$210–224/mo)** — and
+  delivers the entire platform (transcription + AI docs + tasks + calendar + daily sync).
+- **Vs. current combined tooling (~$390–404/mo), GA App is ~$220/mo (~$2,640/yr) cheaper.**
+- **Self-hosting vs cloud-hosting GA App** saves a further ~$215/mo (~$2,580/yr).
+
+### ChatGPT seats — partial displacement (conservative)
+
+GA App uses the **same OpenAI models** your team accesses via ChatGPT Business. It absorbs
+**task-specific** AI work (meeting summaries, follow-up drafts, client-scoped Q&A). It does
+**not** replace **general-purpose** ChatGPT use (ad-hoc writing/research/brainstorming).
+
+- **Conservative:** keep ChatGPT seats; GA App reduces manual effort, not the seat count.
+- **Likely:** some users who only used ChatGPT for meeting/client tasks can drop their seat,
+  or the line stops growing. Even dropping **4–5 seats = ~$80–100/mo (~$960–1,200/yr)** more
+  saved. Validate per-user after GA App is live before cutting seats.
+
+---
+
 ## A. Self-hosted → cloud equivalents (your savings)
 
 These run on the Proxmox VM. The right column is what you'd pay monthly if cloud-hosted.
@@ -144,10 +194,12 @@ risk only applies to heavy-recording teams; GA's actual volume is low and concen
 
 ## Notes / assumptions
 
-- **14 seats provisioned** (~4 active), ~30 clients, ~84 recorded meeting-hours/month —
-  small scale; cloud "free tiers" would cover some of this initially, but managed costs
-  climb with data + retention. The 14-vs-8 headcount does not change infra sizing (still
-  trivial load on the Proxmox VM).
+- **14 Otter seats** (~4 active) + **9 ChatGPT Business seats ($180/mo)**, ~30 clients,
+  ~84 recorded meeting-hours/month — small scale; cloud "free tiers" would cover some of
+  this initially, but managed costs climb with data + retention. Headcount does not change
+  infra sizing (still trivial load on the Proxmox VM).
+- ChatGPT-seat displacement is **conservative and unverified** — confirm per-user after
+  launch before cutting seats; some general-purpose ChatGPT use is legitimate and stays.
 - Self-hosting trades **recurring cloud fees** for **owned ops** (backups, patching,
   monitoring) — acceptable here given the hardware is already paid for and underutilized
   (~8% CPU, ~61 GB RAM free).
