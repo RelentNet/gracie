@@ -174,6 +174,50 @@ export function priorityBadge(hasPriorityFlag: boolean): PriorityBadge {
     : { label: 'MEDIUM', bg: 'var(--color-amber-100)', fg: 'var(--color-amber-600)' };
 }
 
+// --- Task due-date urgency (Task Board) ------------------------------------
+
+/**
+ * Urgency band for a task relative to a reference "today", used by the Task
+ * Board to tone rows (docs/08 M6): overdue = red, due within 48h = amber.
+ *
+ * - `overdue`: due date is strictly before `today` and the task is not complete.
+ * - `due_soon`: due date is today or within the next 48 hours (and not complete).
+ * - `none`: complete tasks, undated tasks, or due dates beyond 48h.
+ *
+ * `today` is injected (the mock app date in Phase 1A; `new Date()` in Phase 1B)
+ * so this stays a pure, testable function with no hidden clock dependency.
+ */
+export type TaskUrgency = 'overdue' | 'due_soon' | 'none';
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** Number of whole days `dueDate` is overdue relative to `today` (>= 1). */
+export function daysOverdue(dueDate: string, today: Date): number {
+  const due = startOfDay(new Date(dueDate));
+  const ref = startOfDay(today);
+  const diff = Math.round((ref.getTime() - due.getTime()) / MS_PER_DAY);
+  return diff > 0 ? diff : 0;
+}
+
+/** Classify a task's urgency from its due date, status, and a reference date. */
+export function taskUrgency(
+  dueDate: string | null,
+  isComplete: boolean,
+  today: Date,
+): TaskUrgency {
+  if (isComplete || dueDate === null) return 'none';
+  const due = startOfDay(new Date(dueDate));
+  const ref = startOfDay(today);
+  const diffDays = Math.round((due.getTime() - ref.getTime()) / MS_PER_DAY);
+  if (diffDays < 0) return 'overdue';
+  if (diffDays <= 2) return 'due_soon';
+  return 'none';
+}
+
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 // --- File size -------------------------------------------------------------
 
 /** Human-readable file size. `null` → em dash. */

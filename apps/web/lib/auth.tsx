@@ -32,14 +32,37 @@ export interface AuthUser {
   readonly isCalendarConnected: boolean;
 }
 
-const MOCK_USER: AuthUser = {
-  id: '00000000-0000-0000-0000-000000000001',
-  name: 'Grace Associate',
-  email: 'grace.associate@graceassociates.com',
-  initials: 'GA',
-  role: MOCK_ROLE,
-  isCalendarConnected: true,
+// Mock identities aligned to lib/mock users so role-based ownership rules
+// (e.g. viewer "mark own task complete") are testable before Phase 1B wires
+// real Logto users. Each role maps to a real mock user that OWNS tasks.
+const MOCK_IDENTITIES: Record<Role, AuthUser> = {
+  admin: {
+    id: 'usr_allie',
+    name: 'Allie Grace',
+    email: 'agrace@graceandassociates.com',
+    initials: 'AG',
+    role: 'admin',
+    isCalendarConnected: true,
+  },
+  standard: {
+    id: 'usr_sarah',
+    name: 'Sarah Chen',
+    email: 'schen@graceandassociates.com',
+    initials: 'SC',
+    role: 'standard',
+    isCalendarConnected: true,
+  },
+  viewer: {
+    id: 'usr_john',
+    name: 'John Smith',
+    email: 'jsmith@graceandassociates.com',
+    initials: 'JS',
+    role: 'viewer',
+    isCalendarConnected: false,
+  },
 };
+
+const MOCK_USER: AuthUser = MOCK_IDENTITIES[MOCK_ROLE];
 // ---------------------------------------------------------------------------
 
 export interface AuthContextValue {
