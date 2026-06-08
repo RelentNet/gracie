@@ -1,15 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { notFound, usePathname } from 'next/navigation';
 import { use } from 'react';
+import { ArrowLeft, Upload } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { Permission } from '@gracie/shared';
 
+import { getClientById } from '@/lib/mock';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
 import { ClientAvatar } from '@/components/ClientAvatar';
+import { Button } from '@/components/ui/Button';
 
 /**
  * Client profile shell with the 7-tab nav (docs/08 §9, docs/03 §3).
@@ -17,10 +20,12 @@ import { ClientAvatar } from '@/components/ClientAvatar';
  * Tabs: Overview, Strategy, Finance (Admin only), Operations, Notes, Documents,
  * Intelligence. The Finance tab is gated by `finance.view` (D14) and is HIDDEN
  * entirely for non-admin roles — mirroring the server omission, not merely
- * disabled. Role data comes from the MOCK `useAuth` (Phase 1A); the same
- * filtering works unchanged against the real Logto session in Phase 1B.
+ * disabled. The Upload action is hidden for viewers (`file.upload`, D14). Role
+ * data comes from the MOCK `useAuth` (Phase 1A); the same filtering works
+ * unchanged against the real Logto session in Phase 1B.
  *
- * Phase 1B: tabs become renamable/reorderable by Admin (backed by `client_tabs`).
+ * Phase 1B: tabs become renamable/reorderable by Admin (backed by `client_tabs`);
+ * the client header reads from `GET /api/clients/:id` instead of the mock.
  */
 interface ClientTab {
   readonly label: string;
@@ -50,6 +55,13 @@ export default function ClientDetailLayout({
   const { can } = useAuth();
   const pathname = usePathname();
 
+  const client = getClientById(clientId);
+  if (client === undefined) {
+    notFound();
+  }
+
+  const canUpload = can('file.upload');
+
   const visibleTabs = CLIENT_TABS.filter(
     (tab) => tab.requires === undefined || can(tab.requires),
   );
@@ -58,18 +70,39 @@ export default function ClientDetailLayout({
 
   return (
     <section className="flex flex-col gap-6">
-      <header className="flex items-center gap-3">
-        {/* Phase 1B: replace placeholder initials with the fetched client. */}
-        <ClientAvatar initials="CL" size="lg" />
-        <div className="flex flex-col gap-0.5">
-          <h1 style={TYPE.pageTitle}>Client Profile</h1>
-          <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-            Client reference: {clientId}
-          </p>
+      <Link
+        href="/clients"
+        className="inline-flex items-center gap-1.5"
+        style={{ ...TYPE.secondary, color: 'var(--color-blue-700)' }}
+      >
+        <ArrowLeft aria-hidden="true" size={16} />
+        Back to clients
+      </Link>
+
+      <header className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <ClientAvatar initials={client.initials} size="lg" />
+          <div className="flex flex-col gap-0.5">
+            <h1 style={TYPE.pageTitle}>{client.name}</h1>
+            <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+              <span className="font-data">{client.contractNumber ?? 'No contract number'}</span>
+              {client.primaryContact !== null ? ` · ${client.primaryContact}` : null}
+            </p>
+          </div>
         </div>
+
+        {canUpload ? (
+          <Button variant="primary" icon={<Upload aria-hidden="true" size={16} />}>
+            Upload
+          </Button>
+        ) : null}
       </header>
 
-      <nav aria-label="Client profile tabs" className="border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+      <nav
+        aria-label="Client profile tabs"
+        className="border-b"
+        style={{ borderColor: 'var(--border-subtle)' }}
+      >
         <ul className="flex flex-wrap gap-1">
           {visibleTabs.map((tab) => {
             const href = `${basePath}/${tab.segment}`;

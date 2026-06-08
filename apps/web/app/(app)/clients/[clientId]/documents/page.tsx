@@ -1,16 +1,28 @@
-import { PagePlaceholder } from '@/components/ui/PagePlaceholder';
+'use client';
+
+import { use } from 'react';
+
+import { getClientById } from '@/lib/mock';
+import { FileBrowser } from '@/components/FileBrowser/FileBrowser';
+import { ErrorState } from '@/components/ui/StateViews';
 
 /**
- * Client tab 6 — Documents (docs/08 §9). Two-panel file browser; the
- * Transcripts folder is Admin-only (restricted visibility, D14).
+ * Client tab 6 — Documents (docs/08 §9). Renders the two-panel file browser
+ * (Module 11) scoped to this client. The Transcripts folder has `restricted`
+ * visibility and is OMITTED entirely for non-admins (handled inside the browser,
+ * D14). Data via MOCK selectors; Phase 1B swaps to the files API.
  */
-export default function ClientDocumentsPage(): React.JSX.Element {
-  return (
-    <PagePlaceholder
-      title="Documents"
-      description="Client file browser. The Transcripts folder is Admin-only."
-      emptyTitle="No documents yet"
-      emptyDescription="A two-panel folder tree and file list will appear here once file storage is connected. Restricted folders are hidden for unauthorized roles."
-    />
-  );
+export default function ClientDocumentsPage({
+  params,
+}: {
+  readonly params: Promise<{ clientId: string }>;
+}): React.JSX.Element {
+  const { clientId } = use(params);
+  const client = getClientById(clientId);
+
+  if (client === undefined) {
+    return <ErrorState title="Client not found" description="This client reference is invalid." />;
+  }
+
+  return <FileBrowser clientId={clientId} />;
 }
