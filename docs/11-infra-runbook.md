@@ -9,6 +9,40 @@
 
 ---
 
+## DEPLOYED STATE (as of initial buildout)
+
+> Live infrastructure. Credentials are in git-ignored `docs/SECRETS.md`.
+
+- **VM:** Debian 13 (Trixie), 8 vCPU / 32 GB / 185 GB, IP `10.200.200.131`
+  (office LAN, behind NAT). SSH: `ssh gracie-vm` (key `~/.ssh/gracie_vm`, user
+  `phoenix`, passwordless sudo). Timezone Eastern. UFW: 22 + 8000.
+- **Coolify:** v4.1.2 standalone at `http://10.200.200.131:8000`. Admin
+  `daniel@fnit.us`. API token issued (see SECRETS). Project **gracie**.
+  - *Note:* main Coolify in Hetzner is NOT linked (office VM is NAT'd); this
+    Coolify runs standalone. Revisit with Tailscale if remote management wanted.
+- **Services (all in Coolify `gracie` project, internal Docker network):**
+  - **Supabase** (`x94kt9hzbjzhplqbhedxi71x`) — 14 containers; Postgres 15 +
+    pgvector; **GA App schema migrated** (24 tables, 31 enums, all RLS,
+    `match_embeddings`, `auth_role`/`auth_uid`). Reached via Kong gateway
+    `supabase-kong-x94kt9hzbjzhplqbhedxi71x:8000` on the internal network.
+  - **Logto** (`p2bsq93ooxot6sj6ntmj93nt`) — app + its Postgres. App config +
+    Microsoft connector + roles still TODO (needs admin-console access).
+  - **MinIO** (`gfnts1k0evdk27m9imi2lt8h`, compose service) — buckets `ga-app`
+    + `ga-app-dev`. Endpoint `minio-gfnts1k0evdk27m9imi2lt8h:9000` internal.
+- **Access model:** services are internal-only; the GA app (to be deployed in
+  Coolify) reaches them by container hostname. Public team access to Logto/app
+  will use Cloudflare Tunnel later.
+
+### Remaining infra TODO
+- [ ] Deploy `apps/web` + `apps/worker` into Coolify (gracie project).
+- [ ] Configure Logto application + Microsoft Entra connector + roles.
+- [ ] Cloudflare Tunnel for team-facing access (app + Logto login).
+- [ ] Redis + n8n (later phases).
+- [ ] Create a scoped MinIO access key (replace root creds in app).
+- [ ] Backups: Postgres dumps + MinIO sync off-site (Phase 10).
+
+---
+
 ## 0. Prerequisites checklist
 
 - [ ] Proxmox host access (2× Xeon E5-2660 v3, 128 GB RAM, Synology SAN).
