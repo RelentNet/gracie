@@ -71,13 +71,36 @@ create type assistant_msg_role  as enum ('user', 'assistant');
 -- HELPER: current role from JWT (Logto role claim mapped into Supabase JWT)
 -- The app sets request.jwt.claims; we read role from it.
 -- ----------------------------------------------------------------------------
+-- Reads the APP role from a dedicated JWT claim (`user_role`/`app_role`),
+-- NOT the top-level `role` claim (which Supabase sets to anon/authenticated/
+-- service_role — Postgres roles, not app roles). Never crashes on non-app
+-- tokens: returns 'viewer' as a safe default. Logto must emit `user_role` in
+-- the JWT for real users (admin/standard/viewer).
 create or replace function auth_role() returns user_role
-language sql stable as $$
-  select coalesce(
-    (current_setting('request.jwt.claims', true)::jsonb ->> 'role'),
-    'viewer'
-  )::user_role;
-$$;
+language plpgsql stable as $fn$
+declare
+  claims jsonb;
+  app_role text;
+begin
+  begin
+    claims := nullif(current_setting('request.jwt.claims', true), '')::jsonb;
+  exception when others then
+    return 'viewer'::user_role;
+  end;
+
+  app_role := coalesce(
+    claims ->> 'user_role',
+    claims ->> 'app_role',
+    (claims -> 'user_metadata') ->> 'app_role'
+  );
+
+  if app_role in ('admin', 'standard', 'viewer') then
+    return app_role::user_role;
+  end if;
+
+  return 'viewer'::user_role;
+end;
+$fn$;
 
 create or replace function auth_uid() returns uuid
 language sql stable as $$
