@@ -26,7 +26,9 @@ Infra: `11-infra-runbook.md`. Costs: `10-cost-analysis.md`.
   before claiming done. Test against live infra where possible.
 - **Never commit secrets.** `docs/SECRETS.md` and `apps/web/.env.local` are
   git-ignored. Confirm with `git check-ignore` before any `git add -A`.
-- Commit + push after each verified milestone. Repo: `git@github.com:itkujo/gracie.git`.
+- Commit + push after each verified milestone. Repo: `git@github.com:RelentNet/gracie.git`
+  (team repo). The earlier `itkujo/gracie` was migrated here with full history and is being
+  retired; the original planning scaffold is preserved on the `archive/planning-scaffold` branch.
 
 ## Toolchain
 
