@@ -24,7 +24,7 @@ export async function GET(
         { status: 404 },
       );
     }
-    const admin = isAdmin(getRequestUser());
+    const admin = isAdmin(await getRequestUser());
     const masterRecord = await getClientMasterRecord(clientId);
     const riskFlags: string[] = [];
     if (client.relationshipTrend === 'declining') {

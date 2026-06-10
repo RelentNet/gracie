@@ -14,7 +14,7 @@ export async function GET(
   context: { params: Promise<{ taskId: string }> },
 ): Promise<NextResponse> {
   try {
-    getRequestUser();
+    await getRequestUser();
     const { taskId } = await context.params;
     const notes = await getTaskNotes(taskId);
     return NextResponse.json({ notes });

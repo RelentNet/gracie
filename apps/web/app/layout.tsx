@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 import { AuthProvider } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/server-auth';
 
 import '@/styles/theme.css';
 
@@ -10,15 +11,16 @@ export const metadata: Metadata = {
   description: 'Grace & Associates — internal meeting-intelligence platform.',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   readonly children: ReactNode;
-}): React.JSX.Element {
+}): Promise<React.JSX.Element> {
+  const user = await getCurrentUser();
   return (
     <html lang="en">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider initialUser={user}>{children}</AuthProvider>
       </body>
     </html>
   );

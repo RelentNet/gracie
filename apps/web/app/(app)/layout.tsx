@@ -1,18 +1,27 @@
+import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
+import { getLogtoContext } from '@logto/next/server-actions';
+
 import { Sidebar } from '@/components/Sidebar';
+import { isLogtoConfigured, logtoConfig } from '@/lib/logto';
 
 /**
  * Authenticated app shell (docs/03 §3). Sidebar + main content region. Role
  * filtering for nav lives in the Sidebar; the same role data gates page-level
- * content. Phase 1B: a server-side auth guard wraps this layout to redirect
- * unauthenticated users to /login.
+ * content. When Logto is configured, unauthenticated visitors are redirected to
+ * /login here (server-side guard). Until then the scaffold renders the mock user.
  */
-export default function AppLayout({
+export default async function AppLayout({
   children,
 }: {
   readonly children: ReactNode;
-}): React.JSX.Element {
+}): Promise<React.JSX.Element> {
+  if (isLogtoConfigured()) {
+    const { isAuthenticated } = await getLogtoContext(logtoConfig);
+    if (!isAuthenticated) redirect('/login');
+  }
+
   return (
     <div className="flex min-h-dvh">
       <Sidebar />

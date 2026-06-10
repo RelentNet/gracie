@@ -12,7 +12,7 @@ import { listClients, redactClientForRole } from '@/lib/data/clients';
 
 export async function GET(): Promise<NextResponse> {
   try {
-    const user = getRequestUser();
+    const user = await getRequestUser();
     const admin = isAdmin(user);
     const clients = await listClients();
     const payload = clients.map((c) => redactClientForRole(c, admin));

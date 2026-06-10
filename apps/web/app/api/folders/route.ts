@@ -14,7 +14,7 @@ import { filterVisibleFolders, listFolders } from '@/lib/data/documents';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    const user = getRequestUser();
+    const user = await getRequestUser();
     const admin = isAdmin(user);
     const clientId = request.nextUrl.searchParams.get('clientId') ?? undefined;
     const folders = await listFolders(clientId);

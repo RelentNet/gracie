@@ -14,7 +14,7 @@ import { listTasks } from '@/lib/data/tasks';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    getRequestUser();
+    await getRequestUser();
     const includeArchived = request.nextUrl.searchParams.get('archived') === 'true';
     const tasks = await listTasks({ includeArchived });
     return NextResponse.json({ tasks });

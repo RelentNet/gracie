@@ -31,7 +31,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const user = getRequestUser();
+    const user = await getRequestUser();
 
     // Authorize the folder path for this role before signing anything.
     const allowed = await canAccessKey(key, isAdmin(user));

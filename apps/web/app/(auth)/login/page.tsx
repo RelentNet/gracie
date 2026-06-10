@@ -26,9 +26,11 @@ export default function LoginPage(): React.JSX.Element {
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)', textAlign: 'center' }}>
           Grace &amp; Associates internal platform. Sign in with your Microsoft account to continue.
         </p>
-        {/* Phase 1B: replace href with the Logto sign-in route. */}
+        {/* Initiates Logto → Microsoft sign-in (no-op redirect to the app until
+            Logto is configured). prefetch disabled: it is a route handler. */}
         <Link
-          href="/dashboard"
+          href="/sign-in"
+          prefetch={false}
           className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5"
           style={{
             backgroundColor: 'var(--color-blue-500)',

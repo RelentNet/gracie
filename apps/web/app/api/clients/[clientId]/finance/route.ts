@@ -16,7 +16,7 @@ export async function GET(
   { params }: { params: Promise<{ clientId: string }> },
 ): Promise<NextResponse> {
   try {
-    if (!isAdmin(getRequestUser())) {
+    if (!isAdmin(await getRequestUser())) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Admin only' } },
         { status: 403 },

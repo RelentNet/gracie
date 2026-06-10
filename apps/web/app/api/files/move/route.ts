@@ -19,7 +19,7 @@ interface MoveBody {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const user = getRequestUser();
+    const user = await getRequestUser();
     if (!canEditRole(user.role)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Move requires editor role' } },
