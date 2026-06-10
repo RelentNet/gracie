@@ -60,21 +60,39 @@ Node 24, pnpm 10.x. `pnpm install` at repo root. macOS dev so far (zsh).
   - **MinIO file layer**: `/api/files/url` (presigned get/put, path-authorized),
     `/api/files/move` (copy+delete), real Download in FileBrowser. Verified:
     viewer denied restricted transcript (403); viewer PUT denied.
-- **Auth is still MOCKED**: `apps/web/lib/api-auth.ts` `getRequestUser()` returns a
-  mock admin; `apps/web/lib/auth.tsx` has mock identities. Flip `MOCK_ROLE` /
-  `MOCK_REQUEST_USER` to test roles. This is the designed drop-in point for Logto.
+- **Logto wiring is STAGED (commit aee12d8), dormant until secrets land.** All
+  Logto code is in place behind `isLogtoConfigured()` (true only when the
+  `LOGTO_*` env vars are set): `lib/logto.ts` (config + role resolution from the
+  `user_role`/`app_role` claim), async `getRequestUser()` (`lib/api-auth.ts`),
+  server resolver (`lib/server-auth.ts`) hydrating `AuthProvider`, the `(app)`
+  layout auth guard, and the `/sign-in` · `/callback` · `/sign-out` route
+  handlers. **Until the secrets are set it falls back to the mock admin**, so dev
+  works unchanged. Mock identities live in `lib/auth-shared.ts` (flip `MOCK_ROLE`
+  to preview roles).
 
 ### Paused at (the immediate next step)
-**Logto auth wiring.** Endpoints are live:
+**Activate Logto** (code is staged — see above). Endpoints are live:
 - Sign-in: `https://auth.gracie.graceandassociates.com` (OIDC issuer verified)
 - Admin console: `https://auth-admin.gracie.graceandassociates.com`
-**Next action = HUMAN: create the Logto admin account** at the admin console URL
-(first-run, can't be API'd). Then: create the GA App application (Next.js
-traditional web) + define roles (admin/standard/viewer) + Microsoft Entra
-connector; then build the app OAuth flow and replace `getRequestUser()` /
-`lib/auth.tsx` with real Logto session + JWT verification (the JWT must carry a
-`user_role` claim — `auth_role()` reads `user_role`/`app_role`, NOT Supabase's
-top-level `role`).
+
+Remaining steps, in order:
+1. **HUMAN: create the Logto admin account** at the admin console URL (first-run,
+   can't be API'd).
+2. **HUMAN: create the GA App application** — type *Traditional Web (Next.js)*;
+   redirect URI `http://localhost:3000/callback` (+ prod
+   `https://gracie.graceandassociates.com/callback`); post-sign-out
+   `http://localhost:3000/`. Define roles admin/standard/viewer and a **custom
+   JWT claim `user_role`** (the `user_role`/`app_role` claim is what `auth_role()`
+   and `lib/logto.ts resolveRole()` read — NOT Supabase's top-level `role`).
+   Configure the **Microsoft Entra** connector.
+3. **Set the secrets** in `apps/web/.env.local` (commented placeholders already
+   there) — `LOGTO_ENDPOINT`, `LOGTO_APP_ID`, `LOGTO_APP_SECRET`,
+   `LOGTO_COOKIE_SECRET` (32+ random chars), `LOGTO_BASE_URL` — and the same in
+   Coolify for prod. Once present, `isLogtoConfigured()` flips on and real auth
+   activates (no code change).
+4. **Verify** real Microsoft login + admin/standard/viewer gating end-to-end, then
+   implement the `TODO(auth)` in `/callback`: upsert the `users` row from the
+   verified claims on first login (docs/01 §4).
 
 ### Remaining Phase 1B + beyond
 - Logto auth (above) → replace mock auth everywhere.
