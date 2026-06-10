@@ -71,3 +71,14 @@ export const GUEST_USER: AuthUser = {
   role: 'viewer',
   isCalendarConnected: false,
 };
+
+/** Two-letter initials from a display name (falls back to the email local part). */
+export function deriveInitials(name: string, email: string): string {
+  const source = (name.trim() || email.trim()).trim();
+  if (source === '') return '?';
+  const parts = source.split(/\s+/).filter((part) => part.length > 0);
+  const first = parts[0]?.[0] ?? '';
+  const second = parts[1]?.[0] ?? '';
+  if (first !== '' && second !== '') return (first + second).toUpperCase();
+  return source.slice(0, 2).toUpperCase();
+}
