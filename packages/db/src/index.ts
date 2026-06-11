@@ -10,3 +10,16 @@ export { getServerConfig, getBrowserConfig } from './config.js';
 export type { SupabaseConfig } from './config.js';
 export { TABLE_NAMES } from './types.js';
 export type { Database, TableName } from './types.js';
+export type { Json } from './database.types.js';
+export {
+  getCredential,
+  listIntegrations,
+  setIntegration,
+  clearIntegrationSecret,
+  recordTestResult,
+  invalidateCredential,
+  isManageableService,
+  MANAGEABLE_SERVICES,
+} from './credentials.js';
+export type { IntegrationKey, IntegrationStatus, SetIntegrationParams } from './credentials.js';
+export { encryptSecret, decryptSecret } from './crypto.js';
