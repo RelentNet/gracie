@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import { Calendar, CalendarClock, Search } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Calendar, CalendarClock, Plus, Search } from 'lucide-react';
 import type { Client } from '@gracie/shared';
 
 import { apiClient } from '@/lib/api-client';
@@ -16,10 +16,13 @@ import {
 } from '@/lib/client-display';
 import { formatEasternDate } from '@/lib/format';
 import { ClientAvatar } from '@/components/ClientAvatar';
+import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { CLIENT_CADENCES } from '@gracie/shared';
 import type { ClientCadence } from '@gracie/shared';
+
+import { AddClientModal } from './AddClientModal';
 
 /**
  * Module 2 — Client List (docs/08 §8 M2, §9). Grid of client cards fetched from
@@ -42,21 +45,21 @@ export default function ClientsPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState<string>('');
   const [cadence, setCadence] = useState<CadenceFilter>('all');
+  const [showAdd, setShowAdd] = useState(false);
+
+  const load = useCallback(async (): Promise<void> => {
+    try {
+      const data = await apiClient.get<ClientsResponse>('/api/clients');
+      setClients(data.clients);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load clients');
+    }
+  }, []);
 
   useEffect(() => {
-    let active = true;
-    apiClient
-      .get<ClientsResponse>('/api/clients')
-      .then((data) => {
-        if (active) setClients(data.clients);
-      })
-      .catch((e: unknown) => {
-        if (active) setError(e instanceof Error ? e.message : 'Failed to load clients');
-      });
-    return (): void => {
-      active = false;
-    };
-  }, []);
+    void load();
+  }, [load]);
 
   const filtered = useMemo<readonly Client[]>(() => {
     if (clients === null) return [];
@@ -74,13 +77,20 @@ export default function ClientsPage(): React.JSX.Element {
 
   return (
     <section className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 style={TYPE.pageTitle}>Clients</h1>
-        <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          {clients === null
-            ? 'Loading client relationships…'
-            : `${clients.length} active client relationships.`}
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 style={TYPE.pageTitle}>Clients</h1>
+          <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+            {clients === null
+              ? 'Loading client relationships…'
+              : `${clients.length} active client relationships.`}
+          </p>
+        </div>
+        {isAdmin ? (
+          <Button icon={<Plus size={16} aria-hidden="true" />} onClick={(): void => setShowAdd(true)}>
+            Add client
+          </Button>
+        ) : null}
       </header>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -136,6 +146,17 @@ export default function ClientsPage(): React.JSX.Element {
           ))}
         </ul>
       )}
+
+      {isAdmin ? (
+        <AddClientModal
+          isOpen={showAdd}
+          onClose={(): void => setShowAdd(false)}
+          onCreated={(): void => {
+            setShowAdd(false);
+            void load();
+          }}
+        />
+      ) : null}
     </section>
   );
 }
