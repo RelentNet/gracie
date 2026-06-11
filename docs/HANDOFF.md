@@ -60,15 +60,19 @@ Node 24, pnpm 10.x. `pnpm install` at repo root. macOS dev so far (zsh).
   - **MinIO file layer**: `/api/files/url` (presigned get/put, path-authorized),
     `/api/files/move` (copy+delete), real Download in FileBrowser. Verified:
     viewer denied restricted transcript (403); viewer PUT denied.
-- **Logto wiring is STAGED (commit aee12d8), dormant until secrets land.** All
-  Logto code is in place behind `isLogtoConfigured()` (true only when the
-  `LOGTO_*` env vars are set): `lib/logto.ts` (config + role resolution from the
-  `user_role`/`app_role` claim), async `getRequestUser()` (`lib/api-auth.ts`),
-  server resolver (`lib/server-auth.ts`) hydrating `AuthProvider`, the `(app)`
-  layout auth guard, and the `/sign-in` · `/callback` · `/sign-out` route
-  handlers. **Until the secrets are set it falls back to the mock admin**, so dev
-  works unchanged. Mock identities live in `lib/auth-shared.ts` (flip `MOCK_ROLE`
-  to preview roles).
+- **Logto is ACTIVE (real auth on).** The `LOGTO_*` env vars are set in
+  `apps/web/.env.local`, so `isLogtoConfigured()` is true and the mock fallback is
+  OFF — the app requires a real login. Configured via the Management API using the
+  M2M "Claude Access" app (see SECRETS.md): a Traditional web app `GA App`
+  (`v4yeg6a8wu5kod32xph81`) with redirect URIs, roles admin/standard/viewer, and a
+  dev test user `gracieadmin` (admin). Role resolution reads the Logto `roles`
+  claim (scope `roles` requested) → `resolveRole` (also honors a `user_role`/
+  `app_role` custom claim if added later). Code: `lib/logto.ts`, async
+  `getRequestUser()`, `lib/server-auth.ts`, `(app)` layout guard, and `/sign-in` ·
+  `/callback` (upserts the users row) · `/sign-out`. Mock identities still live in
+  `lib/auth-shared.ts` (used only when the `LOGTO_*` vars are absent).
+  **Still TODO:** Microsoft Entra connector (needs Azure tenant creds; 0 connectors
+  configured), then remove the dev test user.
 
 ### Paused at (the immediate next step)
 **Activate Logto** (code is staged — see above). Endpoints are live:
