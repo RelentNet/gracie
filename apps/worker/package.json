@@ -3,19 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Fastify + BullMQ worker — long-running pipeline jobs (Phase 1A: bootstrap stub).",
+  "description": "Fastify + BullMQ worker — long-running pipeline jobs and scheduled crons.",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
-    "boot-check": "tsx src/boot-check.ts",
+    "dev": "tsx watch --env-file-if-exists=.env.local src/index.ts",
+    "start": "tsx --env-file-if-exists=.env.local src/index.ts",
+    "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0"
   },
   "dependencies": {
+    "@bull-board/api": "^6.7.0",
+    "@bull-board/fastify": "^6.7.0",
     "@gracie/db": "workspace:*",
     "@gracie/shared": "workspace:*",
     "bullmq": "^5.34.0",
-    "fastify": "^5.2.1"
+    "fastify": "^5.2.1",
+    "ioredis": "^5.4.2"
   },
   "devDependencies": {
     "@gracie/config": "workspace:*",
