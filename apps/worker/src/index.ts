@@ -18,8 +18,10 @@ import { QUEUE_NAMES } from '@gracie/shared';
 import { loadEnv } from './lib/env.js';
 import { createRedisConnection } from './lib/redis.js';
 import { createHeartbeatProcessor } from './processors/heartbeat.processor.js';
+import { createIngestProcessor } from './processors/ingest.processor.js';
 import { createWorker } from './queues/factory.js';
 import { createHeartbeatQueue, scheduleHeartbeat } from './queues/heartbeat.queue.js';
+import { createIngestQueue } from './queues/ingest.queue.js';
 import { buildServer } from './server.js';
 
 /** Resources to release on shutdown. */
@@ -67,9 +69,10 @@ async function start(): Promise<void> {
   const env = loadEnv();
   const connection = createRedisConnection(env.redisUrl);
 
-  // Build the queue + Fastify app first so processors can log through app.log.
+  // Build the queues + Fastify app first so processors can log through app.log.
   const heartbeatQueue = createHeartbeatQueue(connection);
-  const app = buildServer({ connection, queues: [heartbeatQueue] });
+  const ingestQueue = createIngestQueue(connection);
+  const app = buildServer({ connection, queues: [heartbeatQueue, ingestQueue] });
 
   connection.on('error', (error) => app.log.error({ err: error }, 'redis connection error'));
   connection.on('ready', () => app.log.info('redis connection ready'));
@@ -83,13 +86,23 @@ async function start(): Promise<void> {
     app.log.error({ jobId: job?.id, err: error }, 'heartbeat job failed');
   });
 
+  // Ingest: manual-upload pipeline (extract → chunk → embed → pgvector, P5a).
+  const ingestWorker = createWorker(
+    QUEUE_NAMES.ingest,
+    createIngestProcessor(app.log),
+    connection,
+  );
+  ingestWorker.on('failed', (job, error) => {
+    app.log.error({ jobId: job?.id, err: error }, 'ingest job failed');
+  });
+
   await scheduleHeartbeat(heartbeatQueue);
 
   installShutdown({
     app,
     connection,
-    queues: [heartbeatQueue],
-    workers: [heartbeatWorker],
+    queues: [heartbeatQueue, ingestQueue],
+    workers: [heartbeatWorker, ingestWorker],
   });
 
   await app.listen({ port: env.port, host: env.host });

@@ -8,10 +8,12 @@
  * add queues (pipeline, ingest, calendar-scan, daily-sync, brief — docs/03 §4).
  */
 
-/** All BullMQ queue names. Phase 1B ships only the sample `heartbeat` queue. */
+/** All BullMQ queue names. */
 export const QUEUE_NAMES = {
   /** Sample/liveness queue — drives a repeatable heartbeat job. */
   heartbeat: 'heartbeat',
+  /** Manual-upload ingest: extract → chunk → embed → pgvector (P5a, docs/06 §5). */
+  ingest: 'ingest',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -19,6 +21,7 @@ export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 /** Named jobs within a queue — one entry per (queue, job) the system enqueues. */
 export const JOB_NAMES = {
   heartbeat: 'heartbeat.tick',
+  ingest: 'ingest.process',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];

@@ -12,3 +12,22 @@ export interface HeartbeatJobPayload {
   /** Logical origin of the tick — e.g. `'scheduler'` for the repeatable job. */
   readonly source: string;
 }
+
+/**
+ * Payload for an `ingest` job (`QUEUE_NAMES.ingest`, P5a). The web `/api/upload`
+ * route enqueues one per uploaded file after storing the object + inserting the
+ * `documents` row; the worker processor fetches the bytes, extracts text, chunks,
+ * embeds (pinned 1536-dim), and writes `embeddings` rows (docs/06 §5).
+ */
+export interface IngestJobPayload {
+  /** `documents.id` of the row this ingest produces embeddings for. */
+  readonly documentId: string;
+  /** Owning client (`embeddings.client_id`) — scopes vector retrieval. */
+  readonly clientId: string;
+  /** Storage object key in MinIO (the `documents.r2_key`). */
+  readonly objectKey: string;
+  /** Original file name (drives extension-based extraction). */
+  readonly fileName: string;
+  /** MIME type as reported by the upload, when known. */
+  readonly mimeType: string | null;
+}

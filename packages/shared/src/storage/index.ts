@@ -7,6 +7,8 @@ export {
   getS3Config,
   presignGet,
   presignPut,
+  putObject,
+  getObjectBytes,
   moveObject,
 } from './s3.js';
 export type { S3Config } from './s3.js';

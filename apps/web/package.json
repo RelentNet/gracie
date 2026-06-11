@@ -17,6 +17,8 @@
     "@gracie/db": "workspace:*",
     "@gracie/shared": "workspace:*",
     "@logto/next": "^4.2.10",
+    "bullmq": "^5.34.0",
+    "ioredis": "^5.4.2",
     "lucide-react": "^0.471.1",
     "next": "^15.1.6",
     "react": "^19.0.0",

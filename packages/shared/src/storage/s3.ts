@@ -13,6 +13,7 @@ import {
   CopyObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
+import type { GetObjectCommandOutput } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export interface S3Config {
@@ -75,6 +76,34 @@ export async function presignPut(key: string, contentType?: string): Promise<str
     new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
     { expiresIn: PRESIGN_EXPIRY_SECONDS },
   );
+}
+
+/**
+ * Upload object bytes server-side (the `/api/upload` receipt path — the frontend
+ * never holds S3 creds, docs/01 §2). `body` is the raw file content.
+ */
+export async function putObject(
+  key: string,
+  body: Uint8Array | Buffer,
+  contentType?: string,
+): Promise<void> {
+  const { bucket } = getS3Config();
+  await getS3Client().send(
+    new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }),
+  );
+}
+
+/** Fetch an object's full bytes (worker-side, for text extraction). */
+export async function getObjectBytes(key: string): Promise<Buffer> {
+  const { bucket } = getS3Config();
+  const res: GetObjectCommandOutput = await getS3Client().send(
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+  );
+  if (res.Body === undefined) {
+    throw new Error(`getObjectBytes: empty body for key "${key}"`);
+  }
+  const bytes = await res.Body.transformToByteArray();
+  return Buffer.from(bytes);
 }
 
 /** Move an object: server-side copy + delete (invisible to the user). */
