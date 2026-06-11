@@ -23,3 +23,4 @@ export {
 } from './credentials.js';
 export type { IntegrationKey, IntegrationStatus, SetIntegrationParams } from './credentials.js';
 export { encryptSecret, decryptSecret } from './crypto.js';
+export { getActiveProvider, getEmbedder } from './ai.js';
