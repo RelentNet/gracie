@@ -32,7 +32,13 @@ Infra: `11-infra-runbook.md`. Costs: `10-cost-analysis.md`.
 
 ## Toolchain
 
-Node 24, pnpm 10.x. `pnpm install` at repo root. macOS dev so far (zsh).
+Node 24, pnpm 10.33.0. `pnpm install` at repo root. **Dev machine is now Windows 11 / PowerShell.**
+
+**pnpm-on-PATH gotcha (Windows):** `corepack enable` can't write to `C:\Program Files\nodejs`
+(EPERM). pnpm is provided via a corepack **shim added to the User PATH** (dirs:
+`%USERPROFILE%\.corepack-bin` and `%LOCALAPPDATA%\corepack-shims`). New terminals pick it up; an
+already-open shell may need `$env:PATH = "$env:LOCALAPPDATA\corepack-shims;$env:PATH"` once, or just
+use `corepack pnpm@10.33.0` directly.
 
 ---
 
@@ -73,39 +79,32 @@ Node 24, pnpm 10.x. `pnpm install` at repo root. macOS dev so far (zsh).
   `lib/auth-shared.ts` (used only when the `LOGTO_*` vars are absent).
   **Still TODO:** Microsoft Entra connector (needs Azure tenant creds; 0 connectors
   configured), then remove the dev test user.
+- **Worker foundation (`apps/worker`)** — real Fastify + BullMQ service (commit `00999a0`):
+  shared ioredis connection, `createQueue`/`createWorker` factories (attempts + backoff),
+  sample `heartbeat` repeatable job, `GET /health` (Redis ping), Bull Board at
+  `/admin/queues`, graceful shutdown. Queue names + job-payload types in `@gracie/shared`.
+  Verified vs live Redis.
+- **All infra provisioned + verified:** Redis (Coolify `gracie-redis` + dev socat `:6380`);
+  OpenAI (credits active — chat + 1536-dim embeddings work); Recall (region us-west-2,
+  webhook secret in env). API keys live ENCRYPTED in `integration_credentials`
+  (Admin → API Settings), resolved by `getCredential('<service>')`. See SECRETS.md.
 
-### Paused at (the immediate next step)
-**Activate Logto** (code is staged — see above). Endpoints are live:
-- Sign-in: `https://auth.gracie.graceandassociates.com` (OIDC issuer verified)
-- Admin console: `https://auth-admin.gracie.graceandassociates.com`
+### Now — orchestrated phased build
+Logto is ACTIVE and infra is up. Work proceeds as **phased delegation briefs in
+`docs/plan/`**, each executed in a fresh low-context session (human = master terminal).
+- **Done:** `worker-foundation`.
+- **Next:** P5 ingest (manual upload → extract → chunk → embed → pgvector), then P5
+  generation (6 docs + tasks), then P4 calendar (**needs Azure/MS Graph creds**).
+- **Logto remaining:** add the Microsoft Entra connector (needs Azure) + remove the dev
+  test user `gracieadmin`.
 
-Remaining steps, in order:
-1. **HUMAN: create the Logto admin account** at the admin console URL (first-run,
-   can't be API'd).
-2. **HUMAN: create the GA App application** — type *Traditional Web (Next.js)*;
-   redirect URI `http://localhost:3000/callback` (+ prod
-   `https://gracie.graceandassociates.com/callback`); post-sign-out
-   `http://localhost:3000/`. Define roles admin/standard/viewer and a **custom
-   JWT claim `user_role`** (the `user_role`/`app_role` claim is what `auth_role()`
-   and `lib/logto.ts resolveRole()` read — NOT Supabase's top-level `role`).
-   Configure the **Microsoft Entra** connector.
-3. **Set the secrets** in `apps/web/.env.local` (commented placeholders already
-   there) — `LOGTO_ENDPOINT`, `LOGTO_APP_ID`, `LOGTO_APP_SECRET`,
-   `LOGTO_COOKIE_SECRET` (32+ random chars), `LOGTO_BASE_URL` — and the same in
-   Coolify for prod. Once present, `isLogtoConfigured()` flips on and real auth
-   activates (no code change).
-4. **Verify** real Microsoft login + admin/standard/viewer gating end-to-end, then
-   implement the `TODO(auth)` in `/callback`: upsert the `users` row from the
-   verified claims on first login (docs/01 §4).
-
-### Remaining Phase 1B + beyond
-- Logto auth (above) → replace mock auth everywhere.
-- Deploy `apps/web` + `apps/worker` into Coolify (gracie project) so they reach
-  services over the internal Docker network; then `gracie.graceandassociates.com`
-  (:3000) goes live.
-- Later phases (09-build-phases.md): calendar (P4), AI pipeline (P5),
-  intelligence + KB (P6), Assistant (P6B), briefs/sync/notifications (P7), n8n
-  (P8), settings/admin (P9), hardening + KEY ROTATION (P10).
+### Remaining (broad)
+- Deploy `apps/web` + `apps/worker` into Coolify (gracie project) over the internal Docker
+  network (note: `gracie-redis` is on the `coolify` network — ensure the worker can reach it);
+  then `gracie.graceandassociates.com` goes live.
+- Phases (per `docs/plan/` briefs): P5 AI pipeline, P6 intelligence + KB, P6B Assistant,
+  P7 briefs/sync/notifications (needs Resend), P8 n8n, P9 settings/admin, P10 hardening +
+  KEY ROTATION (incl. the build/test keys in SECRETS.md).
 
 ---
 
