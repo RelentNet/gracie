@@ -31,3 +31,32 @@ export interface IngestJobPayload {
   /** MIME type as reported by the upload, when known. */
   readonly mimeType: string | null;
 }
+
+/**
+ * Payload for a `generate` job (`QUEUE_NAMES.generate`, P5b). The Recall webhook
+ * (`/api/webhooks/recall`) enqueues one after verifying the meeting + bot_job_id;
+ * the worker processor fetches the transcript (or uses `transcriptOverride`),
+ * embeds it, and runs the sequential 6-document pipeline (docs/06 §4).
+ */
+export interface GenerationJobPayload {
+  /** `meetings.id` this generation run is for. */
+  readonly meetingId: string;
+  /** Recall `bot_job_id` to fetch the transcript with (null when overridden). */
+  readonly botJobId: string | null;
+  /**
+   * Direct transcript text — bypasses the Recall fetch. Set by tests/local runs
+   * to exercise the full pipeline without a live Recall webhook (docs/06 §4 test
+   * path); production webhook jobs omit it and the worker fetches from Recall.
+   */
+  readonly transcriptOverride?: string;
+}
+
+/**
+ * Payload for the repeatable transcript-watchdog job (`QUEUE_NAMES.watchdog`,
+ * P5b). No per-meeting data — each sweep scans for meetings stuck awaiting a
+ * transcript past the SLA (docs/06 §8).
+ */
+export interface WatchdogJobPayload {
+  /** Logical origin of the sweep — e.g. `'scheduler'` for the repeatable job. */
+  readonly source: string;
+}

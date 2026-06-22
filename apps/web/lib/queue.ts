@@ -12,7 +12,12 @@ import 'server-only';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 
-import { JOB_NAMES, QUEUE_NAMES, type IngestJobPayload } from '@gracie/shared';
+import {
+  JOB_NAMES,
+  QUEUE_NAMES,
+  type GenerationJobPayload,
+  type IngestJobPayload,
+} from '@gracie/shared';
 
 /** Mirrors apps/worker queues/factory.ts DEFAULT_JOB_OPTIONS. */
 const DEFAULT_JOB_OPTIONS = {
@@ -24,6 +29,7 @@ const DEFAULT_JOB_OPTIONS = {
 
 let connection: Redis | undefined;
 let ingestQueue: Queue<IngestJobPayload> | undefined;
+let generateQueue: Queue<GenerationJobPayload> | undefined;
 
 function getConnection(): Redis {
   if (connection !== undefined) return connection;
@@ -48,5 +54,20 @@ function getIngestQueue(): Queue<IngestJobPayload> {
 /** Enqueue one manual-upload ingest job; returns the BullMQ job id. */
 export async function enqueueIngest(payload: IngestJobPayload): Promise<string> {
   const job = await getIngestQueue().add(JOB_NAMES.ingest, payload);
+  return job.id ?? '';
+}
+
+function getGenerateQueue(): Queue<GenerationJobPayload> {
+  if (generateQueue !== undefined) return generateQueue;
+  generateQueue = new Queue<GenerationJobPayload>(QUEUE_NAMES.generate, {
+    connection: getConnection(),
+    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+  });
+  return generateQueue;
+}
+
+/** Enqueue one meeting-generation job (Recall webhook → pipeline); returns the job id. */
+export async function enqueueGenerate(payload: GenerationJobPayload): Promise<string> {
+  const job = await getGenerateQueue().add(JOB_NAMES.generate, payload);
   return job.id ?? '';
 }

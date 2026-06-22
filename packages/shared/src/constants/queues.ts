@@ -14,6 +14,10 @@ export const QUEUE_NAMES = {
   heartbeat: 'heartbeat',
   /** Manual-upload ingest: extract → chunk → embed → pgvector (P5a, docs/06 §5). */
   ingest: 'ingest',
+  /** Meeting generation: transcript → 6 docs → tasks → master record → notify (P5b, docs/06 §4). */
+  generate: 'generate',
+  /** Transcript watchdog: meetings awaiting a transcript past the SLA (P5b, docs/06 §8). */
+  watchdog: 'watchdog',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -22,6 +26,8 @@ export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 export const JOB_NAMES = {
   heartbeat: 'heartbeat.tick',
   ingest: 'ingest.process',
+  generate: 'generate.process',
+  watchdog: 'watchdog.transcript',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
@@ -33,7 +39,17 @@ export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
  */
 export const JOB_SCHEDULER_IDS = {
   heartbeat: 'heartbeat.every-30s',
+  transcriptWatchdog: 'watchdog.transcript.every-15m',
 } as const;
 
 /** Heartbeat repeat interval (ms) — ~every 30s. A liveness signal, not real work. */
 export const HEARTBEAT_INTERVAL_MS = 30_000;
+
+/** Transcript-watchdog sweep interval (ms) — ~every 15 min (docs/06 §8). */
+export const TRANSCRIPT_WATCHDOG_INTERVAL_MS = 15 * 60_000;
+
+/**
+ * SLA for a transcript to arrive after a bot is dispatched (docs/06 §8). Past
+ * this, the watchdog flags the meeting `needs_attention`.
+ */
+export const TRANSCRIPT_TIMEOUT_MINUTES = 90;
