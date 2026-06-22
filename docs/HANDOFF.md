@@ -92,11 +92,18 @@ use `corepack pnpm@10.33.0` directly.
 ### Now — orchestrated phased build
 Logto is ACTIVE and infra is up. Work proceeds as **phased delegation briefs in
 `docs/plan/`**, each executed in a fresh low-context session (human = master terminal).
-- **Done:** `worker-foundation`.
-- **Next:** P5 ingest (manual upload → extract → chunk → embed → pgvector), then P5
-  generation (6 docs + tasks), then P4 calendar (**needs Azure/MS Graph creds**).
-- **Logto remaining:** add the Microsoft Entra connector (needs Azure) + remove the dev
-  test user `gracieadmin`.
+- **Done:** `worker-foundation`; **P5a ingest** (`dd4cf08` — upload → extract → chunk → embed → pgvector).
+- **Next:** **P5b generation** — brief at `docs/plan/p5b-generation-pipeline.md` (Recall webhook →
+  6 docs → tasks → master record → pipeline_runs → notify + transcript watchdog). Then **P4 calendar
+  is DEFERRED to the end** (needs Azure/MS Graph creds).
+- **Logto remaining:** add the Microsoft Entra connector (needs Azure) + remove the dev test user `gracieadmin`.
+
+> **Dev env note (2026-06-18, macOS):** the original `APP_ENCRYPTION_KEY` was lost; it was rotated to a
+> fresh key and the two `integration_credentials` rows (openai, recall) were re-encrypted under it and
+> verified (live 1536-dim embed). New key + raw OpenAI/Recall keys live in git-ignored `docs/SECRETS.md`
+> (BACK IT UP). `apps/worker/.env.local` was reconstructed from the live Coolify containers and verified
+> end-to-end (Redis auth, MinIO `ga-app-dev` put/get, Supabase). `apps/web/.env.local` (Logto +
+> NEXT_PUBLIC_* + REDIS_URL) still TODO. `RECALL_WEBHOOK_SECRET` comes at deploy time (P5b webhook).
 
 ### Remaining (broad)
 - Deploy `apps/web` + `apps/worker` into Coolify (gracie project) over the internal Docker
