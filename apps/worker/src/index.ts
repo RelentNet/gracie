@@ -17,11 +17,15 @@ import { QUEUE_NAMES } from '@gracie/shared';
 
 import { loadEnv } from './lib/env.js';
 import { createRedisConnection } from './lib/redis.js';
+import { createGenerateProcessor } from './processors/generate.processor.js';
 import { createHeartbeatProcessor } from './processors/heartbeat.processor.js';
 import { createIngestProcessor } from './processors/ingest.processor.js';
+import { createWatchdogProcessor } from './processors/watchdog.processor.js';
 import { createWorker } from './queues/factory.js';
+import { createGenerateQueue } from './queues/generate.queue.js';
 import { createHeartbeatQueue, scheduleHeartbeat } from './queues/heartbeat.queue.js';
 import { createIngestQueue } from './queues/ingest.queue.js';
+import { createWatchdogQueue, scheduleTranscriptWatchdog } from './queues/watchdog.queue.js';
 import { buildServer } from './server.js';
 
 /** Resources to release on shutdown. */
@@ -72,7 +76,12 @@ async function start(): Promise<void> {
   // Build the queues + Fastify app first so processors can log through app.log.
   const heartbeatQueue = createHeartbeatQueue(connection);
   const ingestQueue = createIngestQueue(connection);
-  const app = buildServer({ connection, queues: [heartbeatQueue, ingestQueue] });
+  const generateQueue = createGenerateQueue(connection);
+  const watchdogQueue = createWatchdogQueue(connection);
+  const app = buildServer({
+    connection,
+    queues: [heartbeatQueue, ingestQueue, generateQueue, watchdogQueue],
+  });
 
   connection.on('error', (error) => app.log.error({ err: error }, 'redis connection error'));
   connection.on('ready', () => app.log.info('redis connection ready'));
@@ -96,13 +105,34 @@ async function start(): Promise<void> {
     app.log.error({ jobId: job?.id, err: error }, 'ingest job failed');
   });
 
+  // Generate: meeting pipeline (transcript → 6 docs → tasks → notify, P5b).
+  const generateWorker = createWorker(
+    QUEUE_NAMES.generate,
+    createGenerateProcessor(app.log),
+    connection,
+  );
+  generateWorker.on('failed', (job, error) => {
+    app.log.error({ jobId: job?.id, err: error }, 'generate job failed');
+  });
+
+  // Watchdog: flag meetings stuck awaiting a transcript past the SLA (P5b).
+  const watchdogWorker = createWorker(
+    QUEUE_NAMES.watchdog,
+    createWatchdogProcessor(app.log),
+    connection,
+  );
+  watchdogWorker.on('failed', (job, error) => {
+    app.log.error({ jobId: job?.id, err: error }, 'watchdog job failed');
+  });
+
   await scheduleHeartbeat(heartbeatQueue);
+  await scheduleTranscriptWatchdog(watchdogQueue);
 
   installShutdown({
     app,
     connection,
-    queues: [heartbeatQueue, ingestQueue],
-    workers: [heartbeatWorker, ingestWorker],
+    queues: [heartbeatQueue, ingestQueue, generateQueue, watchdogQueue],
+    workers: [heartbeatWorker, ingestWorker, generateWorker, watchdogWorker],
   });
 
   await app.listen({ port: env.port, host: env.host });
