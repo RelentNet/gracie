@@ -14,6 +14,8 @@ export const QUEUE_NAMES = {
   heartbeat: 'heartbeat',
   /** Manual-upload ingest: extract → chunk → embed → pgvector (P5a, docs/06 §5). */
   ingest: 'ingest',
+  /** Knowledge Base ingest: extract → chunk → embed → pgvector, global (P6, docs/06 §7). */
+  kbIngest: 'kb-ingest',
   /** Meeting generation: transcript → 6 docs → tasks → master record → notify (P5b, docs/06 §4). */
   generate: 'generate',
   /** Transcript watchdog: meetings awaiting a transcript past the SLA (P5b, docs/06 §8). */
@@ -26,6 +28,7 @@ export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 export const JOB_NAMES = {
   heartbeat: 'heartbeat.tick',
   ingest: 'ingest.process',
+  kbIngest: 'kb-ingest.process',
   generate: 'generate.process',
   watchdog: 'watchdog.transcript',
 } as const;

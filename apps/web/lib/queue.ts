@@ -17,6 +17,7 @@ import {
   QUEUE_NAMES,
   type GenerationJobPayload,
   type IngestJobPayload,
+  type KbIngestJobPayload,
 } from '@gracie/shared';
 
 /** Mirrors apps/worker queues/factory.ts DEFAULT_JOB_OPTIONS. */
@@ -29,6 +30,7 @@ const DEFAULT_JOB_OPTIONS = {
 
 let connection: Redis | undefined;
 let ingestQueue: Queue<IngestJobPayload> | undefined;
+let kbIngestQueue: Queue<KbIngestJobPayload> | undefined;
 let generateQueue: Queue<GenerationJobPayload> | undefined;
 
 function getConnection(): Redis {
@@ -54,6 +56,21 @@ function getIngestQueue(): Queue<IngestJobPayload> {
 /** Enqueue one manual-upload ingest job; returns the BullMQ job id. */
 export async function enqueueIngest(payload: IngestJobPayload): Promise<string> {
   const job = await getIngestQueue().add(JOB_NAMES.ingest, payload);
+  return job.id ?? '';
+}
+
+function getKbIngestQueue(): Queue<KbIngestJobPayload> {
+  if (kbIngestQueue !== undefined) return kbIngestQueue;
+  kbIngestQueue = new Queue<KbIngestJobPayload>(QUEUE_NAMES.kbIngest, {
+    connection: getConnection(),
+    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+  });
+  return kbIngestQueue;
+}
+
+/** Enqueue one Knowledge Base ingest job (KB upload → embed); returns the job id. */
+export async function enqueueKbIngest(payload: KbIngestJobPayload): Promise<string> {
+  const job = await getKbIngestQueue().add(JOB_NAMES.kbIngest, payload);
   return job.id ?? '';
 }
 

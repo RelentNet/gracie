@@ -106,6 +106,12 @@ export async function getObjectBytes(key: string): Promise<Buffer> {
   return Buffer.from(bytes);
 }
 
+/** Delete an object by key (e.g. when a Knowledge Base document is removed). */
+export async function deleteObject(key: string): Promise<void> {
+  const { bucket } = getS3Config();
+  await getS3Client().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+}
+
 /** Move an object: server-side copy + delete (invisible to the user). */
 export async function moveObject(sourceKey: string, destinationKey: string): Promise<void> {
   const { bucket } = getS3Config();

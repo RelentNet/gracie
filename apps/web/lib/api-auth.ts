@@ -15,6 +15,7 @@ import { getLogtoContext } from '@logto/next/server-actions';
 
 import type { Role } from '@gracie/shared';
 
+import { MOCK_USER } from './auth-shared';
 import { isLogtoConfigured, logtoConfig, resolveRole } from './logto';
 
 export interface RequestUser {
@@ -22,11 +23,14 @@ export interface RequestUser {
   readonly role: Role;
 }
 
-// Fallback identity for local dev before Logto is wired (matches MOCK_ROLE in
-// lib/auth-shared.ts). Replaced by real claims once the Logto secrets are set.
+// Fallback identity for local dev before Logto is wired. Derived from the SAME
+// MOCK_ROLE/MOCK_IDENTITIES as the client AuthProvider (lib/auth-shared.ts), so
+// flipping `MOCK_ROLE` to 'admin' | 'standard' | 'viewer' switches BOTH the UI
+// and these API routes in lockstep — which is how the P6 transcript role filter
+// is exercised locally. Replaced by real claims once the Logto secrets are set.
 const MOCK_REQUEST_USER: RequestUser = {
-  userId: 'usr_allie',
-  role: 'admin',
+  userId: MOCK_USER.id,
+  role: MOCK_USER.role,
 };
 
 /**

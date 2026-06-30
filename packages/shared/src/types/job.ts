@@ -33,6 +33,26 @@ export interface IngestJobPayload {
 }
 
 /**
+ * Payload for a `kb-ingest` job (`QUEUE_NAMES.kbIngest`, P6). The web
+ * `/api/knowledge-base` route enqueues one after storing the object + inserting
+ * the `knowledge_base_documents` row; the worker fetches the bytes, extracts
+ * text, chunks, embeds (pinned 1536-dim), and writes `embeddings` rows with
+ * `source_type='knowledge_base'`, `source_id=<kb id>`, `client_id=null` — global
+ * reference material retrievable into any client's chat (docs/06 §7). Mirrors
+ * `IngestJobPayload` but has no owning client (KB is firm-wide).
+ */
+export interface KbIngestJobPayload {
+  /** `knowledge_base_documents.id` this ingest produces embeddings for. */
+  readonly knowledgeBaseDocumentId: string;
+  /** Storage object key in MinIO (the `knowledge_base_documents.r2_key`). */
+  readonly objectKey: string;
+  /** Original file name (drives extension-based extraction). */
+  readonly fileName: string;
+  /** MIME type as reported by the upload, when known. */
+  readonly mimeType: string | null;
+}
+
+/**
  * Payload for a `generate` job (`QUEUE_NAMES.generate`, P5b). The Recall webhook
  * (`/api/webhooks/recall`) enqueues one after verifying the meeting + bot_job_id;
  * the worker processor fetches the transcript (or uses `transcriptOverride`),

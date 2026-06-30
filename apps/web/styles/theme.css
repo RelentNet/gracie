@@ -18,6 +18,7 @@
 
   /* --- Blue: primary actions, links, in-progress --- */
   --color-blue-500: #3b82f6;
+  --color-blue-600: #2563eb; /* user chat bubble (docs/08 §9 tab 7) */
   --color-blue-700: #1e40af;
   --color-blue-100: #dbeafe;
 
