@@ -92,10 +92,11 @@ use `corepack pnpm@10.33.0` directly.
 ### Now — orchestrated phased build
 Logto is ACTIVE and infra is up. Work proceeds as **phased delegation briefs in
 `docs/plan/`**, each executed in a fresh low-context session (human = master terminal).
-- **Done:** `worker-foundation`; **P5a ingest** (`dd4cf08` — upload → extract → chunk → embed → pgvector).
-- **Next:** **P5b generation** — brief at `docs/plan/p5b-generation-pipeline.md` (Recall webhook →
-  6 docs → tasks → master record → pipeline_runs → notify + transcript watchdog). Then **P4 calendar
-  is DEFERRED to the end** (needs Azure/MS Graph creds).
+- **Done:** `worker-foundation`; **P5a ingest** (`dd4cf08`); **P5b generation** (`715dc68` — merged:
+  Recall webhook → 6 docs → tasks → master record → pipeline_runs → notify + watchdog; verified live).
+- **Next:** **P6 Intelligence chat + Knowledge Base** — brief at `docs/plan/p6-intelligence-kb.md`
+  (`POST /api/ai/chat` streaming + client-scoped, role-filtered retrieval; KB module + embed-on-ingest).
+  Then **deploy / go-live**, P7, P8, P9-finish, P10. **P4 calendar is DEFERRED to the end** (needs Azure).
 - **Logto remaining:** add the Microsoft Entra connector (needs Azure) + remove the dev test user `gracieadmin`.
 
 > **Dev env note (2026-06-18, macOS):** the original `APP_ENCRYPTION_KEY` was lost; it was rotated to a
