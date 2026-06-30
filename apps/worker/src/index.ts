@@ -20,11 +20,13 @@ import { createRedisConnection } from './lib/redis.js';
 import { createGenerateProcessor } from './processors/generate.processor.js';
 import { createHeartbeatProcessor } from './processors/heartbeat.processor.js';
 import { createIngestProcessor } from './processors/ingest.processor.js';
+import { createKbIngestProcessor } from './processors/kb-ingest.processor.js';
 import { createWatchdogProcessor } from './processors/watchdog.processor.js';
 import { createWorker } from './queues/factory.js';
 import { createGenerateQueue } from './queues/generate.queue.js';
 import { createHeartbeatQueue, scheduleHeartbeat } from './queues/heartbeat.queue.js';
 import { createIngestQueue } from './queues/ingest.queue.js';
+import { createKbIngestQueue } from './queues/kb-ingest.queue.js';
 import { createWatchdogQueue, scheduleTranscriptWatchdog } from './queues/watchdog.queue.js';
 import { buildServer } from './server.js';
 
@@ -76,11 +78,12 @@ async function start(): Promise<void> {
   // Build the queues + Fastify app first so processors can log through app.log.
   const heartbeatQueue = createHeartbeatQueue(connection);
   const ingestQueue = createIngestQueue(connection);
+  const kbIngestQueue = createKbIngestQueue(connection);
   const generateQueue = createGenerateQueue(connection);
   const watchdogQueue = createWatchdogQueue(connection);
   const app = buildServer({
     connection,
-    queues: [heartbeatQueue, ingestQueue, generateQueue, watchdogQueue],
+    queues: [heartbeatQueue, ingestQueue, kbIngestQueue, generateQueue, watchdogQueue],
   });
 
   connection.on('error', (error) => app.log.error({ err: error }, 'redis connection error'));
@@ -103,6 +106,16 @@ async function start(): Promise<void> {
   );
   ingestWorker.on('failed', (job, error) => {
     app.log.error({ jobId: job?.id, err: error }, 'ingest job failed');
+  });
+
+  // KB ingest: global reference-doc pipeline (extract → chunk → embed, P6).
+  const kbIngestWorker = createWorker(
+    QUEUE_NAMES.kbIngest,
+    createKbIngestProcessor(app.log),
+    connection,
+  );
+  kbIngestWorker.on('failed', (job, error) => {
+    app.log.error({ jobId: job?.id, err: error }, 'kb-ingest job failed');
   });
 
   // Generate: meeting pipeline (transcript → 6 docs → tasks → notify, P5b).
@@ -131,8 +144,8 @@ async function start(): Promise<void> {
   installShutdown({
     app,
     connection,
-    queues: [heartbeatQueue, ingestQueue, generateQueue, watchdogQueue],
-    workers: [heartbeatWorker, ingestWorker, generateWorker, watchdogWorker],
+    queues: [heartbeatQueue, ingestQueue, kbIngestQueue, generateQueue, watchdogQueue],
+    workers: [heartbeatWorker, ingestWorker, kbIngestWorker, generateWorker, watchdogWorker],
   });
 
   await app.listen({ port: env.port, host: env.host });

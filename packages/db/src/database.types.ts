@@ -1097,6 +1097,18 @@ export type Database = {
           source_type: Database["public"]["Enums"]["embedding_source"]
         }[]
       }
+      match_kb_embeddings: {
+        Args: {
+          match_count?: number
+          query_embedding: string
+        }
+        Returns: {
+          content: string
+          id: string
+          similarity: number
+          source_id: string
+        }[]
+      }
     }
     Enums: {
       assistant_msg_role: "user" | "assistant"

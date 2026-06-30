@@ -3,6 +3,7 @@ export * from './user.js';
 export * from './client.js';
 export * from './meeting.js';
 export * from './document.js';
+export * from './knowledge-base.js';
 export * from './task.js';
 export * from './file.js';
 export * from './system.js';
