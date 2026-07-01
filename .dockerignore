@@ -1,0 +1,15 @@
+# Build context excludes — keep secrets and heavy artifacts out of the image.
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/coverage
+.git
+.github
+**/.env
+**/.env.*
+!**/.env.example
+docs
+*.log
+**/*.log
+.DS_Store
