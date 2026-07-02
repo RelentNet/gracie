@@ -150,3 +150,44 @@ The previous operator will paste the contents of `docs/SECRETS.md`,
 `apps/web/.env.local`, the SSH private key (`~/.ssh/gracie_vm`), and the
 `~/.ssh/config` `gracie-vm` block. Recreate those files, `chmod 600` the key, then
 `ssh gracie-vm` to confirm access. Everything else comes from `git clone`.
+
+---
+
+## ▶ NEXT UP — Connect Microsoft Entra ID (for beta testing)  [added 2026-07-02]
+
+**Status:** GA App is **LIVE in production** at `https://gracie.graceandassociates.com`
+(deployed 2026-07-01) with real Logto auth + valid TLS. Web + worker run as Coolify
+apps on the VM; the office **Nginx Proxy Manager** terminates TLS and forwards the
+domain to the VM's Traefik on **:443** (NOT the app's :3000). P1–P3, P5, P6 done.
+
+**THE NEXT TASK (do this first): wire Microsoft Entra ID (Azure AD) into Logto so
+Grace & Associates staff can sign in with their Microsoft/work accounts — the
+prerequisite for beta testing.** This is the long-deferred "needs Azure" item.
+
+1. **Azure/Entra app registration** (needs Entra tenant admin access — the blocker):
+   in the client's Entra tenant, create an App Registration; capture **tenant id,
+   client id, client secret**. Add the **redirect URI** Logto shows when you create
+   the connector (form: `https://auth.gracie.graceandassociates.com/callback/<connector-id>`).
+   Grant delegated `openid profile email` (+ `User.Read`).
+2. **Logto connector** at `https://auth-admin.gracie.graceandassociates.com` → add the
+   **Microsoft Entra ID (Azure AD)** social/enterprise connector; enter tenant/client/
+   secret + scopes; enable it in the **Sign-in Experience**.
+3. **Role mapping** — the app resolves its Role from a `user_role`/`app_role` claim
+   (Logto JWT customizer / `custom_data`) or Logto RBAC roles, defaulting to
+   least-privilege **viewer** (see `apps/web/lib/logto.ts` `resolveRole`, DB `auth_role()`).
+   Set up the customizer/RBAC so Entra users get a real role; assign beta users
+   admin/standard/viewer.
+4. **Remove the dev test user `gracieadmin`** before opening beta.
+5. **Verify end-to-end:** sign in at `https://gracie.graceandassociates.com` with a
+   Microsoft account → lands authenticated with the correct role; confirm a
+   client-scoped chat answer streams and the transcript **role filter** holds for a
+   real non-admin beta user.
+
+Full prod topology + gotchas (Coolify apps, NPM→Traefik:443, internal-Redis, Coolify
+token location) are in the auto-memory `deploy-topology.md`.
+
+**Smaller prod follow-ups (after Entra, not blockers):** (a) `getRequestUser()` throws
+`'unauthorized'` → API routes return **500 instead of 401** for session-less requests
+(now exposed since Logto is enforced) — map it to 401; (b) add `proxy_buffering off;`
+to the NPM `gracie` host so chat answers stream live; (c) the VM LAN link
+(`10.200.200.131`) **drops intermittently** — worth stabilizing.
