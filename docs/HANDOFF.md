@@ -153,6 +153,72 @@ The previous operator will paste the contents of `docs/SECRETS.md`,
 
 ---
 
+## Session Report — P6 Intelligence/KB + First Go-Live (2026-07-01 → 02)
+
+**Delivered**
+
+- **P6 — Intelligence Chat & Knowledge Base** (merged to `main`, squash `1a086ee`, was PR #2):
+  - **Streaming `POST /api/ai/chat`** (`runtime=nodejs`, any role): embed query →
+    `match_embeddings` (over-fetch) → **role gate** → optional global KB chunks →
+    chat-specific prompt assembly → `provider.stream()`. All AI via the provider
+    interface (never the OpenAI SDK); embeddings pinned 1536-dim.
+  - **Role gate (SECURITY), two layers, mirrors the restricted-folder rule (D14):**
+    (1) drop `source_type='transcript'` for non-admins — pure `filterChunksForRole`
+    in `@gracie/shared` (`ai/chat.ts`); (2) drop document-backed chunks
+    (`upload`/`meeting_document`) whose folder is `restricted` and excludes the role —
+    `filterChunksByFolderVisibility` in `apps/web/lib/data/chat-retrieval.ts`. Both
+    applied BEFORE top-K. Verified live: admin sees transcript + restricted chunks;
+    standard/viewer see neither.
+  - **Intelligence tab** (client tab 7): scope bar, KB toggle, slate-100 / blue-600
+    bubbles, dependency-free Markdown renderer, Enter=send / Shift+Enter=newline,
+    streaming render.
+  - **Knowledge Base module (M9):** routes `GET`(any)/`POST`(editor)/`PATCH`(editor,
+    archive via `ai_active`)/`DELETE`(admin); `kb-ingest` worker job mirroring the
+    ingest processor (`source_type='knowledge_base'`, `client_id=null`, idempotent);
+    table + filters + upload modal + archive UI.
+  - **NEW `match_kb_embeddings` RPC** — migration `packages/db/migrations/0002_add_match_kb_embeddings.sql`,
+    applied to the live DB via postgres-meta `/pg/query`. The shipped `match_embeddings`
+    signature is UNCHANGED.
+  - Adversarial multi-agent review → 6 findings; **fixed 5** (folder-visibility
+    hardening above, KB `GET` auth, wider candidate pool, mid-stream interrupt marker,
+    dropped `aria-live` on the streaming thread), **accepted 1** (KB upload not atomic
+    on enqueue failure — same shape as the shipped P5a pipeline).
+  - Green: `pnpm -w typecheck && pnpm -w lint && pnpm --filter web build`; live role
+    filter + KB upload→embed→archive→delete verified.
+- **First production deploy / go-live (2026-07-01)** — live at `https://gracie.graceandassociates.com`:
+  - Added `apps/web/Dockerfile` + `apps/worker/Dockerfile` (root-context pnpm monorepo;
+    commit `3c3b39a`), validated with local `docker build`.
+  - Created 2 Coolify apps in project `gracie` / env `production`: `gracie-web`
+    (uuid `vp1nsjs9cvdi2nqkdeydjydj`, :3000, domain) + `gracie-worker`
+    (`ck7lktaqtpkrr9uk9bzsfnd2`, :3001, no public domain).
+  - Wired **real Logto auth** for web (GA App `v4yeg6a8wu5kod32xph81`); repointed
+    `REDIS_URL` to the internal Coolify `gracie-redis` (the dev LAN proxy `:6380`
+    times out from containers).
+  - Initial public **502 root cause:** the office **Nginx Proxy Manager** `gracie`
+    host forwarded to `:3000` (not host-exposed); fixed by forwarding to the VM's
+    Traefik on **:443** (like `auth`). Verified: apex 200, `/sign-in` → Logto, valid
+    LE cert. Full topology in auto-memory `deploy-topology.md`.
+
+**Still to do after P6 (roadmap)**
+
+- **Immediate:** Microsoft Entra ID connector for beta — see "▶ NEXT UP" below (blocked on Entra/Azure tenant-admin access).
+- **Prod follow-ups:** (a) map `getRequestUser()`'s `'unauthorized'` throw → **401**
+  (currently 500 for session-less API calls, now exposed with Logto enforced);
+  (b) `proxy_buffering off;` on the NPM `gracie` host for live chat streaming;
+  (c) stabilize the intermittently-dropping VM LAN (`10.200.200.131`).
+- **Verification gaps:** a real **browser login round-trip** + a grounded chat answer
+  through the *public* path were NOT done (only server-side curl) — do this with a
+  real beta user once Entra is in.
+- **Config caveats:** `NEXT_PUBLIC_SUPABASE_URL` is the LAN proxy (OK only if the
+  browser never calls Supabase directly — app is API-route-centric; confirm). Coolify
+  can create duplicate env rows on a bulk env PATCH — check for dupes when editing app env.
+- **Later phases:** P6B Assistant (Module 14) · P7 briefs/daily-sync/notifications
+  (needs Resend) · P8 n8n · P9 settings/admin finish · P10 hardening + KEY ROTATION
+  (incl. the build/test keys in `SECRETS.md`) · P4 calendar (deferred — needs Azure,
+  overlaps with Entra).
+
+---
+
 ## ▶ NEXT UP — Connect Microsoft Entra ID (for beta testing)  [added 2026-07-02]
 
 **Status:** GA App is **LIVE in production** at `https://gracie.graceandassociates.com`
