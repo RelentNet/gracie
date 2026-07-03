@@ -17,6 +17,7 @@ import { putObject } from '@gracie/shared/storage';
 import { getRequestUser, isAdmin } from '@/lib/api-auth';
 import { canEditRole } from '@/lib/data/files';
 import { getClient } from '@/lib/data/clients';
+import { getFolderById } from '@/lib/data/folders';
 import {
   buildUploadKey,
   clientSlug,
@@ -79,16 +80,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Destination subtype (folder), optional title override, and status.
+    // Destination inputs: the currently-viewed folder (explicit target) wins over
+    // the document-type subtype, which only picks a default Uploads folder.
+    const targetFolderId = readString(form.get('folderId'));
     const subtype = resolveSubtype(readString(form.get('subtype')));
-    // SECURITY (docs/02 §D14): filing into the restricted Transcripts folder is
-    // Admin-only — reject a transcript upload from a non-admin.
-    if (subtype.restricted && !isAdmin(user)) {
-      return NextResponse.json(
-        { error: { code: 'forbidden', message: 'Filing into Transcripts requires admin' } },
-        { status: 403 },
-      );
-    }
     const status: DocumentStatus =
       readString(form.get('status')) === 'needs_review' ? 'needs_review' : 'ready';
     const titleOverride = readString(form.get('title'));
@@ -100,9 +95,43 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { status: 404 },
       );
     }
-
     const slug = clientSlug(client.name);
-    const { folderId, folderPath } = await ensureUploadFolder(clientId, slug, subtype.value);
+
+    // Resolve the destination folder + its R2 prefix.
+    let folderId: string;
+    let folderPath: string;
+    if (targetFolderId !== null) {
+      // Upload into the folder the user is viewing.
+      const folder = await getFolderById(targetFolderId);
+      if (folder === null || folder.clientId !== clientId) {
+        return NextResponse.json(
+          { error: { code: 'bad_request', message: 'Invalid target folder' } },
+          { status: 400 },
+        );
+      }
+      // SECURITY (docs/02 §D14): the destination folder's visibility governs —
+      // only admins may upload into a restricted (Admin-only) folder.
+      if (folder.visibility === 'restricted' && !isAdmin(user)) {
+        return NextResponse.json(
+          { error: { code: 'forbidden', message: 'Not authorized for the destination folder' } },
+          { status: 403 },
+        );
+      }
+      folderId = folder.id;
+      folderPath = folder.path;
+    } else {
+      // No folder selected → fall back to the client's Uploads folder by subtype.
+      // SECURITY: filing a transcript into the Admin-only folder requires admin.
+      if (subtype.restricted && !isAdmin(user)) {
+        return NextResponse.json(
+          { error: { code: 'forbidden', message: 'Filing into Transcripts requires admin' } },
+          { status: 403 },
+        );
+      }
+      const ensured = await ensureUploadFolder(clientId, slug, subtype.value);
+      folderId = ensured.folderId;
+      folderPath = ensured.folderPath;
+    }
     const now = new Date();
     const results: UploadedFileResult[] = [];
 

@@ -241,6 +241,10 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
     selectedFolder?.displayName ??
     (activeClientId !== null ? `${clientName(activeClientId)} (root)` : 'client root');
   const defaultSubtype = subtypeForFolder(selectedFolder);
+  // Upload target = the folder currently in view (its breadcrumb as a readable
+  // path). `parentFolderId` is that folder's id, or null at a client/All-files root.
+  const uploadTargetLabel =
+    selectedFolder !== null ? breadcrumbItems.map((crumb) => crumb.label).join(' / ') : null;
   const moveFolders = useMemo<readonly Folder[]>(
     () =>
       moveDoc === null
@@ -326,6 +330,8 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
           fixedClientName={activeClientId !== null ? clientName(activeClientId) : null}
           defaultSubtype={defaultSubtype}
           isAdmin={isAdmin}
+          targetFolderId={parentFolderId}
+          targetLabel={uploadTargetLabel}
         />
       ) : null}
       {editable && newFolderOpen && activeClientId !== null ? (
