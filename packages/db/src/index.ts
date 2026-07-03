@@ -24,3 +24,5 @@ export {
 export type { IntegrationKey, IntegrationStatus, SetIntegrationParams } from './credentials.js';
 export { encryptSecret, decryptSecret } from './crypto.js';
 export { getActiveProvider, getEmbedder } from './ai.js';
+export { findOrCreateFolder } from './folders.js';
+export type { FindOrCreateFolderInput } from './folders.js';

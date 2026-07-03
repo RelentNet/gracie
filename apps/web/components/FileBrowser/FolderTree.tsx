@@ -1,56 +1,47 @@
 'use client';
 
-import { Folder as FolderIcon, FolderOpen, Lock } from 'lucide-react';
-import type { Folder } from '@gracie/shared';
+import Link from 'next/link';
+import {
+  BookOpen,
+  Folder as FolderIcon,
+  FolderOpen,
+  Building2,
+  Users,
+  Clock,
+  Lock,
+} from 'lucide-react';
 
 import { TYPE } from '@/lib/typography';
+import type { TreeIcon, TreeNode } from '@/components/FileBrowser/tree';
 
 /**
- * FolderTree (docs/08 §8 M11) — left panel of the two-panel file browser.
+ * FolderTree (docs/08 §8 M11) — left panel of the two-panel file browser. Renders
+ * the generic `TreeNode` model (see `tree.ts`) for BOTH the client-scoped and the
+ * global browser.
  *
  * CRITICAL role rule (docs/08 §1/§7, D14): restricted folders (e.g. Transcripts)
  * are OMITTED entirely for roles not in `allowedRoles` — the caller filters them
- * out before passing `folders` here, so they are absent from the DOM, not shown
- * and locked. Admins DO see restricted folders, marked with a 🔒 lock icon.
+ * out before building nodes, so they are absent from the DOM, not shown and
+ * locked. Admins DO see restricted folders, marked with a 🔒 lock icon. Nodes
+ * with an `href` (e.g. Knowledge Base) render as navigation links.
  */
-export interface FolderNode {
-  readonly folder: Folder;
-  readonly children: readonly FolderNode[];
-  /** Depth for indentation. */
-  readonly depth: number;
-}
+export type { TreeNode };
 
 export interface FolderTreeProps {
-  readonly nodes: readonly FolderNode[];
-  readonly selectedFolderId: string | null;
-  readonly onSelect: (folderId: string | null) => void;
-  /** Whether the current user may view restricted folders (admin). Drives 🔒. */
-  readonly canViewRestricted: boolean;
+  readonly nodes: readonly TreeNode[];
+  readonly selectedKey: string | null;
+  readonly onSelect: (key: string) => void;
 }
 
-export function FolderTree({
-  nodes,
-  selectedFolderId,
-  onSelect,
-  canViewRestricted,
-}: FolderTreeProps): React.JSX.Element {
+export function FolderTree({ nodes, selectedKey, onSelect }: FolderTreeProps): React.JSX.Element {
   return (
     <nav aria-label="Folders" className="flex flex-col gap-0.5">
-      <FolderRow
-        label="All files"
-        isSelected={selectedFolderId === null}
-        isRestricted={false}
-        showLock={false}
-        depth={0}
-        onSelect={(): void => onSelect(null)}
-      />
       {nodes.map((node) => (
         <FolderBranch
-          key={node.folder.id}
+          key={node.key}
           node={node}
-          selectedFolderId={selectedFolderId}
+          selectedKey={selectedKey}
           onSelect={onSelect}
-          canViewRestricted={canViewRestricted}
         />
       ))}
     </nav>
@@ -59,82 +50,86 @@ export function FolderTree({
 
 function FolderBranch({
   node,
-  selectedFolderId,
+  selectedKey,
   onSelect,
-  canViewRestricted,
 }: {
-  readonly node: FolderNode;
-  readonly selectedFolderId: string | null;
-  readonly onSelect: (folderId: string | null) => void;
-  readonly canViewRestricted: boolean;
+  readonly node: TreeNode;
+  readonly selectedKey: string | null;
+  readonly onSelect: (key: string) => void;
 }): React.JSX.Element {
-  const isRestricted = node.folder.visibility === 'restricted';
   return (
     <>
-      <FolderRow
-        label={node.folder.displayName}
-        isSelected={selectedFolderId === node.folder.id}
-        isRestricted={isRestricted}
-        showLock={isRestricted && canViewRestricted}
-        depth={node.depth}
-        onSelect={(): void => onSelect(node.folder.id)}
-      />
+      <FolderRow node={node} isSelected={selectedKey === node.key} onSelect={onSelect} />
       {node.children.map((child) => (
-        <FolderBranch
-          key={child.folder.id}
-          node={child}
-          selectedFolderId={selectedFolderId}
-          onSelect={onSelect}
-          canViewRestricted={canViewRestricted}
-        />
+        <FolderBranch key={child.key} node={child} selectedKey={selectedKey} onSelect={onSelect} />
       ))}
     </>
   );
 }
 
+const ICONS: Readonly<Record<TreeIcon, typeof FolderIcon>> = {
+  folder: FolderIcon,
+  clients: Building2,
+  client: Users,
+  recent: Clock,
+  book: BookOpen,
+};
+
 function FolderRow({
-  label,
+  node,
   isSelected,
-  isRestricted,
-  showLock,
-  depth,
   onSelect,
 }: {
-  readonly label: string;
+  readonly node: TreeNode;
   readonly isSelected: boolean;
-  readonly isRestricted: boolean;
-  readonly showLock: boolean;
-  readonly depth: number;
-  readonly onSelect: () => void;
+  readonly onSelect: (key: string) => void;
 }): React.JSX.Element {
-  const Icon = isSelected ? FolderOpen : FolderIcon;
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-current={isSelected ? 'true' : undefined}
-      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left"
-      style={{
-        paddingLeft: `${0.5 + depth * 0.875}rem`,
-        backgroundColor: isSelected ? 'var(--color-blue-100)' : 'transparent',
-        color: isSelected ? 'var(--color-blue-700)' : 'var(--text-primary)',
-        cursor: 'pointer',
-        ...TYPE.body,
-      }}
-    >
-      <Icon
-        aria-hidden="true"
-        size={16}
-        style={{ color: isRestricted ? 'var(--color-red-600)' : 'var(--text-secondary)' }}
-      />
-      <span className="truncate">{label}</span>
-      {showLock ? (
+  const Icon = node.icon === 'folder' && isSelected ? FolderOpen : ICONS[node.icon];
+  const iconColor = node.isRestricted ? 'var(--color-red-600)' : 'var(--text-secondary)';
+  const paddingLeft = `${0.5 + node.depth * 0.875}rem`;
+  const className = 'flex items-center gap-2 rounded-md px-2 py-1.5 text-left';
+
+  const inner = (
+    <>
+      <Icon aria-hidden="true" size={16} style={{ color: iconColor }} />
+      <span className="truncate">{node.label}</span>
+      {node.showLock ? (
         <Lock
           aria-label="Restricted folder"
           size={12}
           style={{ color: 'var(--color-red-600)', marginLeft: 'auto' }}
         />
       ) : null}
+    </>
+  );
+
+  if (node.href !== undefined) {
+    return (
+      <Link
+        href={node.href}
+        className={className}
+        style={{ paddingLeft, color: 'var(--text-primary)', ...TYPE.body }}
+      >
+        {inner}
+      </Link>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={(): void => onSelect(node.key)}
+      aria-current={isSelected ? 'true' : undefined}
+      className={className}
+      style={{
+        paddingLeft,
+        backgroundColor: isSelected ? 'var(--color-blue-100)' : 'transparent',
+        color: isSelected ? 'var(--color-blue-700)' : 'var(--text-primary)',
+        cursor: 'pointer',
+        ...TYPE.body,
+      }}
+    >
+      {inner}
     </button>
   );
 }
