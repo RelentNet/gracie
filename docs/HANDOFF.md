@@ -219,16 +219,25 @@ The previous operator will paste the contents of `docs/SECRETS.md`,
 
 ---
 
-## ▶ NEXT UP — Connect Microsoft Entra ID (for beta testing)  [added 2026-07-02]
+## ▶ NEXT UP — P6B Assistant module  [updated 2026-07-03]
 
-**Status:** GA App is **LIVE in production** at `https://gracie.graceandassociates.com`
-(deployed 2026-07-01) with real Logto auth + valid TLS. Web + worker run as Coolify
-apps on the VM; the office **Nginx Proxy Manager** terminates TLS and forwards the
-domain to the VM's Traefik on **:443** (NOT the app's :3000). P1–P3, P5, P6 done.
+**✅ DONE 2026-07-03 — Microsoft Entra ID → Logto is WIRED (beta unblocked).** Staff sign in
+with GA Microsoft accounts (single-tenant `azuread-universal` connector), verified live. Fixed a
+post-sign-in redirect bug on the way (`3d57c6f` — callback now uses public `baseUrl`, not the
+internal `localhost:3000`; deployed). "Default role on first login" was already handled
+(`resolveRole` defaults to `viewer`). Operator action: assign your own Microsoft-linked Logto
+user the `admin` role. The Entra step-by-step is preserved below for reference.
 
-**THE NEXT TASK (do this first): wire Microsoft Entra ID (Azure AD) into Logto so
-Grace & Associates staff can sign in with their Microsoft/work accounts — the
-prerequisite for beta testing.** This is the long-deferred "needs Azure" item.
+**THE NEXT TASK: P6B Assistant** — brief at `docs/plan/p6b-assistant.md` (general AI chat / ChatGPT
+replacement; reuses P6 streaming + Intelligence chat UI; strictly per-user private). Non-blocking
+follow-ups still open: NPM `proxy_buffering off` for live chat streaming; session-less API `500→401`.
+
+---
+
+**Reference — the completed Microsoft Entra step-by-step:** GA App is **LIVE in production** at
+`https://gracie.graceandassociates.com` (deployed 2026-07-01) with real Logto auth + valid TLS. Web +
+worker run as Coolify apps on the VM; the office **Nginx Proxy Manager** terminates TLS and forwards
+the domain to the VM's Traefik on **:443** (NOT the app's :3000). P1–P3, P5, P6 + Microsoft SSO done.
 
 1. **Azure/Entra app registration** (needs Entra tenant admin access — the blocker):
    in the client's Entra tenant, create an App Registration; capture **tenant id,
