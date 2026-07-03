@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { getLogtoContext, handleSignIn } from '@logto/next/server-actions';
 
 import { upsertUserFromLogto } from '@/lib/data/users';
-import { isLogtoConfigured, logtoConfig } from '@/lib/logto';
+import { baseUrl, isLogtoConfigured, logtoConfig } from '@/lib/logto';
 
 /**
  * Logto OAuth callback. Exchanges the authorization code, establishes the
@@ -19,5 +19,8 @@ export async function GET(request: Request): Promise<NextResponse> {
       await upsertUserFromLogto(context);
     }
   }
-  return NextResponse.redirect(new URL('/dashboard', request.url));
+  // Build the redirect from the app's known public origin, NOT request.url —
+  // behind the Traefik/NPM proxy request.url is the internal http://localhost:3000,
+  // which would bounce the browser to a dead localhost address after sign-in.
+  return NextResponse.redirect(new URL('/dashboard', baseUrl));
 }
