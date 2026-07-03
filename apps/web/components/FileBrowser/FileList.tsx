@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, MoreHorizontal, MoveRight } from 'lucide-react';
+import { Download, MoveRight } from 'lucide-react';
 import type { Document } from '@gracie/shared';
 
 import { getUserName } from '@/lib/mock';
@@ -15,14 +15,19 @@ import { EmptyState } from '@/components/ui/StateViews';
 /**
  * FileList (docs/08 §8 M11) — right panel of the file browser.
  *
- * Columns: Name, Type badge (Meeting blue / Upload purple / Auto emerald), Date,
- * Uploaded By, Size, Status badge (Ready / Requires Review / Delivered).
- * Download is available to ALL roles (real presigned-URL download); Move / More
- * are editor-only (D14). Move / More remain visual-only for now.
+ * Columns: Name, (Client — global view only), Type badge (Meeting blue / Upload
+ * purple / Auto emerald), Date, Uploaded By, Size, Status badge. Download works
+ * for ALL roles (real presigned-URL download); Move is editor-only (D14) and
+ * opens the caller's move modal via `onMove`.
  */
 export interface FileListProps {
   readonly documents: readonly Document[];
   readonly canEdit: boolean;
+  /** Global view adds a Client column; `clientName` resolves ids to names. */
+  readonly showClient?: boolean;
+  readonly clientName?: (clientId: string | null) => string;
+  /** Editor-only: open the move/refile flow for a document. */
+  readonly onMove?: (doc: Document) => void;
 }
 
 interface PresignResponse {
@@ -36,7 +41,13 @@ async function downloadDocument(doc: Document): Promise<void> {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
-export function FileList({ documents, canEdit }: FileListProps): React.JSX.Element {
+export function FileList({
+  documents,
+  canEdit,
+  showClient = false,
+  clientName,
+  onMove,
+}: FileListProps): React.JSX.Element {
   if (documents.length === 0) {
     return (
       <EmptyState
@@ -50,16 +61,15 @@ export function FileList({ documents, canEdit }: FileListProps): React.JSX.Eleme
     <Table>
       <THead>
         <TH>Name</TH>
+        {showClient ? <TH>Client</TH> : null}
         <TH>Type</TH>
         <TH>Date</TH>
         <TH>Uploaded By</TH>
         <TH>Size</TH>
         <TH>Status</TH>
-        {canEdit ? (
-          <TH>
-            <span className="sr-only">Actions</span>
-          </TH>
-        ) : null}
+        <TH>
+          <span className="sr-only">Actions</span>
+        </TH>
       </THead>
       <TBody>
         {documents.map((doc) => {
@@ -70,6 +80,13 @@ export function FileList({ documents, canEdit }: FileListProps): React.JSX.Eleme
               <TCell>
                 <span style={TYPE.bodyStrong}>{doc.fileName}</span>
               </TCell>
+              {showClient ? (
+                <TCell>
+                  <Badge bg="var(--color-slate-100)" fg="var(--color-slate-600)">
+                    {clientName?.(doc.clientId) ?? 'Unassigned'}
+                  </Badge>
+                </TCell>
+              ) : null}
               <TCell>
                 <Badge bg={source.bg} fg={source.fg}>
                   {source.label}
@@ -95,13 +112,11 @@ export function FileList({ documents, canEdit }: FileListProps): React.JSX.Eleme
                     }}
                   />
                   {canEdit ? (
-                    <>
-                      <FileAction label={`Move ${doc.fileName}`} icon={<MoveRight size={16} />} />
-                      <FileAction
-                        label={`More actions for ${doc.fileName}`}
-                        icon={<MoreHorizontal size={16} />}
-                      />
-                    </>
+                    <FileAction
+                      label={`Move ${doc.fileName}`}
+                      icon={<MoveRight size={16} />}
+                      onClick={onMove !== undefined ? (): void => onMove(doc) : undefined}
+                    />
                   ) : null}
                 </span>
               </TCell>
@@ -127,8 +142,14 @@ function FileAction({
       type="button"
       aria-label={label}
       onClick={onClick}
+      disabled={onClick === undefined}
       className="rounded-md p-1"
-      style={{ color: 'var(--text-secondary)', background: 'transparent', cursor: 'pointer' }}
+      style={{
+        color: 'var(--text-secondary)',
+        background: 'transparent',
+        cursor: onClick === undefined ? 'default' : 'pointer',
+        opacity: onClick === undefined ? 0.4 : 1,
+      }}
     >
       {icon}
     </button>

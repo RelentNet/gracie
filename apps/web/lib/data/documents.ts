@@ -62,6 +62,31 @@ export async function getDocumentsByFolder(folderId: string): Promise<Document[]
   return (data ?? []).map(mapDocument);
 }
 
+/** Fetch a single document by id, or null if not found. */
+export async function getDocumentById(id: string): Promise<Document | null> {
+  const db = getServerClient();
+  const { data, error } = await db.from('documents').select('*').eq('id', id).maybeSingle();
+  if (error) throw new Error(`getDocumentById: ${error.message}`);
+  return data === null ? null : mapDocument(data);
+}
+
+/**
+ * Refile a document: set its `folder_id` (and, when the object moved, its
+ * `r2_key`) and bump `updated_at`. Used by the move/refile API (docs/plan p2fix §4).
+ */
+export async function moveDocumentToFolder(
+  documentId: string,
+  folderId: string,
+  r2Key: string,
+): Promise<void> {
+  const db = getServerClient();
+  const { error } = await db
+    .from('documents')
+    .update({ folder_id: folderId, r2_key: r2Key, updated_at: new Date().toISOString() })
+    .eq('id', documentId);
+  if (error) throw new Error(`moveDocumentToFolder: ${error.message}`);
+}
+
 /**
  * SECURITY-CRITICAL. A folder is visible if it is unrestricted, or it is
  * restricted AND the requesting role is allowed. Restricted folders are

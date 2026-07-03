@@ -19,7 +19,13 @@
 import type { Job, Processor } from 'bullmq';
 import type { FastifyBaseLogger } from 'fastify';
 
-import { getActiveProvider, getCredential, getEmbedder, getServerClient } from '@gracie/db';
+import {
+  findOrCreateFolder,
+  getActiveProvider,
+  getCredential,
+  getEmbedder,
+  getServerClient,
+} from '@gracie/db';
 import type { Database, ServerClient } from '@gracie/db';
 import {
   EMBEDDING_DIMENSIONS,
@@ -258,6 +264,20 @@ async function persistDocuments(
     throw new Error(`generate: clear prior documents: ${cleared.error.message}`);
   }
 
+  // Drive-feel filing (docs/plan p2fix §2): file this run's docs under a
+  // per-run date subfolder of the client's `Generated Docs` folder. Ensure the
+  // parent first so the subfolder nests correctly in the browser tree.
+  await findOrCreateFolder({
+    clientId,
+    path: `clients/${slug}/generated`,
+    displayName: 'Generated Docs',
+  });
+  const dateFolderId = await findOrCreateFolder({
+    clientId,
+    path: `clients/${slug}/generated/${meetingDate}`,
+    displayName: meetingDate,
+  });
+
   const ids = new Map<GeneratedDocType, string>();
   for (const doc of documents) {
     const fileName = `${doc.type}.md`;
@@ -267,6 +287,7 @@ async function persistDocuments(
     const insert: DocumentInsert = {
       client_id: clientId,
       meeting_id: meeting.id,
+      folder_id: dateFolderId,
       document_type: DOC_TYPE_TO_ENUM[doc.type],
       source_badge: 'meeting',
       r2_key: objectKey,
