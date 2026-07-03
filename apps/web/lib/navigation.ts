@@ -7,6 +7,7 @@ import {
   Calendar,
   Sunrise,
   BookOpen,
+  MessageSquare,
   Settings,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -35,6 +36,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Calendar', href: '/calendar', Icon: Calendar },
   { label: 'Daily Sync', href: '/daily-sync', Icon: Sunrise },
   { label: 'Knowledge Base', href: '/knowledge-base', Icon: BookOpen },
+  // Assistant (Module 14) — general AI chat, all roles (docs/08 §M14).
+  { label: 'Assistant', href: '/assistant', Icon: MessageSquare },
   // Settings is Admin-only (docs/08 §6, D14): gated by settings.access.
   { label: 'Settings', href: '/settings', Icon: Settings, requires: 'settings.access' },
 ] as const;
