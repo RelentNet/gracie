@@ -314,40 +314,42 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
         </div>
       </div>
 
-      {editable ? (
-        <>
-          <UploadModal
-            isOpen={uploadOpen}
-            onClose={(): void => setUploadOpen(false)}
-            onUploaded={refresh}
-            clients={clientOptions}
-            fixedClientId={activeClientId}
-            fixedClientName={activeClientId !== null ? clientName(activeClientId) : null}
-            defaultSubtype={defaultSubtype}
-            isAdmin={isAdmin}
-          />
-          {activeClientId !== null ? (
-            <NewFolderModal
-              isOpen={newFolderOpen}
-              onClose={(): void => setNewFolderOpen(false)}
-              onCreated={(folder): void => {
-                refresh();
-                setSelectedKey(folder.id);
-              }}
-              clientId={activeClientId}
-              parentFolderId={parentFolderId}
-              parentLabel={parentLabel}
-              isAdmin={isAdmin}
-            />
-          ) : null}
-          <MoveModal
-            isOpen={moveDoc !== null}
-            onClose={(): void => setMoveDoc(null)}
-            onMoved={refresh}
-            document={moveDoc}
-            folders={moveFolders}
-          />
-        </>
+      {/* Modals are mounted only while open so each opening re-initializes its
+          form state from the CURRENT selection (subtype, client, parent). */}
+      {editable && uploadOpen ? (
+        <UploadModal
+          isOpen
+          onClose={(): void => setUploadOpen(false)}
+          onUploaded={refresh}
+          clients={clientOptions}
+          fixedClientId={activeClientId}
+          fixedClientName={activeClientId !== null ? clientName(activeClientId) : null}
+          defaultSubtype={defaultSubtype}
+          isAdmin={isAdmin}
+        />
+      ) : null}
+      {editable && newFolderOpen && activeClientId !== null ? (
+        <NewFolderModal
+          isOpen
+          onClose={(): void => setNewFolderOpen(false)}
+          onCreated={(folder): void => {
+            refresh();
+            setSelectedKey(folder.id);
+          }}
+          clientId={activeClientId}
+          parentFolderId={parentFolderId}
+          parentLabel={parentLabel}
+          isAdmin={isAdmin}
+        />
+      ) : null}
+      {editable && moveDoc !== null ? (
+        <MoveModal
+          isOpen
+          onClose={(): void => setMoveDoc(null)}
+          onMoved={refresh}
+          document={moveDoc}
+          folders={moveFolders}
+        />
       ) : null}
     </Card>
   );
