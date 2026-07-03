@@ -28,6 +28,11 @@ export interface UploadModalProps {
   readonly fixedClientName: string | null;
   readonly defaultSubtype: UploadSubtypeValue;
   readonly isAdmin: boolean;
+  /** The folder the user is currently viewing; upload files into it. Null → the
+   *  client's default Uploads folder (chosen by document type). */
+  readonly targetFolderId: string | null;
+  /** Readable path of the target folder, shown as "Uploading to". */
+  readonly targetLabel: string | null;
 }
 
 function Field({ label, children }: { readonly label: string; readonly children: ReactNode }): React.JSX.Element {
@@ -50,6 +55,8 @@ export function UploadModal({
   fixedClientName,
   defaultSubtype,
   isAdmin,
+  targetFolderId,
+  targetLabel,
 }: UploadModalProps): React.JSX.Element {
   const [files, setFiles] = useState<FileList | null>(null);
   const [clientId, setClientId] = useState<string>(fixedClientId ?? '');
@@ -63,6 +70,11 @@ export function UploadModal({
   const subtypeOptions = UPLOAD_SUBTYPES.filter((s) => !s.restricted || isAdmin);
   const singleFile = files !== null && files.length === 1;
   const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body };
+
+  const chosenClientName =
+    fixedClientName ?? clients.find((c) => c.id === clientId)?.name ?? null;
+  const destination =
+    targetLabel ?? `${chosenClientName ?? 'the selected client'} — Uploads (default)`;
 
   function close(): void {
     setFiles(null);
@@ -93,6 +105,7 @@ export function UploadModal({
       body.set('clientId', resolvedClientId);
       body.set('subtype', subtype);
       body.set('status', status);
+      if (targetFolderId !== null) body.set('folderId', targetFolderId);
       if (singleFile && title.trim() !== '') body.set('title', title.trim());
       for (const file of Array.from(files)) body.append('file', file);
 
@@ -136,6 +149,10 @@ export function UploadModal({
           />
         </Field>
 
+        <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+          Uploading to: <strong style={{ color: 'var(--text-primary)' }}>{destination}</strong>
+        </p>
+
         {fixedClientId === null ? (
           <Field label="Client *">
             <select
@@ -152,11 +169,7 @@ export function UploadModal({
               ))}
             </select>
           </Field>
-        ) : (
-          <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-            Uploading to <strong>{fixedClientName ?? 'this client'}</strong>.
-          </p>
-        )}
+        ) : null}
 
         <Field label="Document type">
           <select
@@ -172,6 +185,12 @@ export function UploadModal({
             ))}
           </select>
         </Field>
+        {targetFolderId !== null ? (
+          <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+            Document type only picks the default Uploads folder — it’s ignored when
+            you’re uploading into the folder above.
+          </span>
+        ) : null}
 
         <Field label={singleFile ? 'Title (optional — defaults to filename)' : 'Title (single-file only)'}>
           <input
