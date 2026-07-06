@@ -141,6 +141,9 @@ interface AmbiguousResponse {
 interface AutoJoinResponse {
   readonly autoJoinMeetings: boolean;
 }
+interface CalendarSettingsResponse {
+  readonly botDispatchEnabled: boolean;
+}
 
 export default function CalendarPage(): React.JSX.Element {
   const { hasRole } = useAuth();
@@ -537,10 +540,80 @@ function ConnectionPanel({ isAdmin }: { readonly isAdmin: boolean }): React.JSX.
               You see your own connection status. Admins see the whole team.
             </p>
           )}
+          {isAdmin ? <BotDispatchToggle /> : null}
           <AutoJoinToggle />
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Admin-only master switch for the P4 meeting bot. When off, the worker joins
+ * NO meetings team-wide, regardless of anyone's per-user preference — the global
+ * kill-switch (fail-safe OFF by default). Non-admins never see this control.
+ */
+function BotDispatchToggle(): React.JSX.Element {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    apiClient
+      .get<CalendarSettingsResponse>('/api/calendar/settings')
+      .then((data) => {
+        if (active) setEnabled(data.botDispatchEnabled);
+      })
+      .catch(() => {
+        if (active) setEnabled(false);
+      });
+    return (): void => {
+      active = false;
+    };
+  }, []);
+
+  const onToggle = useCallback(
+    (next: boolean): void => {
+      const previous = enabled;
+      setEnabled(next);
+      setSaving(true);
+      setNote(null);
+      apiClient
+        .patch<CalendarSettingsResponse>('/api/calendar/settings', { enabled: next })
+        .then((data) => setEnabled(data.botDispatchEnabled))
+        .catch((e: unknown) => {
+          setEnabled(previous);
+          setNote(e instanceof Error ? e.message : 'Could not save setting');
+        })
+        .finally(() => setSaving(false));
+    },
+    [enabled],
+  );
+
+  return (
+    <div className="flex flex-col gap-1 border-t pt-3" style={{ borderColor: 'var(--border-subtle)' }}>
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={enabled ?? false}
+          disabled={enabled === null || saving}
+          onChange={(event): void => onToggle(event.target.checked)}
+          className="size-4 rounded border"
+          style={{ borderColor: 'var(--border-subtle)', accentColor: 'var(--color-blue-500)' }}
+        />
+        <span style={TYPE.body}>Auto-join meetings (global)</span>
+      </label>
+      <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+        Master switch for the whole team. When off, the meeting bot won’t join any
+        meeting, regardless of per-user settings.
+      </span>
+      {note !== null ? (
+        <span role="alert" style={{ ...TYPE.label, color: 'var(--color-red-600)' }}>
+          {note}
+        </span>
+      ) : null}
+    </div>
   );
 }
 

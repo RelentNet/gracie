@@ -26,6 +26,16 @@ import type { BotDispatchJobPayload } from '@gracie/shared';
 import { BOT_DISPATCH_GRACE_MINUTES, BOT_DISPATCH_LEAD_MINUTES } from '../lib/calendar-config.js';
 import { dispatchRecallBot } from '../lib/recall.js';
 
+/**
+ * Global kill-switch for bot dispatch (safety-critical, P4). Stored as a
+ * `settings` row; dispatch runs ONLY when the value is exactly the string
+ * 'true'. Any other value — including a missing row — leaves bots OFF, so a
+ * fresh deploy with no setting is fail-safe (no client is ever auto-joined
+ * until an Admin explicitly opts in). Gates ONLY dispatch; calendar-scan keeps
+ * populating meetings so the operator can preview before enabling.
+ */
+const BOT_DISPATCH_ENABLED_SETTING_KEY = 'calendar_bot_dispatch_enabled';
+
 /** Outcome of one dispatch sweep (visible in Bull Board). */
 export interface BotDispatchResult {
   readonly scanned: number;
@@ -58,6 +68,14 @@ export function createBotDispatchProcessor(
     if (error !== null) throw new Error(`bot-dispatch: scan meetings: ${error.message}`);
 
     const due = candidates ?? [];
+
+    // Global kill-switch: gate the whole dispatch phase up front (fail-safe OFF).
+    // The scan still runs on its own cron, so meetings keep populating for preview.
+    if (!(await isBotDispatchEnabled(db))) {
+      log.info({ scanned: due.length }, 'bot-dispatch: globally disabled');
+      return { scanned: due.length, dispatched: 0, skippedOptOut: 0 };
+    }
+
     if (due.length === 0) return { scanned: 0, dispatched: 0, skippedOptOut: 0 };
 
     // Per-user opt-out: leads who set auto_join_meetings = false.
@@ -118,6 +136,21 @@ export function createBotDispatchProcessor(
     if (dispatched > 0 || skippedOptOut > 0) log.info(result, 'bot-dispatch sweep complete');
     return result;
   };
+}
+
+/**
+ * Read the global bot-dispatch kill-switch. Enabled ONLY when the setting value
+ * is exactly the string 'true'; a missing row or any other value = disabled
+ * (fail-safe). See BOT_DISPATCH_ENABLED_SETTING_KEY.
+ */
+async function isBotDispatchEnabled(db: ServerClient): Promise<boolean> {
+  const { data, error } = await db
+    .from('settings')
+    .select('value')
+    .eq('key', BOT_DISPATCH_ENABLED_SETTING_KEY)
+    .maybeSingle();
+  if (error !== null) throw new Error(`bot-dispatch: read kill-switch: ${error.message}`);
+  return data?.value === 'true';
 }
 
 /** Set of user ids who have opted out of auto-join (auto_join_meetings = false). */

@@ -27,6 +27,14 @@ import type {
 
 const LAST_SCAN_SETTING_KEY = 'calendar_last_scan_at';
 
+/**
+ * Global bot-dispatch kill-switch (safety-critical, P4). The worker dispatches
+ * bots ONLY when this setting is exactly the string 'true'; a missing row or any
+ * other value = disabled (fail-safe). Mirrors the worker's
+ * `BOT_DISPATCH_ENABLED_SETTING_KEY` in bot-dispatch.processor.ts.
+ */
+const BOT_DISPATCH_SETTING_KEY = 'calendar_bot_dispatch_enabled';
+
 /** Days per cadence for the overdue calc; `ad_hoc` has no fixed interval. */
 const CADENCE_DAYS: Readonly<Record<ClientCadence, number | null>> = {
   weekly: 7,
@@ -237,6 +245,35 @@ export async function listClientCadence(): Promise<ClientCadenceRow[]> {
       isOverdue,
     };
   });
+}
+
+/**
+ * Read the global bot-dispatch kill-switch (Admin-only control). Enabled ONLY
+ * when the stored value is exactly 'true'; otherwise disabled (fail-safe OFF).
+ */
+export async function getBotDispatchEnabled(): Promise<boolean> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('settings')
+    .select('value')
+    .eq('key', BOT_DISPATCH_SETTING_KEY)
+    .maybeSingle();
+  if (error !== null) throw new Error(`getBotDispatchEnabled: ${error.message}`);
+  return data?.value === 'true';
+}
+
+/**
+ * Flip the global bot-dispatch kill-switch (Admin-only). Persists the exact
+ * strings 'true'/'false' so the worker's `=== 'true'` check stays fail-safe.
+ * Returns the new value.
+ */
+export async function setBotDispatchEnabled(enabled: boolean): Promise<boolean> {
+  const db = getServerClient();
+  const { error } = await db
+    .from('settings')
+    .upsert({ key: BOT_DISPATCH_SETTING_KEY, value: enabled ? 'true' : 'false' }, { onConflict: 'key' });
+  if (error !== null) throw new Error(`setBotDispatchEnabled: ${error.message}`);
+  return enabled;
 }
 
 /** Read the caller's auto-join preference (defaults to true when no profile row). */
