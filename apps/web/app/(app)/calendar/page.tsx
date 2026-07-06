@@ -200,6 +200,12 @@ export default function CalendarPage(): React.JSX.Element {
   const [reloadToken, setReloadToken] = useState(0);
   const reload = useCallback((): void => setReloadToken((t) => t + 1), []);
 
+  // GA-member filter (client-side): show only meetings a chosen member is on (as
+  // lead or attendee). Options accumulate across visited months so the current
+  // selection stays valid while navigating.
+  const [memberFilter, setMemberFilter] = useState<string>('');
+  const [seenMembers, setSeenMembers] = useState<Map<string, CalendarPerson>>(() => new Map());
+
   const grid = useMemo(() => buildMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
 
   // Meetings for the visible grid — refetched on month change or after an edit.
@@ -220,16 +226,43 @@ export default function CalendarPage(): React.JSX.Element {
     };
   }, [grid.fromIso, grid.toIso, reloadToken]);
 
+  // Accumulate the set of GA people seen across visited months for the filter.
+  useEffect(() => {
+    if (meetings === null) return;
+    setSeenMembers((prev) => {
+      const next = new Map(prev);
+      for (const m of meetings) {
+        if (m.lead !== null) next.set(m.lead.id, m.lead);
+        for (const a of m.attendees) next.set(a.id, a);
+      }
+      return next;
+    });
+  }, [meetings]);
+
+  const memberOptions = useMemo(
+    () => [...seenMembers.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    [seenMembers],
+  );
+
+  // Apply the member filter to the loaded window (lead or attendee match).
+  const visibleMeetings = useMemo<readonly CalendarMeeting[]>(() => {
+    const all = meetings ?? [];
+    if (memberFilter === '') return all;
+    return all.filter(
+      (m) => m.lead?.id === memberFilter || m.attendees.some((a) => a.id === memberFilter),
+    );
+  }, [meetings, memberFilter]);
+
   const meetingsByDay = useMemo(() => {
     const map = new Map<string, CalendarMeeting[]>();
-    for (const m of meetings ?? []) {
+    for (const m of visibleMeetings) {
       const key = easternDayKey(m.dateTime);
       const list = map.get(key) ?? [];
       list.push(m);
       map.set(key, list);
     }
     return map;
-  }, [meetings]);
+  }, [visibleMeetings]);
 
   const selectedMeetings = useMemo(
     () =>
@@ -263,6 +296,35 @@ export default function CalendarPage(): React.JSX.Element {
           orgs one click from a new client, lead, or prospect.
         </p>
       </header>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2">
+          <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Member</span>
+          <select
+            value={memberFilter}
+            onChange={(event): void => setMemberFilter(event.target.value)}
+            className="rounded-lg border bg-white px-3 py-2"
+            style={{ borderColor: 'var(--border-subtle)', ...TYPE.body }}
+            aria-label="Filter meetings by GA member"
+          >
+            <option value="">All members</option>
+            {memberOptions.map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {memberFilter !== '' ? (
+          <button
+            type="button"
+            onClick={(): void => setMemberFilter('')}
+            style={{ ...TYPE.label, color: 'var(--color-blue-600)', cursor: 'pointer' }}
+          >
+            Clear filter
+          </button>
+        ) : null}
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
