@@ -6,12 +6,15 @@ import type { Client, Meeting, Task } from '@gracie/shared';
 
 import { getUserName } from '@/lib/mock';
 import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
 import { formatEasternDateTime } from '@/lib/format';
 import { healthColor, healthLabel, priorityBadge, taskStatusLabel } from '@/lib/client-display';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
+
+import { ClientDomainsCard } from '../ClientDomainsCard';
 
 /**
  * Client tab 1 — Overview (docs/08 §9). Relationship health card, last-meeting
@@ -32,6 +35,7 @@ export default function ClientOverviewPage({
   readonly params: Promise<{ clientId: string }>;
 }): React.JSX.Element {
   const { clientId } = use(params);
+  const { can } = useAuth();
 
   const [data, setData] = useState<OverviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -184,6 +188,13 @@ export default function ClientOverviewPage({
           )}
         </div>
       </Card>
+
+      {/* Domains manager — editor tier only, and not for the internal workspace
+          (which is matched by internal domains, not client_domains). `file.upload`
+          is the editor-tier permission (admin + standard; viewers read-only). */}
+      {can('file.upload') && client.type !== 'internal' ? (
+        <ClientDomainsCard clientId={clientId} />
+      ) : null}
     </div>
   );
 }

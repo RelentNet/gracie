@@ -76,6 +76,10 @@ export interface CalendarScanResult {
   readonly unassigned: number;
   /** Removed meetings (cancelled or orphaned by a member leaving the group). */
   readonly reaped: number;
+  /** Existing scheduled meetings whose is_internal / attendees were recomputed
+   *  against the current internal-domain list (e.g. after 0005 added the GA
+   *  onmicrosoft tenant domain). */
+  readonly reclassified: number;
 }
 
 function skipResult(reason: string): CalendarScanResult {
@@ -90,6 +94,7 @@ function skipResult(reason: string): CalendarScanResult {
     internal: 0,
     unassigned: 0,
     reaped: 0,
+    reclassified: 0,
   };
 }
 
@@ -219,7 +224,16 @@ export function createCalendarScanProcessor(
       );
     }
 
-    // 6. Record the last successful scan for the connection panel.
+    // 6. Reclassify already-ingested scheduled meetings against the CURRENT
+    //    internal-domain list. The per-sweep upsert only refreshes meetings that
+    //    are still on a member's calendar in the scan window; this pass covers the
+    //    rest (e.g. after 0005 added the GA onmicrosoft tenant domain, GA-only
+    //    meetings outside the window flip to is_internal + link the GA org, and the
+    //    onmicrosoft domain is stripped from captured external attendees). Reads
+    //    only stored data (no Graph), so it is deterministic and idempotent.
+    const reclassified = await reclassifyStoredMeetings(db, ctx, log);
+
+    // 7. Record the last successful scan for the connection panel.
     await recordLastScan(db, now, log);
 
     const result: CalendarScanResult = {
@@ -232,6 +246,7 @@ export function createCalendarScanProcessor(
       internal,
       unassigned,
       reaped,
+      reclassified,
     };
     log.info(result, 'calendar-scan sweep complete');
     return result;
@@ -275,6 +290,75 @@ async function reconcileRemovedMeetings(
   if (del.error !== null) throw new Error(`calendar-scan: reconcile delete: ${del.error.message}`);
   log.info({ reaped: staleIds.length }, 'calendar-scan: removed cancelled/orphaned meetings');
   return staleIds.length;
+}
+
+/** Defensively parse a stored `external_attendees` jsonb value into typed rows. */
+function parseStoredExternalAttendees(value: Json | null): ExternalAttendee[] {
+  if (!Array.isArray(value)) return [];
+  const out: ExternalAttendee[] = [];
+  for (const item of value) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) continue;
+    const rec = item as Record<string, unknown>;
+    const email = typeof rec.email === 'string' ? rec.email : null;
+    const domain = typeof rec.domain === 'string' ? rec.domain : null;
+    if (email === null || domain === null) continue;
+    out.push({ email, name: typeof rec.name === 'string' ? rec.name : null, domain });
+  }
+  return out;
+}
+
+/**
+ * Re-apply the current internal-domain list to every already-ingested,
+ * still-`scheduled` calendar meeting (P4.1 follow-on). ADDITIVE reclassification:
+ * strips now-internal domains from the captured `external_attendees`, and — when a
+ * meeting is left with NO external participants — flips it to `is_internal = true`
+ * and homes it to the GA org (add-only link + primary when still unassigned).
+ *
+ * Never demotes internal → external: the internal-domain list only ever grows, so
+ * a meeting that was internal stays internal. In-flight / dispatched / non-calendar
+ * meetings are left untouched (same guard as the upsert path).
+ */
+async function reclassifyStoredMeetings(
+  db: ServerClient,
+  ctx: ScanContext,
+  log: FastifyBaseLogger,
+): Promise<number> {
+  const { data, error } = await db
+    .from('meetings')
+    .select('id, client_id, is_internal, external_attendees')
+    .eq('source', 'calendar')
+    .eq('pipeline_status', 'scheduled')
+    .eq('bot_dispatched', false);
+  if (error !== null) throw new Error(`calendar-scan: reclassify lookup: ${error.message}`);
+
+  let changed = 0;
+  for (const row of data ?? []) {
+    const stored = parseStoredExternalAttendees(row.external_attendees);
+    const remaining = stored.filter((a) => !ctx.internalDomains.has(a.domain.trim().toLowerCase()));
+    const strippedInternal = remaining.length !== stored.length;
+    const becameInternal = remaining.length === 0 && !row.is_internal;
+
+    if (!strippedInternal && !becameInternal) continue;
+
+    const patch: MeetingUpdate = {};
+    if (strippedInternal) patch.external_attendees = toJson(remaining);
+    if (becameInternal) {
+      patch.is_internal = true;
+      // Home a newly-internal meeting to the GA org only when still unassigned
+      // (never overwrite an existing Admin/scan assignment).
+      if (ctx.internalOrgId !== null && row.client_id === null) patch.client_id = ctx.internalOrgId;
+    }
+
+    const upd = await db.from('meetings').update(patch).eq('id', row.id);
+    if (upd.error !== null) throw new Error(`calendar-scan: reclassify update: ${upd.error.message}`);
+    if (becameInternal && ctx.internalOrgId !== null) {
+      await linkMeetingClients(db, row.id, [ctx.internalOrgId]);
+    }
+    changed += 1;
+  }
+
+  if (changed > 0) log.info({ reclassified: changed }, 'calendar-scan: reclassified stored meetings');
+  return changed;
 }
 
 /** Load all GA users (id/email/name) with lower-cased emails for matching. */

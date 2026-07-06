@@ -739,6 +739,7 @@ function MeetingCard({
         <LinkExistingModal
           meetingId={m.id}
           linkedIds={m.orgs.map((o) => o.id)}
+          unknownDomains={m.unknownOrgDomains}
           onClose={(): void => setLinkOpen(false)}
           onLinked={(): void => {
             setLinkOpen(false);
@@ -866,17 +867,23 @@ function CreateOrgModal({
 function LinkExistingModal({
   meetingId,
   linkedIds,
+  unknownDomains,
   onClose,
   onLinked,
 }: {
   readonly meetingId: string;
   readonly linkedIds: readonly string[];
+  /** Unknown external domains on this meeting — offered to register on the org. */
+  readonly unknownDomains: readonly string[];
   readonly onClose: () => void;
   readonly onLinked: () => void;
 }): React.JSX.Element {
   const [clients, setClients] = useState<readonly Client[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [choice, setChoice] = useState<string>('');
+  // Which unknown domains to also register on the linked org (default all on) —
+  // this is what teaches a multi-domain client (e.g. us.ibm.com) its new domain.
+  const [registerDomains, setRegisterDomains] = useState<readonly string[]>(unknownDomains);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -895,6 +902,12 @@ function LinkExistingModal({
     };
   }, []);
 
+  const toggleDomain = useCallback((domain: string): void => {
+    setRegisterDomains((prev) =>
+      prev.includes(domain) ? prev.filter((d) => d !== domain) : [...prev, domain],
+    );
+  }, []);
+
   const options = (clients ?? []).filter((c) => !linkedIds.includes(c.id));
 
   const submit = useCallback((): void => {
@@ -902,11 +915,15 @@ function LinkExistingModal({
     setSubmitting(true);
     setError(null);
     apiClient
-      .post(`/api/calendar/meetings/${meetingId}/orgs`, { clientId: choice, action: 'link' })
+      .post(`/api/calendar/meetings/${meetingId}/orgs`, {
+        clientId: choice,
+        action: 'link',
+        registerDomains,
+      })
       .then(() => onLinked())
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to link org'))
       .finally(() => setSubmitting(false));
-  }, [meetingId, choice, onLinked]);
+  }, [meetingId, choice, registerDomains, onLinked]);
 
   const inputClass = 'w-full rounded-lg border bg-white px-3 py-2';
   const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body };
@@ -952,6 +969,29 @@ function LinkExistingModal({
               ))}
             </select>
           </label>
+          {unknownDomains.length > 0 ? (
+            <fieldset className="flex flex-col gap-1.5">
+              <legend style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+                Also add to this org’s domains
+              </legend>
+              {unknownDomains.map((domain) => (
+                <label key={domain} className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={registerDomains.includes(domain)}
+                    onChange={(): void => toggleDomain(domain)}
+                  />
+                  <span className="font-data" style={{ ...TYPE.label, color: 'var(--text-primary)' }}>
+                    {domain}
+                  </span>
+                </label>
+              ))}
+              <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+                Registers the domain and links its other meetings. Uncheck any that don’t belong to
+                this org.
+              </span>
+            </fieldset>
+          ) : null}
           {error !== null ? (
             <span role="alert" style={{ ...TYPE.secondary, color: 'var(--color-red-600)' }}>
               {error}
