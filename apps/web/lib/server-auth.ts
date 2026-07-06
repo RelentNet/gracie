@@ -8,6 +8,7 @@ import { getLogtoContext } from '@logto/next/server-actions';
 
 import type { AuthUser } from './auth-shared';
 import { GUEST_USER, MOCK_USER, deriveInitials } from './auth-shared';
+import { getRoleByLogtoId } from './data/users';
 import { isLogtoConfigured, logtoConfig, resolveRole } from './logto';
 
 /**
@@ -27,12 +28,17 @@ export async function getCurrentUser(): Promise<AuthUser> {
   const displayName = (userInfo?.name ?? claims.name) ?? '';
   const email = (userInfo?.email ?? claims.email) ?? '';
 
+  // Approach B: reflect the authoritative DB role so the UI (sidebar, badges,
+  // Settings visibility) matches the API gate right after a role change. Fall
+  // back to the claim on the bootstrap window / a transient DB error.
+  const dbRole = await getRoleByLogtoId(claims.sub).catch(() => null);
+
   return {
     id: claims.sub,
     name: displayName === '' ? email : displayName,
     email,
     initials: deriveInitials(displayName, email),
-    role: resolveRole(context),
+    role: dbRole ?? resolveRole(context),
     // Calendar connection = membership in the MS access group (docs/02 D5),
     // not a Logto attribute — resolved in a later phase.
     isCalendarConnected: false,

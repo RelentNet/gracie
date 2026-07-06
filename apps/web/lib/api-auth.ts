@@ -16,6 +16,7 @@ import { getLogtoContext } from '@logto/next/server-actions';
 import type { Role } from '@gracie/shared';
 
 import { MOCK_USER } from './auth-shared';
+import { getRoleByLogtoId } from './data/users';
 import { isLogtoConfigured, logtoConfig, resolveRole } from './logto';
 
 export interface RequestUser {
@@ -36,6 +37,12 @@ const MOCK_REQUEST_USER: RequestUser = {
 /**
  * Resolve the authenticated user for an API request. Throws when Logto is
  * configured but the request carries no valid session.
+ *
+ * Approach B: `users.role` is authoritative, so this reads the role from the DB
+ * by `logto_id` — an admin's in-app role change takes effect here on the target's
+ * next request. It falls back to the Logto claim when no `users` row exists yet
+ * (first-login bootstrap) or the lookup fails (availability — identical to the
+ * pre-B claim-only behaviour, so a DB blip never hard-fails auth).
  */
 export async function getRequestUser(): Promise<RequestUser> {
   if (!isLogtoConfigured()) return MOCK_REQUEST_USER;
@@ -44,7 +51,16 @@ export async function getRequestUser(): Promise<RequestUser> {
   if (!context.isAuthenticated || !context.claims) {
     throw new Error('unauthorized');
   }
-  return { userId: context.claims.sub, role: resolveRole(context) };
+  const userId = context.claims.sub;
+
+  let role: Role;
+  try {
+    role = (await getRoleByLogtoId(userId)) ?? resolveRole(context);
+  } catch (dbError) {
+    console.warn('getRequestUser: DB role lookup failed, using Logto claim role', dbError);
+    role = resolveRole(context);
+  }
+  return { userId, role };
 }
 
 export function isAdmin(user: RequestUser): boolean {
