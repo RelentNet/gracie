@@ -96,7 +96,7 @@ export function createBotDispatchProcessor(
     const apiKey = await getCredential('recall');
     if (apiKey === null || apiKey === '') {
       log.warn('bot-dispatch: no Recall API key configured (Admin → API Settings) — skipping sweep');
-      return { scanned: due.length, dispatched: 0, skippedOptOut: 0 };
+      return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0 };
     }
     const region = process.env.RECALL_REGION;
 
@@ -143,7 +143,7 @@ export function createBotDispatchProcessor(
       }
     }
 
-    const result: BotDispatchResult = { scanned: due.length, dispatched, skippedOptOut };
+    const result: BotDispatchResult = { scanned: inWindow.length, dispatched, skippedOptOut };
     if (dispatched > 0 || skippedOptOut > 0) log.info(result, 'bot-dispatch sweep complete');
     return result;
   };

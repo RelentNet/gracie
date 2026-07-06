@@ -325,17 +325,89 @@ async function recomputePrimaryOrg(db: ServerClient, meetingId: string): Promise
 }
 
 /**
+ * Ensure a meeting exists and is EXTERNAL. Org links belong to client meetings;
+ * an internal (GA-only) meeting homes to the GA org via the scan and must never
+ * be hand-linked to a client org (defense-in-depth behind the UI, which hides
+ * these controls for internal meetings).
+ */
+async function requireExternalMeeting(db: ServerClient, meetingId: string): Promise<void> {
+  const res = await db.from('meetings').select('id, is_internal').eq('id', meetingId).maybeSingle();
+  if (res.error !== null) throw new Error(`requireExternalMeeting: ${res.error.message}`);
+  if (res.data === null) throw new Error('Unknown meeting');
+  if (res.data.is_internal) throw new Error('Internal meetings can’t be linked to a client org.');
+}
+
+/**
+ * Link every non-internal meeting carrying any of `domains` to `clientId`
+ * (add-only) and set the primary `client_id` where still unassigned. `alsoInclude`
+ * force-links one specific meeting (the originating one) even if the domain isn't
+ * on its captured attendees. Shared by create-org and the Admin "create org with
+ * domains" path so both backfill meeting history the same way.
+ */
+async function backfillMeetingsForDomains(
+  db: ServerClient,
+  clientId: string,
+  domains: readonly string[],
+  alsoInclude?: string,
+): Promise<void> {
+  const wanted = new Set(domains.map((d) => normalizeDomain(d)).filter((d) => d !== ''));
+  if (wanted.size === 0 && alsoInclude === undefined) return;
+
+  let affected: Array<{ id: string; client_id: string | null }> = [];
+  if (wanted.size > 0) {
+    const res = await db
+      .from('meetings')
+      .select('id, client_id, is_internal, external_attendees')
+      .eq('is_internal', false);
+    if (res.error !== null) throw new Error(`backfillMeetingsForDomains: ${res.error.message}`);
+    affected = (res.data ?? [])
+      .filter((m) =>
+        mapExternalAttendees(m.external_attendees).some((a) => wanted.has(a.domain.trim().toLowerCase())),
+      )
+      .map((m) => ({ id: m.id, client_id: m.client_id }));
+  }
+
+  const linkIds = new Set(affected.map((m) => m.id));
+  if (alsoInclude !== undefined) linkIds.add(alsoInclude);
+  if (linkIds.size === 0) return;
+
+  const linkRows = [...linkIds].map((id) => ({ meeting_id: id, client_id: clientId }));
+  const linked = await db
+    .from('meeting_clients')
+    .upsert(linkRows, { onConflict: 'meeting_id,client_id', ignoreDuplicates: true });
+  if (linked.error !== null) throw new Error(`backfillMeetingsForDomains(link): ${linked.error.message}`);
+
+  const primaryTargets = affected.filter((m) => m.client_id === null).map((m) => m.id);
+  if (alsoInclude !== undefined) primaryTargets.push(alsoInclude);
+  if (primaryTargets.length === 0) return;
+  const upd = await db
+    .from('meetings')
+    .update({ client_id: clientId })
+    .in('id', [...new Set(primaryTargets)])
+    .is('client_id', null);
+  if (upd.error !== null) throw new Error(`backfillMeetingsForDomains(primary): ${upd.error.message}`);
+}
+
+/**
+ * Backfill meeting history for a newly-created org's domains (P4.1). Called after
+ * an Admin creates a party with domains via `POST /api/clients`, so existing
+ * meetings on those domains link immediately instead of waiting for the next scan.
+ */
+export async function backfillOrgDomains(clientId: string, domains: readonly string[]): Promise<void> {
+  if (domains.length === 0) return;
+  await backfillMeetingsForDomains(getServerClient(), clientId, domains);
+}
+
+/**
  * Link an existing org to a meeting (P4.1), then recompute the primary. Validates
- * both the meeting and the org exist.
+ * the org exists and the meeting is an external (non-internal) meeting.
  */
 export async function linkMeetingOrg(meetingId: string, clientId: string): Promise<void> {
   const db = getServerClient();
   const clientRes = await db.from('clients').select('id').eq('id', clientId).maybeSingle();
   if (clientRes.error !== null) throw new Error(`linkMeetingOrg: ${clientRes.error.message}`);
   if (clientRes.data === null) throw new Error('Unknown client');
-  const meetingRes = await db.from('meetings').select('id').eq('id', meetingId).maybeSingle();
-  if (meetingRes.error !== null) throw new Error(`linkMeetingOrg: ${meetingRes.error.message}`);
-  if (meetingRes.data === null) throw new Error('Unknown meeting');
+  await requireExternalMeeting(db, meetingId);
   await linkMeetingOrgRow(db, meetingId, clientId);
   await recomputePrimaryOrg(db, meetingId);
 }
@@ -343,6 +415,7 @@ export async function linkMeetingOrg(meetingId: string, clientId: string): Promi
 /** Unlink an org from a meeting (P4.1), then recompute the primary. */
 export async function unlinkMeetingOrg(meetingId: string, clientId: string): Promise<void> {
   const db = getServerClient();
+  await requireExternalMeeting(db, meetingId);
   const del = await db
     .from('meeting_clients')
     .delete()
@@ -395,9 +468,7 @@ export async function createOrgFromMeeting(input: CreateOrgFromMeetingInput): Pr
     throw new Error('That domain already belongs to an organization.');
   }
 
-  const meetingRes = await db.from('meetings').select('id').eq('id', input.meetingId).maybeSingle();
-  if (meetingRes.error !== null) throw new Error(`createOrgFromMeeting: ${meetingRes.error.message}`);
-  if (meetingRes.data === null) throw new Error('Unknown meeting');
+  await requireExternalMeeting(db, input.meetingId);
 
   const name = (input.name ?? '').trim() !== '' ? (input.name as string).trim() : deriveOrgNameFromDomain(domain);
   const client = await createClient({
@@ -408,36 +479,9 @@ export async function createOrgFromMeeting(input: CreateOrgFromMeetingInput): Pr
     domains: [domain],
   });
 
-  // Retroactively link every (non-internal) meeting carrying this domain. We
-  // filter in-process (not a jsonb operator) so the match is exact + portable.
-  const affectedRes = await db
-    .from('meetings')
-    .select('id, client_id, is_internal, external_attendees')
-    .eq('is_internal', false);
-  if (affectedRes.error !== null) {
-    throw new Error(`createOrgFromMeeting(retro): ${affectedRes.error.message}`);
-  }
-  const affected = (affectedRes.data ?? []).filter((m) =>
-    mapExternalAttendees(m.external_attendees).some((a) => a.domain.trim().toLowerCase() === domain),
-  );
-  const linkIds = new Set(affected.map((m) => m.id));
-  linkIds.add(input.meetingId); // always link the originating meeting
-
-  const linkRows = [...linkIds].map((id) => ({ meeting_id: id, client_id: client.id }));
-  const linked = await db
-    .from('meeting_clients')
-    .upsert(linkRows, { onConflict: 'meeting_id,client_id', ignoreDuplicates: true });
-  if (linked.error !== null) throw new Error(`createOrgFromMeeting(link): ${linked.error.message}`);
-
-  // Set the primary org where the meeting is still unassigned.
-  const primaryTargets = affected.filter((m) => m.client_id === null).map((m) => m.id);
-  primaryTargets.push(input.meetingId);
-  const upd = await db
-    .from('meetings')
-    .update({ client_id: client.id })
-    .in('id', [...new Set(primaryTargets)])
-    .is('client_id', null);
-  if (upd.error !== null) throw new Error(`createOrgFromMeeting(primary): ${upd.error.message}`);
+  // Link this meeting + retroactively link every other meeting on the domain,
+  // setting the primary where still unassigned (in-process match, not a jsonb op).
+  await backfillMeetingsForDomains(db, client.id, [domain], input.meetingId);
 
   return client;
 }

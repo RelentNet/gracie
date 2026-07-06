@@ -10,6 +10,7 @@ import { CLIENT_CADENCES, CLIENT_TYPES, FEE_TIERS } from '@gracie/shared';
 import type { ClientCadence, ClientType, FeeTier } from '@gracie/shared';
 
 import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { backfillOrgDomains } from '@/lib/data/calendar';
 import { createClient, listClients, redactClientForRole } from '@/lib/data/clients';
 
 /** Every non-internal party type — the "link an existing org" picker set. */
@@ -95,6 +96,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         ? body.contractValue
         : undefined;
 
+    const domains = asDomains(body.domains);
     const client = await createClient({
       name,
       type: asType(body.type),
@@ -106,8 +108,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       contractNumber: asTrimmed(body.contractNumber),
       feeTier: asFeeTier(body.feeTier),
       contractValue,
-      domains: asDomains(body.domains),
+      domains,
     });
+
+    // Retroactively link existing meetings on the new org's domains (P4.1), so the
+    // roster/calendar reflect history immediately instead of after the next scan.
+    if (domains !== undefined) await backfillOrgDomains(client.id, domains);
 
     return NextResponse.json({ client }, { status: 201 });
   } catch (error) {
