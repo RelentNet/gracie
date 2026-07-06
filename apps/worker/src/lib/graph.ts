@@ -106,15 +106,27 @@ export class GraphError extends Error {
   }
 }
 
+/**
+ * Result of reading one member's calendar. `ok` is false ONLY when the read was
+ * denied/absent (403/404) — the caller uses it to distinguish "this mailbox
+ * genuinely has no events" from "we couldn't see this mailbox", which matters for
+ * reconciliation (never delete meetings just because a read failed).
+ */
+export interface CalendarReadResult {
+  readonly ok: boolean;
+  readonly events: GraphEvent[];
+}
+
 /** App-only Graph client scoped to the calendar access group. */
 export interface GraphClient {
   /** List the members of `MS_CALENDAR_GROUP_ID` that have a mailbox address. */
   listGroupMembers(): Promise<GraphMember[]>;
   /**
-   * Read a member's events between two instants (ISO, UTC). Returns [] and logs
-   * on a 403 (mailbox outside the access policy) so one member never fails a scan.
+   * Read a member's events between two instants (ISO, UTC). Returns
+   * `{ ok: false, events: [] }` and logs on a 403/404 (mailbox outside the access
+   * policy / no mailbox) so one member never fails a scan; other errors throw.
    */
-  readCalendarView(memberId: string, startIso: string, endIso: string): Promise<GraphEvent[]>;
+  readCalendarView(memberId: string, startIso: string, endIso: string): Promise<CalendarReadResult>;
 }
 
 /** Build an app-only Graph client with an in-process token cache. */
@@ -194,7 +206,7 @@ export function createGraphClient(config: GraphConfig, logger: FastifyBaseLogger
       return members;
     },
 
-    async readCalendarView(memberId, startIso, endIso): Promise<GraphEvent[]> {
+    async readCalendarView(memberId, startIso, endIso): Promise<CalendarReadResult> {
       const params = new URLSearchParams({
         startDateTime: startIso,
         endDateTime: endIso,
@@ -208,14 +220,15 @@ export function createGraphClient(config: GraphConfig, logger: FastifyBaseLogger
         raw = await getAllPages<GraphRawEvent>(url, { Prefer: 'outlook.timezone="UTC"' });
       } catch (error) {
         // 403 = mailbox outside the Application Access Policy; 404 = no mailbox.
-        // Neither should fail the whole scan — log + skip this member.
+        // Neither should fail the whole scan — log + skip this member. `ok: false`
+        // tells the scan NOT to reconcile-delete this member's meetings.
         if (error instanceof GraphError && (error.status === 403 || error.status === 404)) {
           logger.warn({ memberId, status: error.status }, 'graph: calendar read denied — skipping member');
-          return [];
+          return { ok: false, events: [] };
         }
         throw error;
       }
-      return raw
+      const events = raw
         .filter((e): e is GraphRawEvent & { id: string } => typeof e.id === 'string')
         .map((e) => ({
           id: e.id,
@@ -232,6 +245,7 @@ export function createGraphClient(config: GraphConfig, logger: FastifyBaseLogger
             name: a.emailAddress?.name ?? null,
           })),
         }));
+      return { ok: true, events };
     },
   };
 }

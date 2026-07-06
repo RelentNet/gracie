@@ -13,11 +13,14 @@ export const BUSINESS_END_HOUR = 19;
 
 /**
  * Scan window: look back a little (to catch just-started / in-progress meetings)
- * and ahead a few days (so upcoming meetings exist in the DB before the
- * ≤5-min-before-start bot-dispatch window fires).
+ * and ahead far enough to cover the calendar UI's forward display horizon
+ * (~62 days). Reading the full displayed range is what lets reconciliation safely
+ * remove cancelled/orphaned meetings: a meeting absent from a clean sweep of this
+ * window is genuinely gone, not merely beyond what we bothered to read. (The bot
+ * still dispatches off the ≤5-min lead window from the DB, independent of this.)
  */
 export const SCAN_LOOKBACK_MINUTES = 120;
-export const SCAN_LOOKAHEAD_HOURS = 72;
+export const SCAN_LOOKAHEAD_DAYS = 62;
 
 /** Dispatch a bot when a meeting starts within this many minutes (docs/07 §1). */
 export const BOT_DISPATCH_LEAD_MINUTES = 5;
