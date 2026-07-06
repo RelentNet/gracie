@@ -15,6 +15,7 @@ export function mapClient(row: ClientRow): Client {
   return {
     id: row.id,
     name: row.name,
+    type: row.type,
     initials: row.initials,
     contractNumber: row.contract_number,
     primaryContact: row.primary_contact,

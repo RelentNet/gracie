@@ -21,11 +21,20 @@ import type {
   CalendarConnectionStatus,
   CalendarMeeting,
   CalendarPerson,
+  Client,
+  ClientType,
   ClientCadenceRow,
   ClientCadence,
+  ExternalAttendee,
+  MeetingOrg,
 } from '@gracie/shared';
+import { deriveOrgNameFromDomain, isFreeEmailDomain, parseInternalDomains } from '@gracie/shared';
+
+import { mapExternalAttendees } from '../mappers/meeting.js';
+import { createClient, normalizeDomain } from './clients.js';
 
 const LAST_SCAN_SETTING_KEY = 'calendar_last_scan_at';
+const INTERNAL_DOMAINS_SETTING_KEY = 'internal_email_domains';
 
 /**
  * Global bot-dispatch kill-switch (safety-critical, P4). The worker dispatches
@@ -51,13 +60,6 @@ async function loadPeople(db: ServerClient): Promise<Map<string, CalendarPerson>
   return new Map((data ?? []).map((u) => [u.id, { id: u.id, name: u.name, initials: u.initials }]));
 }
 
-/** Load client id → canonical name. */
-async function loadClientNames(db: ServerClient): Promise<Map<string, string>> {
-  const { data, error } = await db.from('clients').select('id, name');
-  if (error !== null) throw new Error(`calendar.loadClientNames: ${error.message}`);
-  return new Map((data ?? []).map((c) => [c.id, c.name]));
-}
-
 /** Resolve a list of user ids to people, dropping unknown ids. */
 function toPeople(
   ids: readonly string[],
@@ -69,9 +71,70 @@ function toPeople(
   });
 }
 
+/** The internal (GA) email domains from settings (default `graceandassociates.com`). */
+async function loadInternalDomains(db: ServerClient): Promise<Set<string>> {
+  const { data, error } = await db
+    .from('settings')
+    .select('value')
+    .eq('key', INTERNAL_DOMAINS_SETTING_KEY)
+    .maybeSingle();
+  if (error !== null) throw new Error(`calendar.loadInternalDomains: ${error.message}`);
+  return parseInternalDomains(typeof data?.value === 'string' ? data.value : null);
+}
+
+/** Every registered org domain (lower-cased) — the "known" set for unknown-domain calc. */
+async function loadKnownDomains(db: ServerClient): Promise<Set<string>> {
+  const { data, error } = await db.from('client_domains').select('domain');
+  if (error !== null) throw new Error(`calendar.loadKnownDomains: ${error.message}`);
+  return new Set((data ?? []).map((r) => r.domain.trim().toLowerCase()));
+}
+
+/** Linked orgs per meeting (from the `meeting_clients` junction), for chips. */
+async function loadMeetingOrgs(
+  db: ServerClient,
+  meetingIds: readonly string[],
+): Promise<Map<string, MeetingOrg[]>> {
+  const map = new Map<string, MeetingOrg[]>();
+  if (meetingIds.length === 0) return map;
+  const { data, error } = await db
+    .from('meeting_clients')
+    .select('meeting_id, clients!inner(id, name, type)')
+    .in('meeting_id', meetingIds);
+  if (error !== null) throw new Error(`calendar.loadMeetingOrgs: ${error.message}`);
+  for (const row of data ?? []) {
+    const org = row.clients as unknown as MeetingOrg | null;
+    if (org === null) continue;
+    const list = map.get(row.meeting_id) ?? [];
+    list.push({ id: org.id, name: org.name, type: org.type });
+    map.set(row.meeting_id, list);
+  }
+  return map;
+}
+
+/**
+ * External attendee domains that don't map to any org yet — the "create client /
+ * lead" targets. Excludes internal + free-email + already-known domains. Computed
+ * at read time so it stays correct as orgs are created.
+ */
+function computeUnknownDomains(
+  externalAttendees: readonly ExternalAttendee[],
+  internalDomains: ReadonlySet<string>,
+  knownDomains: ReadonlySet<string>,
+): string[] {
+  const out = new Set<string>();
+  for (const a of externalAttendees) {
+    const domain = a.domain.trim().toLowerCase();
+    if (domain === '') continue;
+    if (internalDomains.has(domain) || isFreeEmailDomain(domain) || knownDomains.has(domain)) continue;
+    out.add(domain);
+  }
+  return [...out];
+}
+
 /**
  * List meetings whose start falls within [fromIso, toIso], enriched for the grid
- * + day detail. Ordered by start time ascending.
+ * + day detail (P4.1): linked orgs, internal flag, external attendees, and the
+ * computed unknown-org domains. Ordered by start time ascending.
  */
 export async function listCalendarMeetings(
   fromIso: string,
@@ -81,59 +144,98 @@ export async function listCalendarMeetings(
   const { data, error } = await db
     .from('meetings')
     .select(
-      'id, client_id, title, date_time, duration_minutes, meeting_type, video_link, pipeline_status, bot_dispatched, source, meeting_lead_user_id, attendee_user_ids',
+      'id, client_id, title, date_time, duration_minutes, meeting_type, video_link, pipeline_status, bot_dispatched, is_internal, external_attendees, source, meeting_lead_user_id, attendee_user_ids',
     )
     .gte('date_time', fromIso)
     .lte('date_time', toIso)
     .order('date_time', { ascending: true });
   if (error !== null) throw new Error(`listCalendarMeetings: ${error.message}`);
 
-  const [people, clientNames] = await Promise.all([loadPeople(db), loadClientNames(db)]);
-  return (data ?? []).map((m) => ({
-    id: m.id,
-    clientId: m.client_id,
-    clientName: m.client_id !== null ? (clientNames.get(m.client_id) ?? null) : null,
-    title: m.title,
-    dateTime: m.date_time,
-    durationMinutes: m.duration_minutes,
-    meetingType: m.meeting_type,
-    videoLink: m.video_link,
-    pipelineStatus: m.pipeline_status,
-    isBotDispatched: m.bot_dispatched,
-    source: m.source,
-    lead: m.meeting_lead_user_id !== null ? (people.get(m.meeting_lead_user_id) ?? null) : null,
-    attendees: toPeople(m.attendee_user_ids, people),
-  }));
+  const rows = data ?? [];
+  const [people, orgsByMeeting, internalDomains, knownDomains] = await Promise.all([
+    loadPeople(db),
+    loadMeetingOrgs(db, rows.map((m) => m.id)),
+    loadInternalDomains(db),
+    loadKnownDomains(db),
+  ]);
+
+  return rows.map((m) => {
+    const orgs = orgsByMeeting.get(m.id) ?? [];
+    const primary = m.client_id !== null ? orgs.find((o) => o.id === m.client_id) ?? null : null;
+    const externalAttendees = mapExternalAttendees(m.external_attendees);
+    return {
+      id: m.id,
+      clientId: m.client_id,
+      clientName: primary?.name ?? null,
+      title: m.title,
+      dateTime: m.date_time,
+      durationMinutes: m.duration_minutes,
+      meetingType: m.meeting_type,
+      videoLink: m.video_link,
+      pipelineStatus: m.pipeline_status,
+      isBotDispatched: m.bot_dispatched,
+      isInternal: m.is_internal,
+      source: m.source,
+      lead: m.meeting_lead_user_id !== null ? (people.get(m.meeting_lead_user_id) ?? null) : null,
+      attendees: toPeople(m.attendee_user_ids, people),
+      orgs,
+      externalAttendees,
+      unknownOrgDomains: computeUnknownDomains(externalAttendees, internalDomains, knownDomains),
+    };
+  });
 }
 
 /**
- * List meetings the scan flagged ambiguous (client unassigned, still scheduled,
- * calendar-sourced) for the Admin assignment list. Ordered by start time.
+ * List meetings needing attention for the Admin assignment list (P4.1): still
+ * `scheduled`, calendar-sourced, not internal, and either unassigned (no primary
+ * org) OR carrying an unknown external domain. Ordered by start time.
  */
 export async function listAmbiguousMeetings(): Promise<AmbiguousMeeting[]> {
   const db = getServerClient();
   const { data, error } = await db
     .from('meetings')
-    .select('id, title, date_time, video_link, attendee_user_ids')
-    .is('client_id', null)
+    .select('id, title, date_time, video_link, attendee_user_ids, client_id, external_attendees')
     .eq('source', 'calendar')
     .eq('pipeline_status', 'scheduled')
+    .eq('is_internal', false)
     .order('date_time', { ascending: true });
   if (error !== null) throw new Error(`listAmbiguousMeetings: ${error.message}`);
 
-  const people = await loadPeople(db);
-  return (data ?? []).map((m) => ({
-    id: m.id,
-    title: m.title,
-    dateTime: m.date_time,
-    videoLink: m.video_link,
-    attendees: toPeople(m.attendee_user_ids, people),
-  }));
+  const rows = data ?? [];
+  const [people, orgsByMeeting, internalDomains, knownDomains] = await Promise.all([
+    loadPeople(db),
+    loadMeetingOrgs(db, rows.map((m) => m.id)),
+    loadInternalDomains(db),
+    loadKnownDomains(db),
+  ]);
+
+  const out: AmbiguousMeeting[] = [];
+  for (const m of rows) {
+    const unknownOrgDomains = computeUnknownDomains(
+      mapExternalAttendees(m.external_attendees),
+      internalDomains,
+      knownDomains,
+    );
+    const hasClientOrg = (orgsByMeeting.get(m.id) ?? []).some((o) => o.type === 'client');
+    // Needs attention when no client org is linked, or an unknown domain remains.
+    if (hasClientOrg && unknownOrgDomains.length === 0) continue;
+    out.push({
+      id: m.id,
+      title: m.title,
+      dateTime: m.date_time,
+      videoLink: m.video_link,
+      attendees: toPeople(m.attendee_user_ids, people),
+      unknownOrgDomains,
+    });
+  }
+  return out;
 }
 
 /**
  * Admin action: assign a client to a meeting (resolving an ambiguous match).
- * Validates the client exists; throws if the meeting or client is missing.
+ * Sets the primary `client_id` AND records the link in `meeting_clients` (so the
+ * assignment shows as an org chip and counts toward bot eligibility). Throws if
+ * the meeting or client is missing.
  */
 export async function assignMeetingClient(meetingId: string, clientId: string): Promise<void> {
   const db = getServerClient();
@@ -148,6 +250,196 @@ export async function assignMeetingClient(meetingId: string, clientId: string): 
     .select('id');
   if (updated.error !== null) throw new Error(`assignMeetingClient: ${updated.error.message}`);
   if ((updated.data ?? []).length === 0) throw new Error('Unknown meeting');
+
+  await linkMeetingOrgRow(db, meetingId, clientId);
+}
+
+/** The GA `internal` org id (home for internal meetings), or null if absent. */
+async function loadInternalOrgId(db: ServerClient): Promise<string | null> {
+  const { data, error } = await db
+    .from('clients')
+    .select('id')
+    .eq('type', 'internal')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error !== null) throw new Error(`calendar.loadInternalOrgId: ${error.message}`);
+  return data?.id ?? null;
+}
+
+/** Insert one meeting↔org link (idempotent; add-only). */
+async function linkMeetingOrgRow(
+  db: ServerClient,
+  meetingId: string,
+  clientId: string,
+): Promise<void> {
+  const { error } = await db
+    .from('meeting_clients')
+    .upsert({ meeting_id: meetingId, client_id: clientId }, {
+      onConflict: 'meeting_id,client_id',
+      ignoreDuplicates: true,
+    });
+  if (error !== null) throw new Error(`linkMeetingOrg: ${error.message}`);
+}
+
+/**
+ * Recompute the denormalized primary `client_id` from the current links. Internal
+ * meetings always home to the GA org. External meetings keep their current primary
+ * if it's still linked (preserving an Admin choice), else fall to the
+ * earliest-created linked non-internal org, else null.
+ */
+async function recomputePrimaryOrg(db: ServerClient, meetingId: string): Promise<void> {
+  const meetingRes = await db
+    .from('meetings')
+    .select('id, client_id, is_internal')
+    .eq('id', meetingId)
+    .maybeSingle();
+  if (meetingRes.error !== null) throw new Error(`recomputePrimaryOrg: ${meetingRes.error.message}`);
+  const meeting = meetingRes.data;
+  if (meeting === null) return;
+
+  let next: string | null;
+  if (meeting.is_internal) {
+    next = await loadInternalOrgId(db);
+  } else {
+    const linksRes = await db
+      .from('meeting_clients')
+      .select('client_id, clients!inner(created_at, type)')
+      .eq('meeting_id', meetingId);
+    if (linksRes.error !== null) throw new Error(`recomputePrimaryOrg: ${linksRes.error.message}`);
+    const orgs = (linksRes.data ?? [])
+      .map((r) => {
+        const c = r.clients as unknown as { created_at: string; type: ClientType };
+        return { id: r.client_id, createdAt: c.created_at, type: c.type };
+      })
+      .filter((o) => o.type !== 'internal')
+      .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id));
+    const stillLinked = meeting.client_id !== null && orgs.some((o) => o.id === meeting.client_id);
+    next = stillLinked ? meeting.client_id : (orgs[0]?.id ?? null);
+  }
+
+  if (next !== meeting.client_id) {
+    const upd = await db.from('meetings').update({ client_id: next }).eq('id', meetingId);
+    if (upd.error !== null) throw new Error(`recomputePrimaryOrg: ${upd.error.message}`);
+  }
+}
+
+/**
+ * Link an existing org to a meeting (P4.1), then recompute the primary. Validates
+ * both the meeting and the org exist.
+ */
+export async function linkMeetingOrg(meetingId: string, clientId: string): Promise<void> {
+  const db = getServerClient();
+  const clientRes = await db.from('clients').select('id').eq('id', clientId).maybeSingle();
+  if (clientRes.error !== null) throw new Error(`linkMeetingOrg: ${clientRes.error.message}`);
+  if (clientRes.data === null) throw new Error('Unknown client');
+  const meetingRes = await db.from('meetings').select('id').eq('id', meetingId).maybeSingle();
+  if (meetingRes.error !== null) throw new Error(`linkMeetingOrg: ${meetingRes.error.message}`);
+  if (meetingRes.data === null) throw new Error('Unknown meeting');
+  await linkMeetingOrgRow(db, meetingId, clientId);
+  await recomputePrimaryOrg(db, meetingId);
+}
+
+/** Unlink an org from a meeting (P4.1), then recompute the primary. */
+export async function unlinkMeetingOrg(meetingId: string, clientId: string): Promise<void> {
+  const db = getServerClient();
+  const del = await db
+    .from('meeting_clients')
+    .delete()
+    .eq('meeting_id', meetingId)
+    .eq('client_id', clientId);
+  if (del.error !== null) throw new Error(`unlinkMeetingOrg: ${del.error.message}`);
+  await recomputePrimaryOrg(db, meetingId);
+}
+
+/** Input for creating a new org (client/prospect/lead/partner) from a meeting domain. */
+export interface CreateOrgFromMeetingInput {
+  readonly meetingId: string;
+  readonly domain: string;
+  readonly name?: string;
+  readonly type?: ClientType;
+  readonly primaryContact?: string | null;
+  readonly primaryContactEmail?: string | null;
+}
+
+/**
+ * Create a `client|prospect|lead|partner` from an unknown domain on a meeting
+ * (P4.1 §6): inserts the org + its `client_domains` row, links this meeting, and
+ * retroactively links every other meeting carrying that domain (setting the
+ * primary where still unassigned). Rejects free-email and internal domains, and a
+ * domain already owned by another org. Returns the created org.
+ */
+export async function createOrgFromMeeting(input: CreateOrgFromMeetingInput): Promise<Client> {
+  const db = getServerClient();
+  const domain = normalizeDomain(input.domain);
+  if (domain === '') throw new Error('A domain is required.');
+  if (isFreeEmailDomain(domain)) {
+    throw new Error('Free-email domains can’t identify an organization.');
+  }
+  const internalDomains = await loadInternalDomains(db);
+  if (internalDomains.has(domain)) throw new Error('That is an internal domain.');
+
+  // Never create an `internal` org here (that's the reserved GA workspace).
+  const type: ClientType =
+    input.type !== undefined && input.type !== 'internal' ? input.type : 'client';
+
+  const existingDomain = await db
+    .from('client_domains')
+    .select('client_id')
+    .eq('domain', domain)
+    .maybeSingle();
+  if (existingDomain.error !== null) {
+    throw new Error(`createOrgFromMeeting: ${existingDomain.error.message}`);
+  }
+  if (existingDomain.data !== null) {
+    throw new Error('That domain already belongs to an organization.');
+  }
+
+  const meetingRes = await db.from('meetings').select('id').eq('id', input.meetingId).maybeSingle();
+  if (meetingRes.error !== null) throw new Error(`createOrgFromMeeting: ${meetingRes.error.message}`);
+  if (meetingRes.data === null) throw new Error('Unknown meeting');
+
+  const name = (input.name ?? '').trim() !== '' ? (input.name as string).trim() : deriveOrgNameFromDomain(domain);
+  const client = await createClient({
+    name,
+    type,
+    primaryContact: input.primaryContact ?? null,
+    primaryContactEmail: input.primaryContactEmail ?? null,
+    domains: [domain],
+  });
+
+  // Retroactively link every (non-internal) meeting carrying this domain. We
+  // filter in-process (not a jsonb operator) so the match is exact + portable.
+  const affectedRes = await db
+    .from('meetings')
+    .select('id, client_id, is_internal, external_attendees')
+    .eq('is_internal', false);
+  if (affectedRes.error !== null) {
+    throw new Error(`createOrgFromMeeting(retro): ${affectedRes.error.message}`);
+  }
+  const affected = (affectedRes.data ?? []).filter((m) =>
+    mapExternalAttendees(m.external_attendees).some((a) => a.domain.trim().toLowerCase() === domain),
+  );
+  const linkIds = new Set(affected.map((m) => m.id));
+  linkIds.add(input.meetingId); // always link the originating meeting
+
+  const linkRows = [...linkIds].map((id) => ({ meeting_id: id, client_id: client.id }));
+  const linked = await db
+    .from('meeting_clients')
+    .upsert(linkRows, { onConflict: 'meeting_id,client_id', ignoreDuplicates: true });
+  if (linked.error !== null) throw new Error(`createOrgFromMeeting(link): ${linked.error.message}`);
+
+  // Set the primary org where the meeting is still unassigned.
+  const primaryTargets = affected.filter((m) => m.client_id === null).map((m) => m.id);
+  primaryTargets.push(input.meetingId);
+  const upd = await db
+    .from('meetings')
+    .update({ client_id: client.id })
+    .in('id', [...new Set(primaryTargets)])
+    .is('client_id', null);
+  if (upd.error !== null) throw new Error(`createOrgFromMeeting(primary): ${upd.error.message}`);
+
+  return client;
 }
 
 /** Read the last-scan timestamp recorded by the worker (or null if never run). */
@@ -201,7 +493,11 @@ export async function getConnectionStatus(
  */
 export async function listClientCadence(): Promise<ClientCadenceRow[]> {
   const db = getServerClient();
-  const clientsRes = await db.from('clients').select('id, name, cadence').order('name');
+  const clientsRes = await db
+    .from('clients')
+    .select('id, name, cadence')
+    .eq('type', 'client') // cadence is a client-only surface (P4.1)
+    .order('name');
   if (clientsRes.error !== null) throw new Error(`listClientCadence: ${clientsRes.error.message}`);
 
   const meetingsRes = await db

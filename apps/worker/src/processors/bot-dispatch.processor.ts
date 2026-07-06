@@ -2,11 +2,13 @@
  * Bot-dispatch processor (P4, docs/07 §1, docs/09 Phase 4). A tight repeatable
  * sweep (~60s) that dispatches exactly ONE Recall bot per due meeting:
  *
- *   select meetings starting within the lead window that are client-assigned, have
- *   a join URL, are still `scheduled`, and whose lead has NOT opted out →
- *   atomically claim (flip `bot_dispatched` false→true) → dispatch the Recall bot →
- *   store `bot_job_id`. On dispatch failure the claim is rolled back so the next
- *   sweep retries.
+ *   select meetings starting within the lead window that are BOT-ELIGIBLE (P4.1:
+ *   internal — a GA-only meeting — OR linked to ≥1 `client`-type org; leads /
+ *   prospects / partners / still-unassigned meetings never dispatch), have a join
+ *   URL, are still `scheduled`, and whose lead has NOT opted out → atomically
+ *   claim (flip `bot_dispatched` false→true) → dispatch the Recall bot → store
+ *   `bot_job_id`. On dispatch failure the claim is rolled back so the next sweep
+ *   retries.
  *
  * P4's job ENDS here. When the meeting ends, Recall calls the already-built
  * `POST /api/webhooks/recall` (P5b), which matches by `bot_job_id` and runs
@@ -55,28 +57,37 @@ export function createBotDispatchProcessor(
     const graceStart = new Date(now - BOT_DISPATCH_GRACE_MINUTES * 60_000).toISOString();
     const leadEnd = new Date(now + BOT_DISPATCH_LEAD_MINUTES * 60_000).toISOString();
 
-    // Candidates: due, client-assigned, joinable, still scheduled, not dispatched.
+    // Candidates: due, joinable, still scheduled, not dispatched. Eligibility
+    // (internal OR client-linked) is resolved below, after the kill-switch.
     const { data: candidates, error } = await db
       .from('meetings')
-      .select('id, video_link, meeting_lead_user_id, client_id, title')
+      .select('id, video_link, meeting_lead_user_id, is_internal')
       .eq('bot_dispatched', false)
       .eq('pipeline_status', 'scheduled')
-      .not('client_id', 'is', null)
       .not('video_link', 'is', null)
       .gte('date_time', graceStart)
       .lte('date_time', leadEnd);
     if (error !== null) throw new Error(`bot-dispatch: scan meetings: ${error.message}`);
 
-    const due = candidates ?? [];
+    const inWindow = candidates ?? [];
 
     // Global kill-switch: gate the whole dispatch phase up front (fail-safe OFF).
     // The scan still runs on its own cron, so meetings keep populating for preview.
     if (!(await isBotDispatchEnabled(db))) {
-      log.info({ scanned: due.length }, 'bot-dispatch: globally disabled');
-      return { scanned: due.length, dispatched: 0, skippedOptOut: 0 };
+      log.info({ scanned: inWindow.length }, 'bot-dispatch: globally disabled');
+      return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0 };
     }
 
-    if (due.length === 0) return { scanned: 0, dispatched: 0, skippedOptOut: 0 };
+    if (inWindow.length === 0) return { scanned: 0, dispatched: 0, skippedOptOut: 0 };
+
+    // Bot-eligible = internal (GA-only) OR linked to ≥1 `client`-type org. A
+    // lead-only / prospect-only / unassigned meeting must NOT dispatch.
+    const clientLinked = await loadClientLinkedMeetings(
+      db,
+      inWindow.map((m) => m.id),
+    );
+    const due = inWindow.filter((m) => m.is_internal || clientLinked.has(m.id));
+    if (due.length === 0) return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0 };
 
     // Per-user opt-out: leads who set auto_join_meetings = false.
     const optedOut = await loadOptedOutLeads(db);
@@ -158,4 +169,24 @@ async function loadOptedOutLeads(db: ServerClient): Promise<Set<string>> {
   const { data, error } = await db.from('users').select('id').eq('auto_join_meetings', false);
   if (error !== null) throw new Error(`bot-dispatch: load opt-outs: ${error.message}`);
   return new Set((data ?? []).map((u) => u.id));
+}
+
+/**
+ * Of the given meeting ids, the subset linked to ≥1 `client`-type org (via the
+ * `meeting_clients` junction). Lead/prospect/partner/internal links do NOT count
+ * here — internal meetings are made eligible separately by their `is_internal`
+ * flag, so a meeting linked only to non-client orgs is not bot-eligible.
+ */
+async function loadClientLinkedMeetings(
+  db: ServerClient,
+  meetingIds: readonly string[],
+): Promise<Set<string>> {
+  if (meetingIds.length === 0) return new Set();
+  const { data, error } = await db
+    .from('meeting_clients')
+    .select('meeting_id, clients!inner(type)')
+    .in('meeting_id', meetingIds)
+    .eq('clients.type', 'client');
+  if (error !== null) throw new Error(`bot-dispatch: load client links: ${error.message}`);
+  return new Set((data ?? []).map((row) => row.meeting_id));
 }

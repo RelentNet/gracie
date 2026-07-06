@@ -1,26 +1,38 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 
 import { CLIENT_CADENCES, FEE_TIERS } from '@gracie/shared';
-import type { Client, ClientCadence, FeeTier } from '@gracie/shared';
+import type { Client, ClientCadence, ClientType, FeeTier } from '@gracie/shared';
 
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { cadenceLabel } from '@/lib/client-display';
 import { TYPE } from '@/lib/typography';
 
+/** Party types a user can create here (the reserved `internal` org is excluded). */
+const PARTY_TYPE_OPTIONS: ReadonlyArray<{ readonly value: ClientType; readonly label: string }> = [
+  { value: 'client', label: 'Client' },
+  { value: 'prospect', label: 'Prospect' },
+  { value: 'lead', label: 'Lead' },
+  { value: 'partner', label: 'Partner' },
+];
+
 interface AddClientModalProps {
   readonly isOpen: boolean;
   readonly onClose: () => void;
   readonly onCreated: (client: Client) => void;
+  /** Pre-selects the party type from the active roster tab (P4.1). */
+  readonly defaultType?: ClientType;
 }
 
 interface FormState {
   readonly name: string;
+  readonly type: ClientType;
   readonly initials: string;
   readonly cadence: ClientCadence;
+  readonly domains: string;
   readonly primaryContact: string;
   readonly primaryContactEmail: string;
   readonly contractNumber: string;
@@ -31,8 +43,10 @@ interface FormState {
 
 const EMPTY: FormState = {
   name: '',
+  type: 'client',
   initials: '',
   cadence: 'monthly',
+  domains: '',
   primaryContact: '',
   primaryContactEmail: '',
   contractNumber: '',
@@ -53,13 +67,23 @@ function Field({ label, children }: { readonly label: string; readonly children:
   );
 }
 
-export function AddClientModal({ isOpen, onClose, onCreated }: AddClientModalProps): React.JSX.Element {
-  const [form, setForm] = useState<FormState>(EMPTY);
+export function AddClientModal({
+  isOpen,
+  onClose,
+  onCreated,
+  defaultType = 'client',
+}: AddClientModalProps): React.JSX.Element {
+  const [form, setForm] = useState<FormState>({ ...EMPTY, type: defaultType });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Pre-select the party type from the active roster tab each time the modal opens.
+  useEffect(() => {
+    if (isOpen) setForm((prev) => ({ ...prev, type: defaultType }));
+  }, [isOpen, defaultType]);
+
   function close(): void {
-    setForm(EMPTY);
+    setForm({ ...EMPTY, type: defaultType });
     setError(null);
     onClose();
   }
@@ -79,10 +103,16 @@ export function AddClientModal({ isOpen, onClose, onCreated }: AddClientModalPro
     setSubmitting(true);
     setError(null);
     try {
+      const domains = form.domains
+        .split(/[\s,]+/)
+        .map((d) => d.trim())
+        .filter((d) => d !== '');
       const payload = {
         name,
+        type: form.type,
         initials: form.initials.trim() || undefined,
         cadence: form.cadence,
+        domains: domains.length > 0 ? domains : undefined,
         primaryContact: form.primaryContact.trim() || undefined,
         primaryContactEmail: form.primaryContactEmail.trim() || undefined,
         contractNumber: form.contractNumber.trim() || undefined,
@@ -104,7 +134,7 @@ export function AddClientModal({ isOpen, onClose, onCreated }: AddClientModalPro
       if (body?.client !== undefined) {
         onCreated(body.client);
       }
-      setForm(EMPTY);
+      setForm({ ...EMPTY, type: defaultType });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create client.');
     } finally {
@@ -115,6 +145,7 @@ export function AddClientModal({ isOpen, onClose, onCreated }: AddClientModalPro
   type TextKey =
     | 'name'
     | 'initials'
+    | 'domains'
     | 'primaryContact'
     | 'primaryContactEmail'
     | 'contractNumber'
@@ -161,6 +192,22 @@ export function AddClientModal({ isOpen, onClose, onCreated }: AddClientModalPro
         </Field>
 
         <div className="grid grid-cols-2 gap-4">
+          <Field label="Type">
+            <select
+              className={inputClass}
+              style={inputStyle}
+              value={form.type}
+              onChange={(e) => {
+                setForm((prev) => ({ ...prev, type: e.target.value as ClientType }));
+              }}
+            >
+              {PARTY_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label="Initials">
             <input
               className={inputClass}
@@ -171,6 +218,9 @@ export function AddClientModal({ isOpen, onClose, onCreated }: AddClientModalPro
               maxLength={4}
             />
           </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
           <Field label="Cadence">
             <select
               className={inputClass}
@@ -186,6 +236,15 @@ export function AddClientModal({ isOpen, onClose, onCreated }: AddClientModalPro
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label="Org domains">
+            <input
+              className={inputClass}
+              style={inputStyle}
+              value={form.domains}
+              onChange={text('domains')}
+              placeholder="acme.com, sub.acme.com"
+            />
           </Field>
         </div>
 

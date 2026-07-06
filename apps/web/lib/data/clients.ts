@@ -9,16 +9,25 @@ import 'server-only';
 
 import { getServerClient } from '@gracie/db';
 import type { Database } from '@gracie/db';
-import type { Client, ClientCadence, FeeTier } from '@gracie/shared';
+import type { Client, ClientCadence, ClientType, FeeTier } from '@gracie/shared';
 
 import { mapClient } from '../mappers.js';
 
-/** List all clients, ordered by relationship health (desc). */
-export async function listClients(): Promise<Client[]> {
+/**
+ * List clients of the given party type(s), ordered by relationship health (desc).
+ * Defaults to real `client`s only (P4.1) so leads/prospects/partners and the GA
+ * internal org never leak into the client roster, cadence, or assign pickers.
+ * Pass an explicit list (e.g. `['lead','prospect']`, `['internal']`) for the
+ * dedicated lead/prospect tabs or the internal-workspace link.
+ */
+export async function listClients(
+  types: readonly ClientType[] = ['client'],
+): Promise<Client[]> {
   const db = getServerClient();
   const { data, error } = await db
     .from('clients')
     .select('*')
+    .in('type', [...types])
     .order('relationship_health', { ascending: false, nullsFirst: false });
   if (error) throw new Error(`listClients: ${error.message}`);
   return (data ?? []).map(mapClient);
@@ -43,6 +52,7 @@ export function redactClientForRole(client: Client, isAdmin: boolean): Client {
 
 export interface NewClientInput {
   readonly name: string;
+  readonly type?: ClientType;
   readonly initials?: string;
   readonly cadence?: ClientCadence;
   readonly description?: string | null;
@@ -52,6 +62,8 @@ export interface NewClientInput {
   readonly billingCadence?: string | null;
   readonly feeTier?: FeeTier | null;
   readonly contractValue?: number | null;
+  /** Optional org domains (P4.1) — inserted into `client_domains` (lower-cased). */
+  readonly domains?: readonly string[];
 }
 
 /** Two-letter initials from a client name (fallback for an unspecified value). */
@@ -65,7 +77,22 @@ function deriveClientInitials(name: string): string {
   return fallback !== '' ? fallback : '?';
 }
 
-/** Insert a new client (Admin-only at the API layer, docs/05). Returns the row. */
+/** Normalize a raw domain string to a lower-cased, bare host (no scheme/@/path). */
+export function normalizeDomain(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/^.*@/, '')
+    .replace(/\/.*$/, '')
+    .trim();
+}
+
+/**
+ * Insert a new client/party (Admin-only at the API layer, docs/05). Optionally
+ * registers `client_domains` (P4.1) so future meetings on those domains match.
+ * Returns the row. A duplicate domain surfaces as a clear error.
+ */
 export async function createClient(input: NewClientInput): Promise<Client> {
   const db = getServerClient();
   const initials =
@@ -75,6 +102,7 @@ export async function createClient(input: NewClientInput): Promise<Client> {
 
   const insert: Database['public']['Tables']['clients']['Insert'] = {
     name: input.name,
+    type: input.type ?? 'client',
     initials,
     cadence: input.cadence ?? 'monthly',
     description: input.description ?? null,
@@ -88,5 +116,20 @@ export async function createClient(input: NewClientInput): Promise<Client> {
 
   const { data, error } = await db.from('clients').insert(insert).select('*').single();
   if (error) throw new Error(`createClient: ${error.message}`);
+
+  const domains = [...new Set((input.domains ?? []).map(normalizeDomain).filter((d) => d !== ''))];
+  if (domains.length > 0) {
+    const rows = domains.map((domain) => ({ client_id: data.id, domain }));
+    const linked = await db.from('client_domains').insert(rows);
+    if (linked.error !== null) {
+      // The org row is already inserted; a unique-domain collision is the likely
+      // cause. Surface it so the caller can report "domain already in use".
+      if (linked.error.code === '23505') {
+        throw new Error('One of those domains already belongs to another organization.');
+      }
+      throw new Error(`createClient(domains): ${linked.error.message}`);
+    }
+  }
+
   return mapClient(data);
 }
