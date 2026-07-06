@@ -374,7 +374,7 @@ export default function CalendarPage(): React.JSX.Element {
             editable={editable}
             onChanged={reload}
           />
-          <ConnectionPanel isAdmin={isAdmin} />
+          <ConnectionPanel isAdmin={isAdmin} onSynced={reload} />
         </div>
       </div>
 
@@ -979,9 +979,17 @@ function PeopleRow({ people }: { readonly people: readonly CalendarPerson[] }): 
   );
 }
 
-function ConnectionPanel({ isAdmin }: { readonly isAdmin: boolean }): React.JSX.Element {
+function ConnectionPanel({
+  isAdmin,
+  onSynced,
+}: {
+  readonly isAdmin: boolean;
+  readonly onSynced?: () => void;
+}): React.JSX.Element {
   const [status, setStatus] = useState<CalendarConnectionStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncNote, setSyncNote] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -997,6 +1005,43 @@ function ConnectionPanel({ isAdmin }: { readonly isAdmin: boolean }): React.JSX.
       active = false;
     };
   }, []);
+
+  /** Re-fetch connection status; returns the fresh last-synced time. */
+  const refreshStatus = useCallback(async (): Promise<string | null> => {
+    const data = await apiClient.get<ConnectionsResponse>('/api/calendar/connections');
+    setStatus(data.status);
+    return data.status.lastSyncedAt;
+  }, []);
+
+  /**
+   * Trigger a manual scan, then poll until the worker's last-synced time advances
+   * (or a ~30s timeout), so the panel + calendar reflect the fresh sweep.
+   */
+  const onSyncNow = useCallback(async (): Promise<void> => {
+    setSyncing(true);
+    setSyncNote(null);
+    const before = status?.lastSyncedAt ?? null;
+    try {
+      await apiClient.post('/api/calendar/sync', {});
+    } catch (e: unknown) {
+      setSyncNote(e instanceof Error ? e.message : 'Could not start sync');
+      setSyncing(false);
+      return;
+    }
+    let done = false;
+    for (let i = 0; i < 10 && !done; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 3_000));
+      try {
+        const after = await refreshStatus();
+        if (after !== before) done = true;
+      } catch {
+        // transient — keep polling until the timeout
+      }
+    }
+    setSyncNote(done ? 'Calendar synced.' : 'Sync started — results will appear shortly.');
+    if (done) onSynced?.();
+    setSyncing(false);
+  }, [status, refreshStatus, onSynced]);
 
   return (
     <Card>
@@ -1018,6 +1063,30 @@ function ConnectionPanel({ isAdmin }: { readonly isAdmin: boolean }): React.JSX.
         <LoadingState label="Loading connection status…" />
       ) : (
         <div className="flex flex-col gap-3">
+          {isAdmin ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={syncing}
+                onClick={(): void => {
+                  void onSyncNow();
+                }}
+                icon={
+                  <RefreshCw
+                    size={14}
+                    aria-hidden="true"
+                    className={syncing ? 'animate-spin' : undefined}
+                  />
+                }
+              >
+                {syncing ? 'Syncing…' : 'Sync now'}
+              </Button>
+              {syncNote !== null ? (
+                <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>{syncNote}</span>
+              ) : null}
+            </div>
+          ) : null}
           {!status.groupConfigured ? (
             <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
               The calendar scan has not run yet. Connection status appears once the worker syncs
