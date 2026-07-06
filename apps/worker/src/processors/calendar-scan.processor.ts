@@ -16,11 +16,19 @@
  * calendar blocks (no join URL AND ≤1 attendee) and cancelled/undated events are
  * the only skips. Matching is DOMAIN-FIRST (no subject/alias guessing).
  *
- * Idempotent + non-destructive: an existing meeting that is already dispatched or
- * past `scheduled` is left untouched; `meeting_clients` links are only ADDED,
- * never removed (Admin/manual links + previously-created orgs are sticky); the
- * denormalized primary `client_id` is set only when currently null (never
- * overwrites an Admin-assigned client).
+ * Reconciliation (P4.2): after upserting, the sweep REMOVES any calendar-sourced
+ * meeting in the scan window that is no longer on any current group member's
+ * calendar — this is how a cancelled meeting (dropped/`isCancelled`) and a
+ * meeting orphaned by a member leaving the access group both disappear. Only
+ * upcoming, still-`scheduled`, not-yet-dispatched meetings are eligible, so
+ * processed history (bots/transcripts/documents) is preserved. Reconciliation is
+ * SKIPPED whenever any member's calendar read failed (403/404/transient), so a
+ * read we couldn't complete never causes a deletion (fail-safe).
+ *
+ * Idempotent + non-destructive elsewhere: an existing meeting that is already
+ * dispatched or past `scheduled` is left untouched; `meeting_clients` links are
+ * only ADDED, never removed (Admin/manual links + previously-created orgs are
+ * sticky); the denormalized primary `client_id` is set only when currently null.
  */
 import type { Job, Processor } from 'bullmq';
 import type { FastifyBaseLogger } from 'fastify';
@@ -34,7 +42,7 @@ import {
 } from '@gracie/shared';
 
 import {
-  SCAN_LOOKAHEAD_HOURS,
+  SCAN_LOOKAHEAD_DAYS,
   SCAN_LOOKBACK_MINUTES,
   isWithinBusinessHours,
 } from '../lib/calendar-config.js';
@@ -66,6 +74,8 @@ export interface CalendarScanResult {
   readonly internal: number;
   /** Created meetings with no linked org and not internal (need attention). */
   readonly unassigned: number;
+  /** Removed meetings (cancelled or orphaned by a member leaving the group). */
+  readonly reaped: number;
 }
 
 function skipResult(reason: string): CalendarScanResult {
@@ -79,6 +89,7 @@ function skipResult(reason: string): CalendarScanResult {
     updated: 0,
     internal: 0,
     unassigned: 0,
+    reaped: 0,
   };
 }
 
@@ -140,14 +151,17 @@ export function createCalendarScanProcessor(
     // 2. Matcher context: internal domains, domain→org map, GA internal org.
     const ctx = await loadScanContext(db);
 
-    // 3. Read each member's calendar window; aggregate by dedup key.
+    // 3. Read each member's calendar window; aggregate by dedup key. Track whether
+    //    EVERY read succeeded — reconciliation only reaps on a fully-clean sweep.
     const windowStart = new Date(now.getTime() - SCAN_LOOKBACK_MINUTES * 60_000).toISOString();
-    const windowEnd = new Date(now.getTime() + SCAN_LOOKAHEAD_HOURS * 3_600_000).toISOString();
+    const windowEnd = new Date(now.getTime() + SCAN_LOOKAHEAD_DAYS * 86_400_000).toISOString();
     const aggregated = new Map<string, AggregatedMeeting>();
     let eventCount = 0;
+    let allReadsOk = true;
 
     for (const member of members) {
-      const events = await graph.readCalendarView(member.id, windowStart, windowEnd);
+      const { ok, events } = await graph.readCalendarView(member.id, windowStart, windowEnd);
+      if (!ok) allReadsOk = false;
       for (const event of events) {
         if (event.isCancelled || event.startUtc === null) continue;
         // Skip solo calendar blocks (personal holds / focus time): no join URL AND
@@ -189,7 +203,23 @@ export function createCalendarScanProcessor(
       }
     }
 
-    // 5. Record the last successful scan for the connection panel.
+    // 5. Reconcile: remove upcoming, still-scheduled calendar meetings that are no
+    //    longer on any group member's calendar (cancelled, or orphaned by someone
+    //    leaving the group). Only on a fully-clean sweep, so a failed read can't
+    //    trigger deletions.
+    let reaped = 0;
+    if (allReadsOk && members.length > 0) {
+      reaped = await reconcileRemovedMeetings(db, aggregated, windowStart, windowEnd, log);
+    } else {
+      // A failed read (403/transient) or an empty member list (group glitch /
+      // fully emptied) must never mass-delete — leave meetings untouched.
+      log.warn(
+        { allReadsOk, members: members.length },
+        'calendar-scan: skipping reconciliation (incomplete read) — no deletions',
+      );
+    }
+
+    // 6. Record the last successful scan for the connection panel.
     await recordLastScan(db, now, log);
 
     const result: CalendarScanResult = {
@@ -201,10 +231,50 @@ export function createCalendarScanProcessor(
       updated,
       internal,
       unassigned,
+      reaped,
     };
     log.info(result, 'calendar-scan sweep complete');
     return result;
   };
+}
+
+/**
+ * Remove calendar-sourced meetings in the scanned window that were NOT seen this
+ * sweep — i.e. cancelled in Outlook, or orphaned because the member(s) whose
+ * calendar carried them left the access group (a meeting still on ANY current
+ * member's calendar keeps the same cross-mailbox dedup key, so it stays). Only
+ * touches upcoming, still-`scheduled`, not-yet-dispatched meetings so processed
+ * history (bots/transcripts/documents) is preserved; `meeting_clients` links
+ * cascade on delete. MUST be called only after a fully-clean sweep.
+ */
+async function reconcileRemovedMeetings(
+  db: ServerClient,
+  aggregated: ReadonlyMap<string, AggregatedMeeting>,
+  windowStartIso: string,
+  windowEndIso: string,
+  log: FastifyBaseLogger,
+): Promise<number> {
+  const { data, error } = await db
+    .from('meetings')
+    .select('id, calendar_event_id')
+    .eq('source', 'calendar')
+    .eq('pipeline_status', 'scheduled')
+    .eq('bot_dispatched', false)
+    .gte('date_time', windowStartIso)
+    .lte('date_time', windowEndIso);
+  if (error !== null) throw new Error(`calendar-scan: reconcile lookup: ${error.message}`);
+
+  // Stale = has a dedup key that this clean sweep did not observe. Rows without a
+  // key are left alone (can't be matched; shouldn't exist for calendar meetings).
+  const staleIds = (data ?? [])
+    .filter((m) => m.calendar_event_id !== null && !aggregated.has(m.calendar_event_id))
+    .map((m) => m.id);
+  if (staleIds.length === 0) return 0;
+
+  const del = await db.from('meetings').delete().in('id', staleIds);
+  if (del.error !== null) throw new Error(`calendar-scan: reconcile delete: ${del.error.message}`);
+  log.info({ reaped: staleIds.length }, 'calendar-scan: removed cancelled/orphaned meetings');
+  return staleIds.length;
 }
 
 /** Load all GA users (id/email/name) with lower-cased emails for matching. */

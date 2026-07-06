@@ -15,6 +15,7 @@ import { Redis } from 'ioredis';
 import {
   JOB_NAMES,
   QUEUE_NAMES,
+  type CalendarScanJobPayload,
   type GenerationJobPayload,
   type IngestJobPayload,
   type KbIngestJobPayload,
@@ -32,6 +33,7 @@ let connection: Redis | undefined;
 let ingestQueue: Queue<IngestJobPayload> | undefined;
 let kbIngestQueue: Queue<KbIngestJobPayload> | undefined;
 let generateQueue: Queue<GenerationJobPayload> | undefined;
+let calendarScanQueue: Queue<CalendarScanJobPayload> | undefined;
 
 function getConnection(): Redis {
   if (connection !== undefined) return connection;
@@ -86,5 +88,24 @@ function getGenerateQueue(): Queue<GenerationJobPayload> {
 /** Enqueue one meeting-generation job (Recall webhook → pipeline); returns the job id. */
 export async function enqueueGenerate(payload: GenerationJobPayload): Promise<string> {
   const job = await getGenerateQueue().add(JOB_NAMES.generate, payload);
+  return job.id ?? '';
+}
+
+function getCalendarScanQueue(): Queue<CalendarScanJobPayload> {
+  if (calendarScanQueue !== undefined) return calendarScanQueue;
+  calendarScanQueue = new Queue<CalendarScanJobPayload>(QUEUE_NAMES.calendarScan, {
+    connection: getConnection(),
+    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+  });
+  return calendarScanQueue;
+}
+
+/**
+ * Enqueue a one-off calendar-scan sweep ("Sync now"). A `source: 'manual'` sweep
+ * runs immediately regardless of the business-hours gate (the worker consumes the
+ * SAME repeatable schedule otherwise). Returns the BullMQ job id.
+ */
+export async function enqueueCalendarScan(payload: CalendarScanJobPayload): Promise<string> {
+  const job = await getCalendarScanQueue().add(JOB_NAMES.calendarScan, payload);
   return job.id ?? '';
 }
