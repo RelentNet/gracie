@@ -8,6 +8,16 @@
 export const CLIENT_CADENCES = ['weekly', 'biweekly', 'monthly', 'qbr', 'ad_hoc'] as const;
 export type ClientCadence = (typeof CLIENT_CADENCES)[number];
 
+/**
+ * Party type on `clients` (P4.1). One domain-keyed table holds every party;
+ * `type` distinguishes real clients from the funnel + the internal workspace.
+ * "Promote a lead → client" is just flipping this value. Only `client` rows
+ * appear on client-only surfaces (roster, cadence, ambiguous-assign picker);
+ * `internal` is the single Grace & Associates workspace org.
+ */
+export const CLIENT_TYPES = ['client', 'prospect', 'lead', 'partner', 'internal'] as const;
+export type ClientType = (typeof CLIENT_TYPES)[number];
+
 export const FEE_TIERS = ['low', 'mid', 'high'] as const; // admin-only data
 export type FeeTier = (typeof FEE_TIERS)[number];
 

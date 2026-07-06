@@ -1,12 +1,17 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  Building2,
   ChevronLeft,
   ChevronRight,
+  Link2,
+  Lock,
   RefreshCw,
   Video,
+  X,
 } from 'lucide-react';
 import type {
   AmbiguousMeeting,
@@ -14,9 +19,14 @@ import type {
   CalendarConnectionStatus,
   CalendarMeeting,
   CalendarPerson,
+  Client,
   ClientCadenceRow,
+  ClientType,
+  ExternalAttendee,
+  MeetingOrg,
   PipelineStatus,
 } from '@gracie/shared';
+import { deriveOrgNameFromDomain } from '@gracie/shared';
 
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
@@ -25,6 +35,7 @@ import { formatEasternDateTime } from '@/lib/format';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
+import { Modal } from '@/components/ui/Modal';
 import { ClientAvatar } from '@/components/ClientAvatar';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
@@ -95,6 +106,33 @@ function toBadgeStatus(status: PipelineStatus): BadgeStatus {
   }
 }
 
+/** A meeting needs attention when it's external with no linked org yet (amber). */
+function meetingNeedsAttention(m: CalendarMeeting): boolean {
+  return !m.isInternal && m.orgs.length === 0;
+}
+
+/** Non-internal party types offered when creating an org from a domain. */
+const CREATE_ORG_TYPES: ReadonlyArray<{ readonly value: ClientType; readonly label: string }> = [
+  { value: 'client', label: 'Client' },
+  { value: 'prospect', label: 'Prospect' },
+  { value: 'lead', label: 'Lead' },
+  { value: 'partner', label: 'Partner' },
+];
+
+/** Human label for a party type (chip caption). */
+function orgTypeLabel(type: ClientType): string {
+  return CREATE_ORG_TYPES.find((t) => t.value === type)?.label ?? 'Internal';
+}
+
+/** A short caption of a meeting's org state for the month-grid pill. */
+function meetingGridLabel(m: CalendarMeeting): string {
+  if (m.isInternal) return 'Internal';
+  if (m.orgs.length === 1) return m.orgs[0]?.name ?? 'Meeting';
+  if (m.orgs.length > 1) return `${m.orgs.length} clients`;
+  if (m.unknownOrgDomains.length > 0) return `${m.unknownOrgDomains[0]} · no client`;
+  return m.title ?? 'Meeting';
+}
+
 interface GridCell {
   readonly key: string;
   readonly dayOfMonth: number;
@@ -146,8 +184,9 @@ interface CalendarSettingsResponse {
 }
 
 export default function CalendarPage(): React.JSX.Element {
-  const { hasRole } = useAuth();
+  const { hasRole, canEdit } = useAuth();
   const isAdmin = hasRole('admin');
+  const editable = canEdit();
 
   const nowKey = easternDayKey(new Date().toISOString());
   const [nowY, nowM] = nowKey.split('-').map(Number);
@@ -157,10 +196,13 @@ export default function CalendarPage(): React.JSX.Element {
 
   const [meetings, setMeetings] = useState<readonly CalendarMeeting[] | null>(null);
   const [meetingsError, setMeetingsError] = useState<string | null>(null);
+  // Bumped after a link/create-org action to refetch the visible window in place.
+  const [reloadToken, setReloadToken] = useState(0);
+  const reload = useCallback((): void => setReloadToken((t) => t + 1), []);
 
   const grid = useMemo(() => buildMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
 
-  // Meetings for the visible grid — refetched on month change.
+  // Meetings for the visible grid — refetched on month change or after an edit.
   useEffect(() => {
     let active = true;
     setMeetings(null);
@@ -176,7 +218,7 @@ export default function CalendarPage(): React.JSX.Element {
     return (): void => {
       active = false;
     };
-  }, [grid.fromIso, grid.toIso]);
+  }, [grid.fromIso, grid.toIso, reloadToken]);
 
   const meetingsByDay = useMemo(() => {
     const map = new Map<string, CalendarMeeting[]>();
@@ -217,7 +259,8 @@ export default function CalendarPage(): React.JSX.Element {
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Calendar</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          Team meetings detected from Outlook, matched to clients, and queued for the meeting bot.
+          Every team meeting from Outlook — matched to clients by attendee domain, with unknown
+          orgs one click from a new client, lead, or prospect.
         </p>
       </header>
 
@@ -262,7 +305,13 @@ export default function CalendarPage(): React.JSX.Element {
         </div>
 
         <div className="flex flex-col gap-6">
-          <DayDetail dayKey={selectedDay} meetings={selectedMeetings} loading={meetings === null} />
+          <DayDetail
+            dayKey={selectedDay}
+            meetings={selectedMeetings}
+            loading={meetings === null}
+            editable={editable}
+            onChanged={reload}
+          />
           <ConnectionPanel isAdmin={isAdmin} />
         </div>
       </div>
@@ -321,7 +370,7 @@ function MonthGrid({
         {grid.cells.map((cell) => {
           const dayMeetings = meetingsByDay.get(cell.key) ?? [];
           const isSelected = cell.key === selectedDay;
-          const hasAmbiguous = dayMeetings.some((m) => m.clientId === null);
+          const hasAttention = dayMeetings.some(meetingNeedsAttention);
           return (
             <button
               key={cell.key}
@@ -352,25 +401,34 @@ function MonthGrid({
                 >
                   {cell.dayOfMonth}
                 </span>
-                {hasAmbiguous ? (
+                {hasAttention ? (
                   <AlertTriangle size={12} aria-label="Needs client assignment" style={{ color: 'var(--color-amber-600)' }} />
                 ) : null}
               </span>
               {loading ? null : dayMeetings.length > 0 ? (
                 <span className="flex flex-col gap-0.5">
-                  {dayMeetings.slice(0, 2).map((m) => (
-                    <span
-                      key={m.id}
-                      className="truncate rounded px-1"
-                      style={{
-                        ...TYPE.label,
-                        backgroundColor: m.clientId === null ? 'var(--color-amber-100)' : 'var(--color-blue-100)',
-                        color: m.clientId === null ? 'var(--color-amber-600)' : 'var(--color-blue-700)',
-                      }}
-                    >
-                      {easternTime(m.dateTime)} {m.clientName ?? m.title ?? 'Meeting'}
-                    </span>
-                  ))}
+                  {dayMeetings.slice(0, 2).map((m) => {
+                    const attention = meetingNeedsAttention(m);
+                    const bg = attention
+                      ? 'var(--color-amber-100)'
+                      : m.isInternal
+                        ? 'var(--color-slate-100)'
+                        : 'var(--color-blue-100)';
+                    const fg = attention
+                      ? 'var(--color-amber-600)'
+                      : m.isInternal
+                        ? 'var(--color-slate-600)'
+                        : 'var(--color-blue-700)';
+                    return (
+                      <span
+                        key={m.id}
+                        className="truncate rounded px-1"
+                        style={{ ...TYPE.label, backgroundColor: bg, color: fg }}
+                      >
+                        {easternTime(m.dateTime)} {meetingGridLabel(m)}
+                      </span>
+                    );
+                  })}
                   {dayMeetings.length > 2 ? (
                     <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
                       +{dayMeetings.length - 2} more
@@ -390,10 +448,14 @@ function DayDetail({
   dayKey,
   meetings,
   loading,
+  editable,
+  onChanged,
 }: {
   readonly dayKey: string;
   readonly meetings: readonly CalendarMeeting[];
   readonly loading: boolean;
+  readonly editable: boolean;
+  readonly onChanged: () => void;
 }): React.JSX.Element {
   return (
     <Card>
@@ -403,49 +465,439 @@ function DayDetail({
       ) : meetings.length === 0 ? (
         <EmptyState title="No meetings" description="Nothing scheduled for this day." />
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="flex flex-col gap-4">
           {meetings.map((m) => (
-            <li key={m.id} className="flex flex-col gap-2 border-t pt-3 first:border-t-0 first:pt-0" style={{ borderColor: 'var(--border-subtle)' }}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex flex-col gap-0.5">
-                  <span style={TYPE.bodyStrong}>{m.title ?? 'Untitled meeting'}</span>
-                  <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>{easternTime(m.dateTime)}</span>
-                </div>
-                <StatusBadge status={toBadgeStatus(m.pipelineStatus)} size="sm" />
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {m.clientName !== null ? (
-                  <Badge bg="var(--color-slate-100)" fg="var(--color-slate-600)">
-                    {m.clientName}
-                  </Badge>
-                ) : (
-                  <Badge bg="var(--color-amber-100)" fg="var(--color-amber-600)">
-                    Unassigned
-                  </Badge>
-                )}
-                {m.isBotDispatched ? (
-                  <span className="inline-flex items-center gap-1" style={{ ...TYPE.label, color: 'var(--color-emerald-600)' }}>
-                    <Video size={13} aria-hidden="true" /> Bot dispatched
-                  </span>
-                ) : null}
-              </div>
-              {m.attendees.length > 0 ? <PeopleRow people={m.attendees} /> : null}
-              {m.videoLink !== null ? (
-                <a
-                  href={m.videoLink}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="inline-flex w-fit items-center gap-1"
-                  style={{ ...TYPE.label, color: 'var(--color-blue-600)' }}
-                >
-                  <Video size={13} aria-hidden="true" /> Join link
-                </a>
-              ) : null}
+            <li
+              key={m.id}
+              className="border-t pt-4 first:border-t-0 first:pt-0"
+              style={{ borderColor: 'var(--border-subtle)' }}
+            >
+              <MeetingCard meeting={m} editable={editable} onChanged={onChanged} />
             </li>
           ))}
         </ul>
       )}
     </Card>
+  );
+}
+
+/** One org chip (linked client/lead/prospect/internal) with an optional remove. */
+function OrgChip({
+  org,
+  onRemove,
+  removing,
+}: {
+  readonly org: MeetingOrg;
+  readonly onRemove?: () => void;
+  readonly removing: boolean;
+}): React.JSX.Element {
+  const isInternal = org.type === 'internal';
+  const bg = isInternal ? 'var(--color-slate-100)' : 'var(--color-blue-100)';
+  const fg = isInternal ? 'var(--color-slate-600)' : 'var(--color-blue-700)';
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-md"
+      style={{ backgroundColor: bg, color: fg, fontSize: '0.6875rem', fontWeight: 600, padding: '0.0625rem 0.375rem' }}
+    >
+      <Link href={`/clients/${org.id}`} className="inline-flex items-center gap-1" style={{ color: fg }}>
+        {isInternal ? <Lock size={11} aria-hidden="true" /> : <Building2 size={11} aria-hidden="true" />}
+        {org.name}
+      </Link>
+      {!isInternal && org.type !== 'client' ? (
+        <span style={{ opacity: 0.7 }}>· {orgTypeLabel(org.type)}</span>
+      ) : null}
+      {onRemove !== undefined && !isInternal ? (
+        <button
+          type="button"
+          aria-label={`Unlink ${org.name}`}
+          onClick={onRemove}
+          disabled={removing}
+          style={{ color: fg, cursor: removing ? 'wait' : 'pointer', lineHeight: 0 }}
+        >
+          <X size={12} aria-hidden="true" />
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
+/** The external (non-GA) attendees on a meeting, name + email. */
+function ExternalAttendeesList({ people }: { readonly people: readonly ExternalAttendee[] }): React.JSX.Element {
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {people.map((p) => (
+        <li key={p.email} style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+          <span style={{ color: 'var(--text-primary)' }}>{p.name ?? p.email}</span>
+          {p.name !== null ? <span> · {p.email}</span> : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** One meeting in the day-detail: status, org chips, external people, org actions. */
+function MeetingCard({
+  meeting,
+  editable,
+  onChanged,
+}: {
+  readonly meeting: CalendarMeeting;
+  readonly editable: boolean;
+  readonly onChanged: () => void;
+}): React.JSX.Element {
+  const m = meeting;
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [create, setCreate] = useState<{ domain: string; type: ClientType } | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const attention = meetingNeedsAttention(m);
+
+  const unlink = useCallback(
+    (clientId: string): void => {
+      setBusy(`unlink:${clientId}`);
+      setError(null);
+      apiClient
+        .post(`/api/calendar/meetings/${m.id}/orgs`, { clientId, action: 'unlink' })
+        .then(() => onChanged())
+        .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to unlink org'))
+        .finally(() => setBusy(null));
+    },
+    [m.id, onChanged],
+  );
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-col gap-0.5">
+          <span style={TYPE.bodyStrong}>{m.title ?? 'Untitled meeting'}</span>
+          <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>{easternTime(m.dateTime)}</span>
+        </div>
+        <StatusBadge status={toBadgeStatus(m.pipelineStatus)} size="sm" />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {m.isInternal ? (
+          <Badge bg="var(--color-slate-100)" fg="var(--color-slate-600)" icon={<Lock size={11} aria-hidden="true" />}>
+            Internal
+          </Badge>
+        ) : null}
+        {m.orgs
+          .filter((o) => !(m.isInternal && o.type === 'internal'))
+          .map((o) => (
+            <OrgChip
+              key={o.id}
+              org={o}
+              removing={busy === `unlink:${o.id}`}
+              onRemove={editable ? (): void => unlink(o.id) : undefined}
+            />
+          ))}
+        {attention ? (
+          <Badge bg="var(--color-amber-100)" fg="var(--color-amber-600)" icon={<AlertTriangle size={11} aria-hidden="true" />}>
+            No client
+          </Badge>
+        ) : null}
+        {m.isBotDispatched ? (
+          <span className="inline-flex items-center gap-1" style={{ ...TYPE.label, color: 'var(--color-emerald-600)' }}>
+            <Video size={13} aria-hidden="true" /> Bot dispatched
+          </span>
+        ) : null}
+      </div>
+
+      {m.attendees.length > 0 ? <PeopleRow people={m.attendees} /> : null}
+
+      {m.externalAttendees.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>External attendees</span>
+          <ExternalAttendeesList people={m.externalAttendees} />
+        </div>
+      ) : null}
+
+      {editable && (m.unknownOrgDomains.length > 0 || m.orgs.length === 0) && !m.isInternal ? (
+        <div
+          className="flex flex-col gap-2 rounded-lg border p-2"
+          style={{ borderColor: 'var(--color-amber-200, var(--border-subtle))' }}
+        >
+          {m.unknownOrgDomains.map((domain) => (
+            <div key={domain} className="flex flex-wrap items-center gap-2">
+              <span className="font-data" style={{ ...TYPE.label, color: 'var(--text-primary)' }}>
+                {domain}
+              </span>
+              <Button size="sm" variant="secondary" onClick={(): void => setCreate({ domain, type: 'client' })}>
+                Create client
+              </Button>
+              <Button size="sm" variant="secondary" onClick={(): void => setCreate({ domain, type: 'lead' })}>
+                Create lead
+              </Button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={(): void => setLinkOpen(true)}
+            className="inline-flex w-fit items-center gap-1"
+            style={{ ...TYPE.label, color: 'var(--color-blue-600)', cursor: 'pointer' }}
+          >
+            <Link2 size={13} aria-hidden="true" /> Link an existing org
+          </button>
+        </div>
+      ) : null}
+
+      {m.videoLink !== null ? (
+        <a
+          href={m.videoLink}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="inline-flex w-fit items-center gap-1"
+          style={{ ...TYPE.label, color: 'var(--color-blue-600)' }}
+        >
+          <Video size={13} aria-hidden="true" /> Join link
+        </a>
+      ) : null}
+
+      {error !== null ? (
+        <span role="alert" style={{ ...TYPE.label, color: 'var(--color-red-600)' }}>
+          {error}
+        </span>
+      ) : null}
+
+      {create !== null ? (
+        <CreateOrgModal
+          meetingId={m.id}
+          domain={create.domain}
+          defaultType={create.type}
+          suggested={m.externalAttendees.find((a) => a.domain === create.domain) ?? null}
+          onClose={(): void => setCreate(null)}
+          onCreated={(): void => {
+            setCreate(null);
+            onChanged();
+          }}
+        />
+      ) : null}
+
+      {linkOpen ? (
+        <LinkExistingModal
+          meetingId={m.id}
+          linkedIds={m.orgs.map((o) => o.id)}
+          onClose={(): void => setLinkOpen(false)}
+          onLinked={(): void => {
+            setLinkOpen(false);
+            onChanged();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** Modal: create a client/lead/prospect/partner from an unknown meeting domain. */
+function CreateOrgModal({
+  meetingId,
+  domain,
+  defaultType,
+  suggested,
+  onClose,
+  onCreated,
+}: {
+  readonly meetingId: string;
+  readonly domain: string;
+  readonly defaultType: ClientType;
+  readonly suggested: ExternalAttendee | null;
+  readonly onClose: () => void;
+  readonly onCreated: () => void;
+}): React.JSX.Element {
+  const [name, setName] = useState<string>(deriveOrgNameFromDomain(domain));
+  const [type, setType] = useState<ClientType>(defaultType);
+  const [contact, setContact] = useState<string>(suggested?.name ?? '');
+  const [contactEmail, setContactEmail] = useState<string>(suggested?.email ?? '');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = useCallback((): void => {
+    if (name.trim() === '') {
+      setError('A name is required.');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    apiClient
+      .post(`/api/calendar/meetings/${meetingId}/create-org`, {
+        domain,
+        name: name.trim(),
+        type,
+        primaryContact: contact.trim() || undefined,
+        primaryContactEmail: contactEmail.trim() || undefined,
+      })
+      .then(() => onCreated())
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to create org'))
+      .finally(() => setSubmitting(false));
+  }, [meetingId, domain, name, type, contact, contactEmail, onCreated]);
+
+  const inputClass = 'w-full rounded-lg border bg-white px-3 py-2';
+  const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body };
+
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Create organization"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={submit} disabled={submitting}>
+            {submitting ? 'Creating…' : 'Create'}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+          New org for <span className="font-data">{domain}</span>. Past and future meetings on this
+          domain will link automatically.
+        </p>
+        <label className="flex flex-col gap-1">
+          <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Name *</span>
+          <input className={inputClass} style={inputStyle} value={name} onChange={(e): void => setName(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Type</span>
+          <select
+            className={inputClass}
+            style={inputStyle}
+            value={type}
+            onChange={(e): void => setType(e.target.value as ClientType)}
+          >
+            {CREATE_ORG_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-4">
+          <label className="flex flex-col gap-1">
+            <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Primary contact</span>
+            <input className={inputClass} style={inputStyle} value={contact} onChange={(e): void => setContact(e.target.value)} />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Contact email</span>
+            <input
+              type="email"
+              className={inputClass}
+              style={inputStyle}
+              value={contactEmail}
+              onChange={(e): void => setContactEmail(e.target.value)}
+            />
+          </label>
+        </div>
+        {error !== null ? (
+          <span role="alert" style={{ ...TYPE.secondary, color: 'var(--color-red-600)' }}>
+            {error}
+          </span>
+        ) : null}
+      </div>
+    </Modal>
+  );
+}
+
+/** Modal: link an existing (non-internal) org to a meeting. */
+function LinkExistingModal({
+  meetingId,
+  linkedIds,
+  onClose,
+  onLinked,
+}: {
+  readonly meetingId: string;
+  readonly linkedIds: readonly string[];
+  readonly onClose: () => void;
+  readonly onLinked: () => void;
+}): React.JSX.Element {
+  const [clients, setClients] = useState<readonly Client[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [choice, setChoice] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    apiClient
+      .get<{ clients: readonly Client[] }>('/api/clients?type=all')
+      .then((d) => {
+        if (active) setClients(d.clients);
+      })
+      .catch((e: unknown) => {
+        if (active) setLoadError(e instanceof Error ? e.message : 'Failed to load orgs');
+      });
+    return (): void => {
+      active = false;
+    };
+  }, []);
+
+  const options = (clients ?? []).filter((c) => !linkedIds.includes(c.id));
+
+  const submit = useCallback((): void => {
+    if (choice === '') return;
+    setSubmitting(true);
+    setError(null);
+    apiClient
+      .post(`/api/calendar/meetings/${meetingId}/orgs`, { clientId: choice, action: 'link' })
+      .then(() => onLinked())
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to link org'))
+      .finally(() => setSubmitting(false));
+  }, [meetingId, choice, onLinked]);
+
+  const inputClass = 'w-full rounded-lg border bg-white px-3 py-2';
+  const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body };
+
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Link an existing org"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={submit} disabled={submitting || choice === ''}>
+            {submitting ? 'Linking…' : 'Link'}
+          </Button>
+        </>
+      }
+    >
+      {loadError !== null ? (
+        <ErrorState title="Couldn’t load orgs" description={loadError} />
+      ) : clients === null ? (
+        <LoadingState label="Loading orgs…" />
+      ) : options.length === 0 ? (
+        <EmptyState title="No orgs to link" description="Every existing org is already linked, or none exist yet." />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Organization</span>
+            <select
+              className={inputClass}
+              style={inputStyle}
+              value={choice}
+              onChange={(e): void => setChoice(e.target.value)}
+            >
+              <option value="">Select an org…</option>
+              {options.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {c.type !== 'client' ? ` (${orgTypeLabel(c.type)})` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          {error !== null ? (
+            <span role="alert" style={{ ...TYPE.secondary, color: 'var(--color-red-600)' }}>
+              {error}
+            </span>
+          ) : null}
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -716,7 +1168,7 @@ function AmbiguousSection(): React.JSX.Element {
     <Card accent={data !== null && data.meetings.length > 0 ? 'critical' : 'none'}>
       <CardHeader
         title="Needs client assignment"
-        description="Meetings that matched more than one client. Assign the correct client to queue the bot."
+        description="Meetings with no linked client or an unrecognized org domain. Assign a client to queue the bot, or create the org from the meeting."
       />
       {error !== null ? (
         <ErrorState title="Couldn’t load" description={error} />
@@ -738,6 +1190,11 @@ function AmbiguousSection(): React.JSX.Element {
                   {formatEasternDateTime(m.dateTime)}
                   {m.attendees.length > 0 ? ` · ${m.attendees.map((p) => p.name).join(', ')}` : ''}
                 </span>
+                {m.unknownOrgDomains.length > 0 ? (
+                  <span className="font-data" style={{ ...TYPE.label, color: 'var(--color-amber-600)' }}>
+                    Unknown: {m.unknownOrgDomains.join(', ')}
+                  </span>
+                ) : null}
               </div>
               <div className="flex items-center gap-2">
                 <select

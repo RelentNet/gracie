@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Calendar, CalendarClock, Plus, Search } from 'lucide-react';
-import type { Client } from '@gracie/shared';
+import { Calendar, CalendarClock, Lock, Plus, Search } from 'lucide-react';
+import type { Client, ClientType } from '@gracie/shared';
 
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
@@ -33,6 +33,14 @@ import { AddClientModal } from './AddClientModal';
  */
 type CadenceFilter = ClientCadence | 'all';
 
+/** Party-type tabs — real clients plus the funnel (P4.1). Internal is separate. */
+const PARTY_TABS: ReadonlyArray<{ readonly value: ClientType; readonly label: string }> = [
+  { value: 'client', label: 'Clients' },
+  { value: 'prospect', label: 'Prospects' },
+  { value: 'lead', label: 'Leads' },
+  { value: 'partner', label: 'Partners' },
+];
+
 interface ClientsResponse {
   readonly clients: readonly Client[];
 }
@@ -41,25 +49,44 @@ export default function ClientsPage(): React.JSX.Element {
   const { hasRole } = useAuth();
   const isAdmin = hasRole('admin');
 
+  const [party, setParty] = useState<ClientType>('client');
   const [clients, setClients] = useState<readonly Client[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState<string>('');
   const [cadence, setCadence] = useState<CadenceFilter>('all');
   const [showAdd, setShowAdd] = useState(false);
+  const [internalOrg, setInternalOrg] = useState<Client | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     try {
-      const data = await apiClient.get<ClientsResponse>('/api/clients');
+      const data = await apiClient.get<ClientsResponse>(`/api/clients?type=${party}`);
       setClients(data.clients);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load clients');
     }
-  }, []);
+  }, [party]);
 
   useEffect(() => {
+    setClients(null);
     void load();
   }, [load]);
+
+  // The GA internal workspace is reachable but kept out of the roster (P4.1).
+  useEffect(() => {
+    let active = true;
+    apiClient
+      .get<ClientsResponse>('/api/clients?type=internal')
+      .then((data) => {
+        if (active) setInternalOrg(data.clients[0] ?? null);
+      })
+      .catch(() => {
+        if (active) setInternalOrg(null);
+      });
+    return (): void => {
+      active = false;
+    };
+  }, []);
 
   const filtered = useMemo<readonly Client[]>(() => {
     if (clients === null) return [];
@@ -82,16 +109,53 @@ export default function ClientsPage(): React.JSX.Element {
           <h1 style={TYPE.pageTitle}>Clients</h1>
           <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
             {clients === null
-              ? 'Loading client relationships…'
-              : `${clients.length} active client relationships.`}
+              ? 'Loading relationships…'
+              : `${clients.length} ${PARTY_TABS.find((t) => t.value === party)?.label.toLowerCase() ?? 'clients'}.`}
           </p>
         </div>
         {isAdmin ? (
           <Button icon={<Plus size={16} aria-hidden="true" />} onClick={(): void => setShowAdd(true)}>
-            Add client
+            Add {party === 'client' ? 'client' : 'party'}
           </Button>
         ) : null}
       </header>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1" role="tablist" aria-label="Party type">
+          {PARTY_TABS.map((tab) => {
+            const active = party === tab.value;
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={(): void => setParty(tab.value)}
+                className="rounded-lg border px-3 py-1.5 transition-colors"
+                style={{
+                  borderColor: active ? 'var(--color-blue-500)' : 'var(--border-subtle)',
+                  backgroundColor: active ? 'var(--color-blue-100)' : '#ffffff',
+                  color: active ? 'var(--color-blue-700)' : 'var(--text-secondary)',
+                  ...TYPE.bodyStrong,
+                  cursor: 'pointer',
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+        {internalOrg !== null ? (
+          <Link
+            href={`/clients/${internalOrg.id}`}
+            className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5"
+            style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)', ...TYPE.bodyStrong }}
+          >
+            <Lock size={14} aria-hidden="true" />
+            Internal · {internalOrg.name}
+          </Link>
+        ) : null}
+      </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <label className="relative flex-1" style={{ minWidth: '16rem' }}>
@@ -150,6 +214,7 @@ export default function ClientsPage(): React.JSX.Element {
       {isAdmin ? (
         <AddClientModal
           isOpen={showAdd}
+          defaultType={party}
           onClose={(): void => setShowAdd(false)}
           onCreated={(): void => {
             setShowAdd(false);

@@ -10,6 +10,7 @@ export const MOCK_CLIENTS: readonly Client[] = [
   {
     id: 'cli_cms',
     name: 'CMS Data Analytics',
+    type: 'client',
     initials: 'CM',
     contractNumber: 'GS-35F-0119Y',
     primaryContact: 'Dr. Linda Reyes',
@@ -30,6 +31,7 @@ export const MOCK_CLIENTS: readonly Client[] = [
   {
     id: 'cli_va',
     name: 'VA Modernization',
+    type: 'client',
     initials: 'VA',
     contractNumber: '36C10B22D0007',
     primaryContact: 'Marcus Bell',
@@ -50,6 +52,7 @@ export const MOCK_CLIENTS: readonly Client[] = [
   {
     id: 'cli_hhs',
     name: 'HHS Integration Project',
+    type: 'client',
     initials: 'HH',
     contractNumber: 'HHSP233201600045I',
     primaryContact: 'Angela Brooks',
@@ -70,6 +73,7 @@ export const MOCK_CLIENTS: readonly Client[] = [
   {
     id: 'cli_fda',
     name: 'FDA Reporting Portal',
+    type: 'client',
     initials: 'FD',
     contractNumber: '75F40122C00031',
     primaryContact: 'Dr. Samuel Okafor',
@@ -90,6 +94,7 @@ export const MOCK_CLIENTS: readonly Client[] = [
   {
     id: 'cli_cdc',
     name: 'CDC Emergency Response',
+    type: 'client',
     initials: 'CD',
     contractNumber: '75D30122C14589',
     primaryContact: 'Rachel Nguyen',
@@ -110,6 +115,7 @@ export const MOCK_CLIENTS: readonly Client[] = [
   {
     id: 'cli_nih',
     name: 'NIH Research Cloud',
+    type: 'client',
     initials: 'NI',
     contractNumber: 'HHSN263201800012C',
     primaryContact: 'Dr. Patricia Vance',
@@ -130,6 +136,7 @@ export const MOCK_CLIENTS: readonly Client[] = [
   {
     id: 'cli_ihs',
     name: 'IHS Telehealth Expansion',
+    type: 'client',
     initials: 'IH',
     contractNumber: '75H70122C00018',
     primaryContact: 'Daniel Whitefeather',
@@ -150,6 +157,7 @@ export const MOCK_CLIENTS: readonly Client[] = [
   {
     id: 'cli_samhsa',
     name: 'SAMHSA Behavioral Health',
+    type: 'client',
     initials: 'SA',
     contractNumber: 'HHSS283201700022I',
     primaryContact: 'Olivia Park',
@@ -170,6 +178,7 @@ export const MOCK_CLIENTS: readonly Client[] = [
   {
     id: 'cli_arpah',
     name: 'ARPA-H Innovation',
+    type: 'client',
     initials: 'AR',
     contractNumber: '75N99123C00005',
     primaryContact: 'Dr. Ethan Cole',
@@ -190,6 +199,7 @@ export const MOCK_CLIENTS: readonly Client[] = [
   {
     id: 'cli_hrsa',
     name: 'HRSA Workforce Data',
+    type: 'client',
     initials: 'HR',
     contractNumber: 'HHSH250201900008C',
     primaryContact: 'Grace Liu',
@@ -210,6 +220,7 @@ export const MOCK_CLIENTS: readonly Client[] = [
   {
     id: 'cli_cdc2',
     name: 'CDC Immunization Registry',
+    type: 'client',
     initials: 'CI',
     contractNumber: '75D30123C16002',
     primaryContact: 'Thomas Reed',
@@ -230,6 +241,7 @@ export const MOCK_CLIENTS: readonly Client[] = [
   {
     id: 'cli_va2',
     name: 'VA Claims Automation',
+    type: 'client',
     initials: 'VC',
     contractNumber: '36C10B23D0042',
     primaryContact: 'Nicole Adams',

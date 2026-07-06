@@ -1,28 +1,37 @@
 /**
- * Calendar-scan processor (P4, docs/07 §6, docs/09 Phase 4). A repeatable sweep
- * (~30 min, business hours ET) that:
+ * Calendar-scan processor (P4.1, docs/plan p4.1-meetings-first-orgs.md §4). A
+ * repeatable sweep (~30 min, business hours ET) that turns Outlook into a
+ * meetings-first workspace:
  *
  *   1. lists the members of `MS_CALENDAR_GROUP_ID` (Graph, app-only),
  *   2. syncs `users.calendar_connected` from that membership (= "connected", D5),
  *   3. reads each member's `calendarView` for a short window,
  *   4. dedups the SAME meeting across attendees' calendars into one logical event,
- *   5. matches each event to a client (alias + attendee-domain; simple, no NLP),
- *   6. upserts a `meetings` row keyed by a stable dedup key (`calendar_event_id`).
+ *   5. resolves each meeting's org(s) from external attendee DOMAINS (multi-client
+ *      via the `meeting_clients` junction; internal-only meetings → the GA org),
+ *   6. upserts a `meetings` row keyed by a stable dedup key (`calendar_event_id`),
+ *      capturing `is_internal` + `external_attendees` and linking matched orgs.
  *
- * Matching outcome per event: 0 candidates → not a client meeting (skipped);
- * 1 → assigned; >1 → ambiguous (`client_id = null`, Admin assigns via the UI).
+ * EVERY real meeting is ingested now (not just client-matched ones) — solo
+ * calendar blocks (no join URL AND ≤1 attendee) and cancelled/undated events are
+ * the only skips. Matching is DOMAIN-FIRST (no subject/alias guessing).
  *
  * Idempotent + non-destructive: an existing meeting that is already dispatched or
- * past `scheduled` is left untouched; a previously-ambiguous meeting is auto-
- * resolved only when matching now yields exactly one client. Never overwrites an
- * Admin-assigned `client_id`.
+ * past `scheduled` is left untouched; `meeting_clients` links are only ADDED,
+ * never removed (Admin/manual links + previously-created orgs are sticky); the
+ * denormalized primary `client_id` is set only when currently null (never
+ * overwrites an Admin-assigned client).
  */
 import type { Job, Processor } from 'bullmq';
 import type { FastifyBaseLogger } from 'fastify';
 
 import { getServerClient } from '@gracie/db';
-import type { Database, ServerClient } from '@gracie/db';
-import type { CalendarScanJobPayload } from '@gracie/shared';
+import type { Database, Json, ServerClient } from '@gracie/db';
+import {
+  parseInternalDomains,
+  type CalendarScanJobPayload,
+  type ExternalAttendee,
+} from '@gracie/shared';
 
 import {
   SCAN_LOOKAHEAD_HOURS,
@@ -30,15 +39,19 @@ import {
   isWithinBusinessHours,
 } from '../lib/calendar-config.js';
 import {
-  buildClientMatchers,
-  resolveClientCandidates,
   meetingDedupKey,
-  type ClientMatchers,
+  resolveMeetingOrgs,
+  type OrgDomainEntry,
 } from '../lib/calendar-match.js';
 import { createGraphClient, getGraphConfig, type GraphEvent } from '../lib/graph.js';
 
 type MeetingInsert = Database['public']['Tables']['meetings']['Insert'];
 type MeetingUpdate = Database['public']['Tables']['meetings']['Update'];
+
+/** Cast typed external attendees to the raw jsonb column type for a DB write. */
+function toJson(attendees: readonly ExternalAttendee[]): Json {
+  return attendees as unknown as Json;
+}
 
 /** Outcome of one scan sweep (visible in Bull Board). */
 export interface CalendarScanResult {
@@ -49,11 +62,24 @@ export interface CalendarScanResult {
   readonly meetings: number;
   readonly created: number;
   readonly updated: number;
-  readonly ambiguous: number;
+  /** Ingested meetings tagged internal (GA-only). */
+  readonly internal: number;
+  /** Created meetings with no linked org and not internal (need attention). */
+  readonly unassigned: number;
 }
 
 function skipResult(reason: string): CalendarScanResult {
-  return { skipped: true, reason, members: 0, events: 0, meetings: 0, created: 0, updated: 0, ambiguous: 0 };
+  return {
+    skipped: true,
+    reason,
+    members: 0,
+    events: 0,
+    meetings: 0,
+    created: 0,
+    updated: 0,
+    internal: 0,
+    unassigned: 0,
+  };
 }
 
 /** An internal GA user, keyed by lower-cased email for attendee resolution. */
@@ -71,7 +97,15 @@ interface AggregatedMeeting {
   readonly ownerEmails: Set<string>;
 }
 
-type UpsertOutcome = 'created' | 'created-ambiguous' | 'updated' | 'skipped';
+/** Resolved scan context: matcher tables + the internal-org home. */
+interface ScanContext {
+  readonly internalDomains: ReadonlySet<string>;
+  readonly domainToOrg: ReadonlyMap<string, OrgDomainEntry>;
+  /** The GA `internal` org id (home for internal meetings), or null if absent. */
+  readonly internalOrgId: string | null;
+}
+
+type UpsertOutcome = 'created' | 'created-internal' | 'created-unassigned' | 'updated' | 'skipped';
 
 /** Build the calendar-scan processor, logging through the worker's Fastify logger. */
 export function createCalendarScanProcessor(
@@ -103,8 +137,8 @@ export function createCalendarScanProcessor(
     const users = await loadUsers(db);
     await syncCalendarConnected(db, memberEmails, log);
 
-    // 2. Client matchers (aliases + canonical names + contact domains).
-    const matchers = await loadMatchers(db);
+    // 2. Matcher context: internal domains, domain→org map, GA internal org.
+    const ctx = await loadScanContext(db);
 
     // 3. Read each member's calendar window; aggregate by dedup key.
     const windowStart = new Date(now.getTime() - SCAN_LOOKBACK_MINUTES * 60_000).toISOString();
@@ -116,6 +150,9 @@ export function createCalendarScanProcessor(
       const events = await graph.readCalendarView(member.id, windowStart, windowEnd);
       for (const event of events) {
         if (event.isCancelled || event.startUtc === null) continue;
+        // Skip solo calendar blocks (personal holds / focus time): no join URL AND
+        // at most one attendee — never a real meeting.
+        if (event.joinUrl === null && event.attendees.length <= 1) continue;
         eventCount += 1;
         const key = meetingDedupKey({
           iCalUId: event.iCalUId,
@@ -132,19 +169,23 @@ export function createCalendarScanProcessor(
       }
     }
 
-    // 4. Match + upsert each unique meeting.
+    // 4. Resolve + upsert each unique meeting.
     const usersByEmail = new Map(users.map((u) => [u.email, u]));
     let created = 0;
     let updated = 0;
-    let ambiguous = 0;
+    let internal = 0;
+    let unassigned = 0;
 
     for (const agg of aggregated.values()) {
-      const outcome = await upsertMeeting(db, agg, matchers, usersByEmail);
-      if (outcome === 'created') created += 1;
-      else if (outcome === 'updated') updated += 1;
-      else if (outcome === 'created-ambiguous') {
+      const outcome = await upsertMeeting(db, agg, ctx, usersByEmail);
+      if (outcome === 'updated') updated += 1;
+      else if (outcome === 'created') created += 1;
+      else if (outcome === 'created-internal') {
         created += 1;
-        ambiguous += 1;
+        internal += 1;
+      } else if (outcome === 'created-unassigned') {
+        created += 1;
+        unassigned += 1;
       }
     }
 
@@ -158,7 +199,8 @@ export function createCalendarScanProcessor(
       meetings: aggregated.size,
       created,
       updated,
-      ambiguous,
+      internal,
+      unassigned,
     };
     log.info(result, 'calendar-scan sweep complete');
     return result;
@@ -196,21 +238,52 @@ async function syncCalendarConnected(
   if (changed > 0) log.info({ changed }, 'calendar-scan: synced calendar_connected');
 }
 
-/** Build the client matcher tables from the roster + aliases. */
-async function loadMatchers(db: ServerClient): Promise<ClientMatchers> {
-  const clientsRes = await db.from('clients').select('id, name, primary_contact_email');
-  if (clientsRes.error !== null) throw new Error(`calendar-scan: load clients: ${clientsRes.error.message}`);
-  const aliasesRes = await db.from('client_aliases').select('client_id, alias');
-  if (aliasesRes.error !== null) throw new Error(`calendar-scan: load aliases: ${aliasesRes.error.message}`);
+/**
+ * Load the scan matcher context: the internal-domain set (from
+ * `settings.internal_email_domains`), the domain→org map (from `client_domains`
+ * joined to non-internal orgs), and the GA internal org id.
+ */
+async function loadScanContext(db: ServerClient): Promise<ScanContext> {
+  const settingRes = await db
+    .from('settings')
+    .select('value')
+    .eq('key', 'internal_email_domains')
+    .maybeSingle();
+  if (settingRes.error !== null) {
+    throw new Error(`calendar-scan: load internal domains: ${settingRes.error.message}`);
+  }
+  const rawDomains = typeof settingRes.data?.value === 'string' ? settingRes.data.value : null;
+  const internalDomains = parseInternalDomains(rawDomains);
 
-  return buildClientMatchers(
-    (clientsRes.data ?? []).map((c) => ({
-      id: c.id,
-      name: c.name,
-      primaryContactEmail: c.primary_contact_email,
-    })),
-    (aliasesRes.data ?? []).map((a) => ({ clientId: a.client_id, alias: a.alias })),
-  );
+  // domain → org, only for real (non-internal) orgs; GA is found by type below and
+  // is deliberately NOT registered in client_domains (never matched as a client).
+  const domainRes = await db
+    .from('client_domains')
+    .select('domain, client_id, clients!inner(created_at, type)');
+  if (domainRes.error !== null) {
+    throw new Error(`calendar-scan: load client_domains: ${domainRes.error.message}`);
+  }
+  const domainToOrg = new Map<string, OrgDomainEntry>();
+  for (const row of domainRes.data ?? []) {
+    const org = row.clients as unknown as { created_at: string; type: string } | null;
+    if (org === null || org.type === 'internal') continue;
+    domainToOrg.set(row.domain.trim().toLowerCase(), {
+      clientId: row.client_id,
+      domain: row.domain.trim().toLowerCase(),
+      createdAt: org.created_at,
+    });
+  }
+
+  const gaRes = await db
+    .from('clients')
+    .select('id')
+    .eq('type', 'internal')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (gaRes.error !== null) throw new Error(`calendar-scan: load GA org: ${gaRes.error.message}`);
+
+  return { internalDomains, domainToOrg, internalOrgId: gaRes.data?.id ?? null };
 }
 
 /** Whole-minute duration between two ISO instants, or null. */
@@ -257,6 +330,23 @@ function resolveLead(
 }
 
 /**
+ * Add `meeting_clients` links for the given orgs (idempotent, add-only: existing
+ * links are never removed, per the sticky-link rule).
+ */
+async function linkMeetingClients(
+  db: ServerClient,
+  meetingId: string,
+  clientIds: readonly string[],
+): Promise<void> {
+  if (clientIds.length === 0) return;
+  const rows = clientIds.map((client_id) => ({ meeting_id: meetingId, client_id }));
+  const { error } = await db
+    .from('meeting_clients')
+    .upsert(rows, { onConflict: 'meeting_id,client_id', ignoreDuplicates: true });
+  if (error !== null) throw new Error(`calendar-scan: link meeting_clients: ${error.message}`);
+}
+
+/**
  * Insert or refresh the `meetings` row for one aggregated meeting. Returns the
  * outcome for metric counting. See the module header for the non-destructive
  * update rules.
@@ -264,15 +354,29 @@ function resolveLead(
 async function upsertMeeting(
   db: ServerClient,
   agg: AggregatedMeeting,
-  matchers: ClientMatchers,
+  ctx: ScanContext,
   usersByEmail: ReadonlyMap<string, UserLite>,
 ): Promise<UpsertOutcome> {
   const event = agg.canonical;
   const startUtc = event.startUtc as string; // non-null: filtered before aggregation
-  const attendeeEmails = [...event.attendees.map((a) => a.email), event.organizerEmail];
-  const candidates = resolveClientCandidates({ subject: event.subject, attendeeEmails }, matchers);
+  const resolution = resolveMeetingOrgs(
+    {
+      attendees: event.attendees.map((a) => ({ email: a.email, name: a.name })),
+      organizerEmail: event.organizerEmail,
+    },
+    { internalDomains: ctx.internalDomains, domainToOrg: ctx.domainToOrg },
+  );
   const internalUserIds = resolveInternalUsers(agg, usersByEmail);
   const leadUserId = resolveLead(agg, usersByEmail, internalUserIds);
+
+  // Internal meetings home to the GA org; external meetings to the earliest matched.
+  const gaOrgId = resolution.isInternal ? ctx.internalOrgId : null;
+  const primaryClientId = resolution.isInternal ? gaOrgId : resolution.primaryClientId;
+  const linkIds = resolution.isInternal
+    ? gaOrgId !== null
+      ? [gaOrgId]
+      : []
+    : resolution.matchedClientIds;
 
   const existingRes = await db
     .from('meetings')
@@ -285,11 +389,8 @@ async function upsertMeeting(
   const existing = existingRes.data;
 
   if (existing === null) {
-    // A brand-new event with no client match is not a client meeting → skip it.
-    if (candidates.length === 0) return 'skipped';
-    const clientId = candidates.length === 1 ? candidates[0] : null;
     const insert: MeetingInsert = {
-      client_id: clientId,
+      client_id: primaryClientId,
       title: event.subject,
       date_time: startUtc,
       duration_minutes: computeDuration(startUtc, event.endUtc),
@@ -297,17 +398,22 @@ async function upsertMeeting(
       attendee_user_ids: internalUserIds,
       calendar_event_id: agg.dedupKey,
       video_link: event.joinUrl,
+      is_internal: resolution.isInternal,
+      external_attendees: toJson(resolution.externalAttendees),
       pipeline_status: 'scheduled',
       source: 'calendar',
     };
-    const inserted = await db.from('meetings').insert(insert);
+    const inserted = await db.from('meetings').insert(insert).select('id').maybeSingle();
     if (inserted.error !== null) {
       // A concurrent insert may have raced us on the unique dedup key — treat as
       // an update on the next sweep rather than failing the whole scan.
       if (inserted.error.code === '23505') return 'skipped';
       throw new Error(`calendar-scan: insert meeting: ${inserted.error.message}`);
     }
-    return clientId === null ? 'created-ambiguous' : 'created';
+    const newId = inserted.data?.id;
+    if (newId !== undefined) await linkMeetingClients(db, newId, linkIds);
+    if (resolution.isInternal) return 'created-internal';
+    return linkIds.length === 0 ? 'created-unassigned' : 'created';
   }
 
   // Leave in-flight / non-calendar meetings untouched (never disturb a dispatched
@@ -323,14 +429,18 @@ async function upsertMeeting(
     meeting_lead_user_id: leadUserId,
     attendee_user_ids: internalUserIds,
     video_link: event.joinUrl,
+    is_internal: resolution.isInternal,
+    external_attendees: toJson(resolution.externalAttendees),
   };
-  // Auto-resolve a still-unassigned meeting only when matching is now unambiguous;
-  // never overwrite an existing (Admin- or scan-) assigned client.
-  if (existing.client_id === null && candidates.length === 1) {
-    patch.client_id = candidates[0];
+  // Set the primary org only when still unassigned; never overwrite an existing
+  // (Admin- or scan-) assigned client.
+  if (existing.client_id === null && primaryClientId !== null) {
+    patch.client_id = primaryClientId;
   }
   const patched = await db.from('meetings').update(patch).eq('id', existing.id);
   if (patched.error !== null) throw new Error(`calendar-scan: update meeting: ${patched.error.message}`);
+  // Add newly-matched links (add-only; previously-created links are sticky).
+  await linkMeetingClients(db, existing.id, linkIds);
   return 'updated';
 }
 

@@ -8,8 +8,9 @@
  * the client page imports the types. Distinct from the raw `Meeting` domain type
  * (types/meeting.ts), which mirrors the DB row.
  */
-import type { MeetingSource, MeetingType, PipelineStatus } from '../constants/enums.js';
+import type { ClientType, MeetingSource, MeetingType, PipelineStatus } from '../constants/enums.js';
 import type { ClientCadence } from '../constants/enums.js';
+import type { ExternalAttendee } from './meeting.js';
 import type { ISOTimestamp, UUID } from './common.js';
 
 /** A person on a meeting who maps to a GA App user (by email). */
@@ -19,10 +20,21 @@ export interface CalendarPerson {
   readonly initials: string;
 }
 
+/** A linked org (from the `meeting_clients` junction) shown as a chip. */
+export interface MeetingOrg {
+  readonly id: UUID;
+  readonly name: string;
+  readonly type: ClientType;
+}
+
 /**
- * A meeting enriched for the month grid + day detail. `clientId === null` means
- * the scan flagged it ambiguous (multi-client match) and it awaits Admin
- * assignment; `clientName` mirrors that (null when unassigned).
+ * A meeting enriched for the month grid + day detail (P4.1: meetings-first).
+ *
+ * EVERY real meeting is surfaced — not just client-matched ones. A meeting's
+ * org(s) come from the `orgs` junction (multi-client is 2+). `isInternal` tags a
+ * GA-only meeting. `unknownOrgDomains` are external domains with no org yet
+ * (offer "create client / lead" — computed at read time so it stays correct as
+ * orgs get created). `clientId`/`clientName` mirror the denormalized PRIMARY org.
  */
 export interface CalendarMeeting {
   readonly id: UUID;
@@ -35,15 +47,20 @@ export interface CalendarMeeting {
   readonly videoLink: string | null;
   readonly pipelineStatus: PipelineStatus;
   readonly isBotDispatched: boolean;
+  readonly isInternal: boolean;
   readonly source: MeetingSource;
   readonly lead: CalendarPerson | null;
   readonly attendees: readonly CalendarPerson[];
+  readonly orgs: readonly MeetingOrg[];
+  readonly externalAttendees: readonly ExternalAttendee[];
+  readonly unknownOrgDomains: readonly string[];
 }
 
 /**
- * An ambiguous meeting for the Admin assignment list: the meeting plus its GA
- * attendees, so the Admin has context (title + who's on it) for choosing the
- * right client. The scan flagged it because more than one client matched.
+ * A meeting needing attention for the Admin assignment list (P4.1): no linked
+ * client-type org yet, or an external domain with no org. Includes the GA
+ * attendees (who's on it) plus any `unknownOrgDomains` so the Admin can assign an
+ * existing client or spin up a new org from the surfaced domain.
  */
 export interface AmbiguousMeeting {
   readonly id: UUID;
@@ -51,6 +68,7 @@ export interface AmbiguousMeeting {
   readonly dateTime: ISOTimestamp;
   readonly videoLink: string | null;
   readonly attendees: readonly CalendarPerson[];
+  readonly unknownOrgDomains: readonly string[];
 }
 
 /** One row of the calendar connection panel (= access-group membership, D5). */

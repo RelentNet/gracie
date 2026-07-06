@@ -187,6 +187,34 @@ export type Database = {
           },
         ]
       }
+      client_domains: {
+        Row: {
+          client_id: string
+          created_at: string
+          domain: string
+          id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          domain: string
+          id?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          domain?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_domains_client_id_fkey"
+            columns: ["client_id"]
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_notes: {
         Row: {
           author_user_id: string | null
@@ -284,6 +312,7 @@ export type Database = {
           relationship_trend:
             | Database["public"]["Enums"]["relationship_trend"]
             | null
+          type: Database["public"]["Enums"]["client_type"]
           updated_at: string
         }
         Insert: {
@@ -305,6 +334,7 @@ export type Database = {
           relationship_trend?:
             | Database["public"]["Enums"]["relationship_trend"]
             | null
+          type?: Database["public"]["Enums"]["client_type"]
           updated_at?: string
         }
         Update: {
@@ -326,6 +356,7 @@ export type Database = {
           relationship_trend?:
             | Database["public"]["Enums"]["relationship_trend"]
             | null
+          type?: Database["public"]["Enums"]["client_type"]
           updated_at?: string
         }
         Relationships: []
@@ -688,6 +719,37 @@ export type Database = {
           },
         ]
       }
+      meeting_clients: {
+        Row: {
+          client_id: string
+          created_at: string
+          meeting_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          meeting_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          meeting_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_clients_client_id_fkey"
+            columns: ["client_id"]
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_clients_meeting_id_fkey"
+            columns: ["meeting_id"]
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meetings: {
         Row: {
           attendee_user_ids: string[]
@@ -698,8 +760,10 @@ export type Database = {
           created_at: string
           date_time: string
           duration_minutes: number | null
+          external_attendees: Json
           has_open_items: boolean
           id: string
+          is_internal: boolean
           meeting_lead_user_id: string | null
           meeting_type: Database["public"]["Enums"]["meeting_type"] | null
           pipeline_completed_at: string | null
@@ -720,8 +784,10 @@ export type Database = {
           created_at?: string
           date_time: string
           duration_minutes?: number | null
+          external_attendees?: Json
           has_open_items?: boolean
           id?: string
+          is_internal?: boolean
           meeting_lead_user_id?: string | null
           meeting_type?: Database["public"]["Enums"]["meeting_type"] | null
           pipeline_completed_at?: string | null
@@ -742,8 +808,10 @@ export type Database = {
           created_at?: string
           date_time?: string
           duration_minutes?: number | null
+          external_attendees?: Json
           has_open_items?: boolean
           id?: string
+          is_internal?: boolean
           meeting_lead_user_id?: string | null
           meeting_type?: Database["public"]["Enums"]["meeting_type"] | null
           pipeline_completed_at?: string | null
@@ -1116,6 +1184,7 @@ export type Database = {
     Enums: {
       assistant_msg_role: "user" | "assistant"
       client_cadence: "weekly" | "biweekly" | "monthly" | "qbr" | "ad_hoc"
+      client_type: "client" | "prospect" | "lead" | "partner" | "internal"
       document_source: "meeting" | "upload" | "auto"
       document_status: "ready" | "needs_review" | "delivered" | "archived"
       document_type:
@@ -1303,6 +1372,7 @@ export const Constants = {
     Enums: {
       assistant_msg_role: ["user", "assistant"],
       client_cadence: ["weekly", "biweekly", "monthly", "qbr", "ad_hoc"],
+      client_type: ["client", "prospect", "lead", "partner", "internal"],
       document_source: ["meeting", "upload", "auto"],
       document_status: ["ready", "needs_review", "delivered", "archived"],
       document_type: [

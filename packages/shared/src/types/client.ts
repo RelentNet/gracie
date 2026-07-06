@@ -1,5 +1,6 @@
 import type {
   ClientCadence,
+  ClientType,
   FeeTier,
   RelationshipTrend,
 } from '../constants/enums.js';
@@ -13,6 +14,8 @@ import type { ISOTimestamp, Timestamps, UUID } from './common.js';
 export interface Client extends Timestamps {
   readonly id: UUID;
   readonly name: string;
+  /** Party type (P4.1): client | prospect | lead | partner | internal. */
+  readonly type: ClientType;
   readonly initials: string;
   readonly contractNumber: string | null;
   readonly primaryContact: string | null;
@@ -36,6 +39,18 @@ export interface ClientAlias {
   readonly id: UUID;
   readonly clientId: UUID;
   readonly alias: string;
+  readonly createdAt: ISOTimestamp;
+}
+
+/**
+ * `client_domains` table (P4.1) — the domain→org match key. A domain maps to
+ * exactly one org (globally unique, case-insensitive); a meeting attendee on that
+ * domain links the meeting to the org.
+ */
+export interface ClientDomain {
+  readonly id: UUID;
+  readonly clientId: UUID;
+  readonly domain: string;
   readonly createdAt: ISOTimestamp;
 }
 

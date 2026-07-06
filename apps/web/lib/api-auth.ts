@@ -50,3 +50,8 @@ export async function getRequestUser(): Promise<RequestUser> {
 export function isAdmin(user: RequestUser): boolean {
   return user.role === 'admin';
 }
+
+/** Editor tier (admin + standard) — allowed to triage/create orgs from meetings. */
+export function isEditor(user: RequestUser): boolean {
+  return user.role === 'admin' || user.role === 'standard';
+}
