@@ -9,9 +9,11 @@ import 'server-only';
 
 import { getServerClient } from '@gracie/db';
 import type { Database } from '@gracie/db';
-import type { Client, ClientCadence, ClientType, FeeTier } from '@gracie/shared';
+import { isFreeEmailDomain } from '@gracie/shared';
+import type { Client, ClientCadence, ClientDomain, ClientType, FeeTier } from '@gracie/shared';
 
-import { mapClient } from '../mappers.js';
+import { backfillOrgDomains, loadInternalDomains } from './calendar.js';
+import { mapClient, mapClientDomain } from '../mappers.js';
 
 /**
  * List clients of the given party type(s), ordered by relationship health (desc).
@@ -132,4 +134,98 @@ export async function createClient(input: NewClientInput): Promise<Client> {
   }
 
   return mapClient(data);
+}
+
+/**
+ * List an org's registered domains (P4.1), oldest-registered first. These are the
+ * `client_domains` rows that match incoming meetings to this org by attendee
+ * email domain.
+ */
+export async function listClientDomains(clientId: string): Promise<ClientDomain[]> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('client_domains')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: true });
+  if (error !== null) throw new Error(`listClientDomains: ${error.message}`);
+  return (data ?? []).map(mapClientDomain);
+}
+
+/**
+ * Register a new domain on an EXISTING org (P4.1) and backfill history: every
+ * non-internal meeting carrying that domain links to the org, taking it as the
+ * primary where still unassigned (via {@link backfillOrgDomains}). This is what
+ * lets a multi-domain client (e.g. IBM = `ibm.com` + `us.ibm.com`) pick up the
+ * meetings it was missing. Rejects free-email, internal, and already-taken
+ * domains; a domain THIS org already owns is an idempotent no-op (still
+ * backfills). Returns the org's full domain list after the change.
+ */
+export async function addClientDomain(clientId: string, domainRaw: string): Promise<ClientDomain[]> {
+  const db = getServerClient();
+  const domain = normalizeDomain(domainRaw);
+  if (domain === '') throw new Error('A domain is required.');
+  if (isFreeEmailDomain(domain)) {
+    throw new Error('Free-email domains can’t identify an organization.');
+  }
+  const internalDomains = await loadInternalDomains(db);
+  if (internalDomains.has(domain)) throw new Error('That is an internal domain.');
+
+  // The org must exist (clear "Unknown client" 404 vs a bare FK violation), and
+  // the reserved GA workspace is matched by internal domains, not client_domains.
+  const clientRes = await db.from('clients').select('id, type').eq('id', clientId).maybeSingle();
+  if (clientRes.error !== null) throw new Error(`addClientDomain: ${clientRes.error.message}`);
+  if (clientRes.data === null) throw new Error('Unknown client');
+  if (clientRes.data.type === 'internal') {
+    throw new Error('The internal workspace is matched by internal domains, not client domains.');
+  }
+
+  // Ownership check against the global unique(lower(domain)) constraint:
+  // idempotent for THIS org, a clear error when another org already owns it.
+  const owner = await db
+    .from('client_domains')
+    .select('client_id')
+    .eq('domain', domain)
+    .maybeSingle();
+  if (owner.error !== null) throw new Error(`addClientDomain: ${owner.error.message}`);
+  if (owner.data !== null && owner.data.client_id !== clientId) {
+    throw new Error('That domain already belongs to another organization.');
+  }
+
+  if (owner.data === null) {
+    const ins = await db.from('client_domains').insert({ client_id: clientId, domain });
+    if (ins.error !== null) {
+      // A concurrent insert may have raced us onto the unique index.
+      if (ins.error.code === '23505') {
+        throw new Error('That domain already belongs to another organization.');
+      }
+      throw new Error(`addClientDomain: ${ins.error.message}`);
+    }
+  }
+
+  // Retroactively link + set-primary existing meetings on the domain (idempotent).
+  await backfillOrgDomains(clientId, [domain]);
+
+  return listClientDomains(clientId);
+}
+
+/**
+ * Remove a domain from an org (P4.1). Only stops FUTURE matching — existing
+ * meeting↔org links are add-only/sticky and are LEFT in place, so history and any
+ * denormalized primary stay intact. Returns the org's remaining domain list.
+ */
+export async function removeClientDomain(
+  clientId: string,
+  domainRaw: string,
+): Promise<ClientDomain[]> {
+  const db = getServerClient();
+  const domain = normalizeDomain(domainRaw);
+  if (domain === '') throw new Error('A domain is required.');
+  const del = await db
+    .from('client_domains')
+    .delete()
+    .eq('client_id', clientId)
+    .eq('domain', domain);
+  if (del.error !== null) throw new Error(`removeClientDomain: ${del.error.message}`);
+  return listClientDomains(clientId);
 }

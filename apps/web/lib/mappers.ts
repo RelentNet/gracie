@@ -7,9 +7,10 @@
  * reaches the client (docs/02 §D14).
  */
 import type { Database } from '@gracie/db';
-import type { Client } from '@gracie/shared';
+import type { Client, ClientDomain } from '@gracie/shared';
 
 type ClientRow = Database['public']['Tables']['clients']['Row'];
+type ClientDomainRow = Database['public']['Tables']['client_domains']['Row'];
 
 export function mapClient(row: ClientRow): Client {
   return {
@@ -31,5 +32,15 @@ export function mapClient(row: ClientRow): Client {
     driveFolderUrl: row.drive_folder_url,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+/** `client_domains` row → domain view-model (the domain→org match key, P4.1). */
+export function mapClientDomain(row: ClientDomainRow): ClientDomain {
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    domain: row.domain,
+    createdAt: row.created_at,
   };
 }

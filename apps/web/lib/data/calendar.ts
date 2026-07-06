@@ -72,7 +72,7 @@ function toPeople(
 }
 
 /** The internal (GA) email domains from settings (default `graceandassociates.com`). */
-async function loadInternalDomains(db: ServerClient): Promise<Set<string>> {
+export async function loadInternalDomains(db: ServerClient): Promise<Set<string>> {
   const { data, error } = await db
     .from('settings')
     .select('value')
