@@ -1033,6 +1033,7 @@ export type Database = {
       }
       users: {
         Row: {
+          auto_join_meetings: boolean
           calendar_connected: boolean
           created_at: string
           deactivated_at: string | null
@@ -1046,6 +1047,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auto_join_meetings?: boolean
           calendar_connected?: boolean
           created_at?: string
           deactivated_at?: string | null
@@ -1059,6 +1061,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auto_join_meetings?: boolean
           calendar_connected?: boolean
           created_at?: string
           deactivated_at?: string | null

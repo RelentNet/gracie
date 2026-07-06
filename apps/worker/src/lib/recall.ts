@@ -22,6 +22,16 @@ export interface RecallFetchOptions {
   readonly region?: string;
 }
 
+/** Options for dispatching a Recall bot into a meeting (P4, docs/07 §1). */
+export interface RecallDispatchOptions extends RecallFetchOptions {
+  /** The join URL the bot dials into (`meetings.video_link`). */
+  readonly meetingUrl: string;
+  /** Display name the bot joins as (shown to human attendees). */
+  readonly botName?: string;
+}
+
+const DEFAULT_BOT_NAME = 'Grace & Associates Notetaker';
+
 /** A transcript segment as returned by Recall's transcript endpoint. */
 interface RecallTranscriptSegment {
   readonly speaker?: string | null;
@@ -48,6 +58,43 @@ function segmentToLine(segment: RecallTranscriptSegment): string {
   if (text === '') return '';
   const speaker = segment.speaker?.trim();
   return speaker !== undefined && speaker !== '' ? `${speaker}: ${text}` : text;
+}
+
+/**
+ * Dispatch a Recall bot into a meeting (docs/07 §1). Creates the bot via
+ * `POST /bot` with the meeting's join URL; returns the Recall bot id, which the
+ * caller stores as `meetings.bot_job_id`. When the meeting ends, Recall calls the
+ * (already-built, P5b) `POST /api/webhooks/recall` webhook — which matches the
+ * meeting by that `bot_job_id` and runs generation. P4's job ends here.
+ *
+ * Throws on a non-OK response so the caller (BullMQ) retries transient failures
+ * with backoff; the bot-dispatch processor only marks `bot_dispatched=true` after
+ * this resolves, so a failed dispatch is retried, never silently dropped.
+ */
+export async function dispatchRecallBot(options: RecallDispatchOptions): Promise<string> {
+  const res = await fetch(`${baseUrl(options.region)}/bot/`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Token ${options.apiKey}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      meeting_url: options.meetingUrl,
+      bot_name: options.botName ?? DEFAULT_BOT_NAME,
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(
+      `Recall bot dispatch failed for ${options.meetingUrl} (HTTP ${res.status}): ${body.slice(0, 300)}`,
+    );
+  }
+  const data = (await res.json()) as { id?: string };
+  if (typeof data.id !== 'string' || data.id === '') {
+    throw new Error('Recall bot dispatch response had no bot id');
+  }
+  return data.id;
 }
 
 /**

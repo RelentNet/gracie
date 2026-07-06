@@ -80,3 +80,25 @@ export interface WatchdogJobPayload {
   /** Logical origin of the sweep — e.g. `'scheduler'` for the repeatable job. */
   readonly source: string;
 }
+
+/**
+ * Payload for the repeatable calendar-scan job (`QUEUE_NAMES.calendarScan`, P4).
+ * No per-meeting data — each sweep reads the group members' Outlook calendars via
+ * Microsoft Graph, matches events to clients, dedups the same meeting across
+ * attendees, and upserts `meetings` (docs/07 §6, docs/09 Phase 4).
+ */
+export interface CalendarScanJobPayload {
+  /** Logical origin of the sweep — e.g. `'scheduler'` for the repeatable job. */
+  readonly source: string;
+}
+
+/**
+ * Payload for the repeatable bot-dispatch job (`QUEUE_NAMES.botDispatch`, P4).
+ * No per-meeting data — each sweep selects meetings starting within the lead
+ * window that are client-assigned, not yet dispatched, and whose lead has not
+ * opted out, then dispatches exactly one Recall bot per meeting (docs/07 §1).
+ */
+export interface BotDispatchJobPayload {
+  /** Logical origin of the sweep — e.g. `'scheduler'` for the repeatable job. */
+  readonly source: string;
+}
