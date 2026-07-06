@@ -20,6 +20,10 @@ export const QUEUE_NAMES = {
   generate: 'generate',
   /** Transcript watchdog: meetings awaiting a transcript past the SLA (P5b, docs/06 §8). */
   watchdog: 'watchdog',
+  /** Calendar scan: Graph calendarView → match client → dedup → upsert meetings (P4, docs/07 §6). */
+  calendarScan: 'calendar-scan',
+  /** Bot dispatch: dispatch one Recall bot per due, opted-in meeting (P4, docs/07 §1). */
+  botDispatch: 'bot-dispatch',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -31,6 +35,8 @@ export const JOB_NAMES = {
   kbIngest: 'kb-ingest.process',
   generate: 'generate.process',
   watchdog: 'watchdog.transcript',
+  calendarScan: 'calendar-scan.sweep',
+  botDispatch: 'bot-dispatch.sweep',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
@@ -43,6 +49,8 @@ export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
 export const JOB_SCHEDULER_IDS = {
   heartbeat: 'heartbeat.every-30s',
   transcriptWatchdog: 'watchdog.transcript.every-15m',
+  calendarScan: 'calendar-scan.every-30m',
+  botDispatch: 'bot-dispatch.every-60s',
 } as const;
 
 /** Heartbeat repeat interval (ms) — ~every 30s. A liveness signal, not real work. */
@@ -56,3 +64,16 @@ export const TRANSCRIPT_WATCHDOG_INTERVAL_MS = 15 * 60_000;
  * this, the watchdog flags the meeting `needs_attention`.
  */
 export const TRANSCRIPT_TIMEOUT_MINUTES = 90;
+
+/**
+ * Calendar-scan sweep interval (ms) — ~every 30 min (P4, docs/09 Phase 4). The
+ * repeatable fires around the clock but the processor only does work during
+ * business hours ET (see the worker's calendar-scan config).
+ */
+export const CALENDAR_SCAN_INTERVAL_MS = 30 * 60_000;
+
+/**
+ * Bot-dispatch sweep interval (ms) — ~every 60s (P4, docs/07 §1). A tight cadence
+ * so a bot can be dispatched within the ≤5-min-before-start window.
+ */
+export const BOT_DISPATCH_INTERVAL_MS = 60_000;

@@ -6,9 +6,8 @@
  * graceful shutdown on SIGINT/SIGTERM.
  *
  * Scope (worker foundation): a real Fastify + BullMQ service + one sample
- * heartbeat job. The AI pipeline (P5), calendar crons (P4), and external clients
- * (OpenAI/Recall/Graph/Resend) are intentionally NOT wired here yet — they extend
- * the factory pattern in ./queues/factory.ts later.
+ * heartbeat job. The P5 AI pipeline and the P4 calendar crons (calendar-scan +
+ * bot-dispatch) extend the factory pattern in ./queues/factory.ts.
  */
 import type { Queue, Worker } from 'bullmq';
 import type { FastifyInstance } from 'fastify';
@@ -17,11 +16,15 @@ import { QUEUE_NAMES } from '@gracie/shared';
 
 import { loadEnv } from './lib/env.js';
 import { createRedisConnection } from './lib/redis.js';
+import { createBotDispatchProcessor } from './processors/bot-dispatch.processor.js';
+import { createCalendarScanProcessor } from './processors/calendar-scan.processor.js';
 import { createGenerateProcessor } from './processors/generate.processor.js';
 import { createHeartbeatProcessor } from './processors/heartbeat.processor.js';
 import { createIngestProcessor } from './processors/ingest.processor.js';
 import { createKbIngestProcessor } from './processors/kb-ingest.processor.js';
 import { createWatchdogProcessor } from './processors/watchdog.processor.js';
+import { createBotDispatchQueue, scheduleBotDispatch } from './queues/bot-dispatch.queue.js';
+import { createCalendarScanQueue, scheduleCalendarScan } from './queues/calendar-scan.queue.js';
 import { createWorker } from './queues/factory.js';
 import { createGenerateQueue } from './queues/generate.queue.js';
 import { createHeartbeatQueue, scheduleHeartbeat } from './queues/heartbeat.queue.js';
@@ -81,9 +84,19 @@ async function start(): Promise<void> {
   const kbIngestQueue = createKbIngestQueue(connection);
   const generateQueue = createGenerateQueue(connection);
   const watchdogQueue = createWatchdogQueue(connection);
+  const calendarScanQueue = createCalendarScanQueue(connection);
+  const botDispatchQueue = createBotDispatchQueue(connection);
   const app = buildServer({
     connection,
-    queues: [heartbeatQueue, ingestQueue, kbIngestQueue, generateQueue, watchdogQueue],
+    queues: [
+      heartbeatQueue,
+      ingestQueue,
+      kbIngestQueue,
+      generateQueue,
+      watchdogQueue,
+      calendarScanQueue,
+      botDispatchQueue,
+    ],
   });
 
   connection.on('error', (error) => app.log.error({ err: error }, 'redis connection error'));
@@ -138,14 +151,52 @@ async function start(): Promise<void> {
     app.log.error({ jobId: job?.id, err: error }, 'watchdog job failed');
   });
 
+  // Calendar scan: Graph calendarView → match client → dedup → upsert meetings (P4).
+  const calendarScanWorker = createWorker(
+    QUEUE_NAMES.calendarScan,
+    createCalendarScanProcessor(app.log),
+    connection,
+  );
+  calendarScanWorker.on('failed', (job, error) => {
+    app.log.error({ jobId: job?.id, err: error }, 'calendar-scan job failed');
+  });
+
+  // Bot dispatch: dispatch one Recall bot per due, opted-in meeting (P4).
+  const botDispatchWorker = createWorker(
+    QUEUE_NAMES.botDispatch,
+    createBotDispatchProcessor(app.log),
+    connection,
+  );
+  botDispatchWorker.on('failed', (job, error) => {
+    app.log.error({ jobId: job?.id, err: error }, 'bot-dispatch job failed');
+  });
+
   await scheduleHeartbeat(heartbeatQueue);
   await scheduleTranscriptWatchdog(watchdogQueue);
+  await scheduleCalendarScan(calendarScanQueue);
+  await scheduleBotDispatch(botDispatchQueue);
 
   installShutdown({
     app,
     connection,
-    queues: [heartbeatQueue, ingestQueue, kbIngestQueue, generateQueue, watchdogQueue],
-    workers: [heartbeatWorker, ingestWorker, kbIngestWorker, generateWorker, watchdogWorker],
+    queues: [
+      heartbeatQueue,
+      ingestQueue,
+      kbIngestQueue,
+      generateQueue,
+      watchdogQueue,
+      calendarScanQueue,
+      botDispatchQueue,
+    ],
+    workers: [
+      heartbeatWorker,
+      ingestWorker,
+      kbIngestWorker,
+      generateWorker,
+      watchdogWorker,
+      calendarScanWorker,
+      botDispatchWorker,
+    ],
   });
 
   await app.listen({ port: env.port, host: env.host });

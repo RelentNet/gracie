@@ -2,6 +2,7 @@ export * from './common.js';
 export * from './user.js';
 export * from './client.js';
 export * from './meeting.js';
+export * from './calendar.js';
 export * from './document.js';
 export * from './knowledge-base.js';
 export * from './task.js';
