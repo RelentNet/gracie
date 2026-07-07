@@ -9,6 +9,7 @@
 import {
   PINNED_EMBEDDING_MODEL,
   type AIProvider,
+  type AIToolCall,
   type EmbedInput,
   type GenerateInput,
   type GenerateResult,
@@ -20,9 +21,28 @@ export interface OpenAIAdapterConfig {
   readonly baseUrl?: string;
 }
 
+interface ApiToolCall {
+  readonly id?: string;
+  readonly function?: { readonly name?: string; readonly arguments?: string };
+}
+
 interface ChatCompletionResponse {
-  readonly choices: ReadonlyArray<{ readonly message?: { readonly content?: string | null } }>;
+  readonly choices: ReadonlyArray<{
+    readonly message?: { readonly content?: string | null; readonly tool_calls?: readonly ApiToolCall[] };
+    readonly finish_reason?: string | null;
+  }>;
   readonly usage?: { readonly prompt_tokens?: number; readonly completion_tokens?: number };
+}
+
+/** Map raw OpenAI `tool_calls` to the provider-neutral shape; drop malformed entries. */
+function toToolCalls(raw: readonly ApiToolCall[] | undefined): AIToolCall[] {
+  return (raw ?? [])
+    .filter((c): c is ApiToolCall => typeof c.function?.name === 'string' && c.function.name !== '')
+    .map((c) => ({
+      id: c.id ?? '',
+      name: c.function?.name ?? '',
+      arguments: c.function?.arguments ?? '',
+    }));
 }
 
 interface EmbeddingResponse {
@@ -48,17 +68,49 @@ export class OpenAIAdapter implements AIProvider {
     return { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' };
   }
 
+  /**
+   * Serialize the neutral message list to OpenAI wire shape. Plain turns map 1:1;
+   * an `assistant` turn with `toolCalls` and a `tool` result turn are expanded to
+   * the function-calling protocol (assistant `content: null` + `tool_calls`, then
+   * one `{ role: 'tool', tool_call_id }` per result).
+   */
+  private toApiMessages(input: GenerateInput): unknown[] {
+    const out: unknown[] = [{ role: 'system', content: input.system }];
+    for (const m of input.messages) {
+      if (m.role === 'tool') {
+        out.push({ role: 'tool', tool_call_id: m.toolCallId ?? '', content: m.content });
+      } else if (m.role === 'assistant' && m.toolCalls !== undefined && m.toolCalls.length > 0) {
+        out.push({
+          role: 'assistant',
+          content: m.content === '' ? null : m.content,
+          tool_calls: m.toolCalls.map((tc) => ({
+            id: tc.id,
+            type: 'function',
+            function: { name: tc.name, arguments: tc.arguments },
+          })),
+        });
+      } else {
+        out.push({ role: m.role, content: m.content });
+      }
+    }
+    return out;
+  }
+
   private chatBody(input: GenerateInput, stream: boolean): string {
     const payload: Record<string, unknown> = {
       model: input.model,
       stream,
-      messages: [
-        { role: 'system', content: input.system },
-        ...input.messages.map((m) => ({ role: m.role, content: m.content })),
-      ],
+      messages: this.toApiMessages(input),
     };
     if (input.temperature !== undefined) payload.temperature = input.temperature;
     if (input.responseFormat === 'json') payload.response_format = { type: 'json_object' };
+    if (input.tools !== undefined && input.tools.length > 0) {
+      payload.tools = input.tools.map((t) => ({
+        type: 'function',
+        function: { name: t.name, description: t.description, parameters: t.parameters },
+      }));
+      payload.tool_choice = input.toolChoice ?? 'auto';
+    }
     return JSON.stringify(payload);
   }
 
@@ -72,7 +124,10 @@ export class OpenAIAdapter implements AIProvider {
       throw new Error(`OpenAI generate failed (HTTP ${res.status}): ${await safeText(res)}`);
     }
     const json = (await res.json()) as ChatCompletionResponse;
-    const content = json.choices[0]?.message?.content ?? '';
+    const choice = json.choices[0];
+    const content = choice?.message?.content ?? '';
+    const toolCalls = toToolCalls(choice?.message?.tool_calls);
+    const finishReason = choice?.finish_reason ?? undefined;
     const usage =
       json.usage !== undefined
         ? {
@@ -84,6 +139,8 @@ export class OpenAIAdapter implements AIProvider {
       content,
       providerId: this.id,
       model: input.model,
+      ...(toolCalls.length > 0 ? { toolCalls } : {}),
+      ...(finishReason !== undefined && finishReason !== null ? { finishReason } : {}),
       ...(usage !== undefined ? { usage } : {}),
     };
   }

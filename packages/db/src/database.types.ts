@@ -1154,6 +1154,20 @@ export type Database = {
         Returns: Database["public"]["Enums"]["user_role"]
       }
       auth_uid: { Args: never; Returns: string }
+      match_all_embeddings: {
+        Args: {
+          match_count?: number
+          query_embedding: string
+        }
+        Returns: {
+          client_id: string | null
+          content: string
+          id: string
+          similarity: number
+          source_id: string
+          source_type: Database["public"]["Enums"]["embedding_source"]
+        }[]
+      }
       match_embeddings: {
         Args: {
           match_client_id: string

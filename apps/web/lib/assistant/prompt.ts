@@ -1,12 +1,19 @@
 /**
- * Prompt assembly for the general Assistant (P6B). Unlike the client Intelligence
- * chat, the Assistant has NO client/KB retrieval and NO embeddings — attached
- * files are extracted on upload and their text is injected directly into the
- * turn (chunk + truncate if oversized, per spec §3).
+ * Prompt assembly for the general Assistant (P6B, extended for company-awareness
+ * in P6B.1). The Assistant is still a general per-user helper, but now has a
+ * READ-ONLY, role-mirrored view of company knowledge (Knowledge Base + client
+ * documents + transcripts, subject to the asking user's permissions) and a set of
+ * structured read tools (clients, tasks, meetings, KB). Attached files are still
+ * extracted on upload and injected directly into the turn (spec §3).
  */
 import type { AIProvider, AIMessage } from '@gracie/shared';
 
-/** General-assistant persona (docs §1: native to Gracie, replaces ChatGPT seats). */
+/**
+ * Base general-assistant persona (docs §1: native to Gracie, replaces ChatGPT
+ * seats). Exported for callers/tests that only need the persona; the company-aware
+ * turn uses {@link buildAssistantSystemPrompt} to fold in the firm description and
+ * the read-only tool contract.
+ */
 export const ASSISTANT_SYSTEM_PROMPT = [
   'You are the Grace & Associates internal AI assistant — a general-purpose helper',
   'for the team’s everyday work: writing and drafting, research and Q&A, and',
@@ -15,6 +22,40 @@ export const ASSISTANT_SYSTEM_PROMPT = [
   'question needs current information you cannot verify, say so plainly rather than',
   'guessing. When the user attaches files, ground your answer in their contents.',
 ].join(' ');
+
+/**
+ * Assemble the full system prompt for a company-aware turn. Folds the firm
+ * description (read from `settings.ga_company_description`, never hardcoded here)
+ * into the persona and states the READ-ONLY, ground-and-cite, access-scoped
+ * contract the tools enforce. `gaCompanyDescription` is passed in so this stays a
+ * pure function.
+ */
+export function buildAssistantSystemPrompt(gaCompanyDescription: string): string {
+  return [
+    ASSISTANT_SYSTEM_PROMPT,
+    '',
+    `About the firm: ${gaCompanyDescription}`,
+    '',
+    'You also have READ-ONLY access to company information through tools. Use them',
+    'whenever a question is about the firm’s clients, tasks, meetings, or knowledge —',
+    'do not guess from memory. Available tools: count_clients, list_clients,',
+    'get_client, list_tasks, list_meetings, list_knowledge_base,',
+    'get_knowledge_base_document, search_knowledge_base, and search_documents.',
+    'For "the latest" or "most recent" of something, list it ordered by recency and',
+    'read the top item rather than relying on semantic search alone.',
+    '',
+    'Rules for company data:',
+    '- You are STRICTLY READ-ONLY. You cannot create, edit, delete, send, or change',
+    '  anything (including settings or bots). If asked to, explain you can only read.',
+    '- Every tool already returns ONLY what THIS user is permitted to see. Never claim',
+    '  or imply there is data you were not shown. If a tool returns nothing, an error,',
+    '  or clearly withheld fields (e.g. financials shown as null), say "I don’t have',
+    '  access to that" or "I couldn’t find that" — do not guess or fabricate.',
+    '- Ground every company answer in tool or search results, and briefly cite what you',
+    '  used (e.g. the client, document title, or that it came from the Knowledge Base).',
+    '- You have no access to system settings, API keys, or other users’ conversations.',
+  ].join('\n');
+}
 
 /** Total character budget for injected attachment text (~6k tokens). */
 const MAX_ATTACHMENT_CONTEXT_CHARS = 24_000;
