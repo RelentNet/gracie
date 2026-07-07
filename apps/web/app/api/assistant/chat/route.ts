@@ -17,9 +17,11 @@ import { getActiveProvider } from '@gracie/db';
 import type { AIMessage } from '@gracie/shared';
 
 import { getAssistantUser } from '@/lib/assistant/user';
+import { resolveCompanyTools } from '@/lib/assistant/company/agent';
+import { toCompanyCaller } from '@/lib/assistant/company/access';
 import {
-  ASSISTANT_SYSTEM_PROMPT,
   assembleAssistantMessages,
+  buildAssistantSystemPrompt,
   buildAttachmentContext,
   estimateTokens,
   generateChatTitle,
@@ -31,6 +33,7 @@ import {
   insertMessage,
   updateChat,
 } from '@/lib/data/assistant';
+import { getGaCompanyDescription } from '@/lib/data/chat-retrieval';
 
 export const runtime = 'nodejs';
 
@@ -49,8 +52,12 @@ function parseAttachmentIds(raw: unknown): string[] {
 
 export async function POST(req: NextRequest): Promise<Response> {
   let ownerId: string;
+  let caller: ReturnType<typeof toCompanyCaller>;
   try {
-    ownerId = (await getAssistantUser()).id;
+    const assistantUser = await getAssistantUser();
+    ownerId = assistantUser.id;
+    // The caller's role is DB-authoritative; company tools + retrieval mirror it.
+    caller = toCompanyCaller({ userId: assistantUser.id, role: assistantUser.role });
   } catch {
     return jsonError('unauthorized', 'Sign in required', 401);
   }
@@ -93,23 +100,47 @@ export async function POST(req: NextRequest): Promise<Response> {
     const attachmentContext = buildAttachmentContext(files);
     const messages = assembleAssistantMessages({ history, message, attachmentContext });
 
+    // Company-aware system prompt: fold in the firm description (settings, never
+    // hardcoded) and the read-only tool contract. Resolved before the stream so a
+    // failure is a clean JSON error, not an empty 200.
+    const gaCompanyDescription = await getGaCompanyDescription();
+    const system = buildAssistantSystemPrompt(gaCompanyDescription);
+
     // Persist the user's message up front so it survives a stream failure.
     await insertMessage({ chatId: chatIdResolved, role: 'user', content: message, attachmentIds });
 
-    const promptTokens = estimateTokens(
-      ASSISTANT_SYSTEM_PROMPT + messages.map((m) => m.content).join('\n'),
-    );
-
     const encoder = new TextEncoder();
+    const TEMPERATURE = 0.3;
     const stream = new ReadableStream<Uint8Array>({
       async start(controller): Promise<void> {
         let answer = '';
+        // Starts as the plain turn; Phase 1 augments it with tool-call + tool
+        // result messages. Declared here so `finally` can size the token estimate.
+        let resolvedMessages: AIMessage[] = messages;
         try {
+          // Phase 1 (buffered): let the model call read-only, role-gated company
+          // tools. Degrade to a plain answer if resolution fails so a tool hiccup
+          // never breaks the chat.
+          try {
+            const resolved = await resolveCompanyTools({
+              provider,
+              model,
+              system,
+              baseMessages: messages,
+              caller,
+              temperature: TEMPERATURE,
+            });
+            resolvedMessages = resolved.messages;
+          } catch (toolError) {
+            console.error('assistant tool resolution failed, answering without tools:', toolError);
+          }
+
+          // Phase 2 (streamed): final answer, tools disabled → normal text stream.
           for await (const token of provider.stream({
             model,
-            system: ASSISTANT_SYSTEM_PROMPT,
-            messages,
-            temperature: 0.3,
+            system,
+            messages: resolvedMessages,
+            temperature: TEMPERATURE,
           })) {
             answer += token;
             controller.enqueue(encoder.encode(token));
@@ -128,6 +159,9 @@ export async function POST(req: NextRequest): Promise<Response> {
             // Persist a partial answer too (spec §8) — nothing to save only if
             // zero tokens arrived.
             if (answer !== '') {
+              const promptTokens = estimateTokens(
+                system + resolvedMessages.map((m) => m.content).join('\n'),
+              );
               await insertMessage({
                 chatId: chatIdResolved,
                 role: 'assistant',

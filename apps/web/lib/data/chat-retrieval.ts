@@ -62,7 +62,7 @@ async function embedQuery(query: string): Promise<number[]> {
  * not document-backed and pass through (transcripts are gated by source_type
  * upstream). Chunks for an unfiled document (`folder_id = null`) are unrestricted.
  */
-async function filterChunksByFolderVisibility(
+export async function filterChunksByFolderVisibility(
   db: ServerClient,
   chunks: readonly RetrievedChunk[],
   role: Role,
