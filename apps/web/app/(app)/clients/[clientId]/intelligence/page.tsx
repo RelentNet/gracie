@@ -40,7 +40,7 @@ export default function ClientIntelligencePage({
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [includeKnowledgeBase, setIncludeKnowledgeBase] = useState(false);
-  const [webAccess, setWebAccess] = useState(false);
+  const [webAccess, setWebAccess] = useState(true);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
