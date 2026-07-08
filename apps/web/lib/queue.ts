@@ -19,6 +19,7 @@ import {
   type GenerationJobPayload,
   type IngestJobPayload,
   type KbIngestJobPayload,
+  type RelationshipHealthJobPayload,
 } from '@gracie/shared';
 
 /** Mirrors apps/worker queues/factory.ts DEFAULT_JOB_OPTIONS. */
@@ -34,6 +35,7 @@ let ingestQueue: Queue<IngestJobPayload> | undefined;
 let kbIngestQueue: Queue<KbIngestJobPayload> | undefined;
 let generateQueue: Queue<GenerationJobPayload> | undefined;
 let calendarScanQueue: Queue<CalendarScanJobPayload> | undefined;
+let relationshipHealthQueue: Queue<RelationshipHealthJobPayload> | undefined;
 
 function getConnection(): Redis {
   if (connection !== undefined) return connection;
@@ -107,5 +109,29 @@ function getCalendarScanQueue(): Queue<CalendarScanJobPayload> {
  */
 export async function enqueueCalendarScan(payload: CalendarScanJobPayload): Promise<string> {
   const job = await getCalendarScanQueue().add(JOB_NAMES.calendarScan, payload);
+  return job.id ?? '';
+}
+
+function getRelationshipHealthQueue(): Queue<RelationshipHealthJobPayload> {
+  if (relationshipHealthQueue !== undefined) return relationshipHealthQueue;
+  relationshipHealthQueue = new Queue<RelationshipHealthJobPayload>(QUEUE_NAMES.relationshipHealth, {
+    connection: getConnection(),
+    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+  });
+  return relationshipHealthQueue;
+}
+
+/**
+ * Enqueue a single-client relationship-health recompute after a client edit, task,
+ * or note change (P2.1). Deduped by a `health:<clientId>` job id so a burst of edits
+ * collapses to one recompute. Best-effort: callers wrap this so a missing/unreachable
+ * Redis never fails the user's write — the nightly sweep is the backstop.
+ */
+export async function enqueueRelationshipHealth(clientId: string, source: string): Promise<string> {
+  const job = await getRelationshipHealthQueue().add(
+    JOB_NAMES.relationshipHealthClient,
+    { source, clientId },
+    { jobId: `health:${clientId}` },
+  );
   return job.id ?? '';
 }

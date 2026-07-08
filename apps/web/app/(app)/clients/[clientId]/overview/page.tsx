@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useEffect, useState } from 'react';
-import { ExternalLink, Pencil } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import type { Client, Meeting, Task } from '@gracie/shared';
 
 import { getUserName } from '@/lib/mock';
@@ -9,19 +9,22 @@ import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
 import { formatEasternDateTime } from '@/lib/format';
-import { healthColor, healthLabel, priorityBadge, taskStatusLabel } from '@/lib/client-display';
+import { priorityBadge, taskStatusLabel } from '@/lib/client-display';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { TextAreaField, FormError } from '@/components/ui/Field';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
 
 import { ClientDomainsCard } from '../ClientDomainsCard';
+import { ClientDetailsCard } from '@/components/client/ClientDetailsCard';
+import { HealthCard } from '@/components/client/HealthCard';
 
 /**
- * Client tab 1 — Overview (docs/08 §9). Relationship health card, last-meeting
- * snapshot, top-3 open tasks, an editable-looking description, and the Drive
- * quick-link. Data via `GET /api/clients/:id/overview` (real Supabase data).
- * User names still resolve through the mock display lookup (users module not
- * yet wired).
+ * Client tab 1 — Overview (docs/08 §9, P2.1). Algorithmic relationship-health card
+ * (auto badge + breakdown + admin adjust), last-meeting snapshot, top-3 open tasks,
+ * an editable Client Details card + description, and the domains manager. Data via
+ * `GET /api/clients/:id/overview`; editors mutate via `PATCH /api/clients/:id`.
  */
 interface OverviewResponse {
   readonly client: Client;
@@ -35,7 +38,8 @@ export default function ClientOverviewPage({
   readonly params: Promise<{ clientId: string }>;
 }): React.JSX.Element {
   const { clientId } = use(params);
-  const { can } = useAuth();
+  const { can, canEdit } = useAuth();
+  const editable = canEdit();
 
   const [data, setData] = useState<OverviewResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,22 +69,14 @@ export default function ClientOverviewPage({
 
   const { client, lastMeeting, topTasks } = data;
 
+  function setClient(updated: Client): void {
+    setData((prev) => (prev === null ? prev : { ...prev, client: updated }));
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Relationship health */}
-        <Card style={{ borderTop: `3px solid ${healthColor(client.relationshipHealth)}` }}>
-          <p style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Relationship Health</p>
-          <p className="mt-2 flex items-baseline gap-2">
-            <span style={{ ...TYPE.pageTitle, color: healthColor(client.relationshipHealth) }}>
-              {client.relationshipHealth ?? '—'}
-            </span>
-            <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>/ 100</span>
-          </p>
-          <p className="mt-1" style={{ ...TYPE.secondary, color: healthColor(client.relationshipHealth) }}>
-            {healthLabel(client.relationshipHealth)}
-          </p>
-        </Card>
+        <HealthCard clientId={clientId} fallbackScore={client.relationshipHealth} />
 
         {/* Last meeting snapshot */}
         <Card className="p-6 lg:col-span-2">
@@ -95,9 +91,7 @@ export default function ClientOverviewPage({
               <p style={TYPE.bodyStrong}>{lastMeeting.title ?? 'Untitled meeting'}</p>
               <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
                 {formatEasternDateTime(lastMeeting.dateTime)}
-                {lastMeeting.durationMinutes !== null
-                  ? ` · ${lastMeeting.durationMinutes} min`
-                  : null}
+                {lastMeeting.durationMinutes !== null ? ` · ${lastMeeting.durationMinutes} min` : null}
               </p>
               <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
                 Led by {getUserName(lastMeeting.meetingLeadUserId)} ·{' '}
@@ -144,57 +138,99 @@ export default function ClientOverviewPage({
         )}
       </Card>
 
-      {/* Description + Drive link */}
-      <Card>
-        <CardHeader
-          title="Description"
-          description="Used as context in AI generation (5-layer prompt)."
-          action={
+      {/* Client details (editable facts + drive link) */}
+      <ClientDetailsCard client={client} editable={editable} onChange={setClient} />
+
+      {/* Description (editable) */}
+      <DescriptionCard client={client} editable={editable} onChange={setClient} />
+
+      {/* Domains manager — editor tier only, not for the internal workspace. */}
+      {can('file.upload') && client.type !== 'internal' ? <ClientDomainsCard clientId={clientId} /> : null}
+    </div>
+  );
+}
+
+function DescriptionCard({
+  client,
+  editable,
+  onChange,
+}: {
+  readonly client: Client;
+  readonly editable: boolean;
+  readonly onChange: (client: Client) => void;
+}): React.JSX.Element {
+  const [editing, setEditing] = useState<boolean>(false);
+  const [draft, setDraft] = useState<string>(client.description ?? '');
+  const [saving, setSaving] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(): Promise<void> {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { client: updated } = await apiClient.patch<{ client: Client }>(`/api/clients/${client.id}`, {
+        description: draft,
+      });
+      onChange(updated);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="Description"
+        description="Used as context in AI generation (5-layer prompt)."
+        action={
+          editable && !editing ? (
             <button
               type="button"
+              onClick={(): void => {
+                setDraft(client.description ?? '');
+                setError(null);
+                setEditing(true);
+              }}
               className="inline-flex items-center gap-1.5 rounded-md px-2 py-1"
               style={{ ...TYPE.secondary, color: 'var(--color-blue-700)', cursor: 'pointer', background: 'transparent' }}
             >
               <Pencil aria-hidden="true" size={14} />
               Edit
             </button>
-          }
-        />
-        {client.description !== null ? (
-          <p style={{ ...TYPE.body, color: 'var(--text-primary)' }}>{client.description}</p>
-        ) : (
-          <EmptyState
-            title="No description yet"
-            description="Add a short description of this engagement to improve AI-generated documents."
+          ) : undefined
+        }
+      />
+      {editing ? (
+        <div className="flex flex-col gap-3">
+          <TextAreaField
+            label="Description"
+            value={draft}
+            onChange={setDraft}
+            rows={4}
+            placeholder="Short description of this engagement…"
           />
-        )}
-
-        <div className="mt-4">
-          {client.driveFolderUrl !== null ? (
-            <a
-              href={client.driveFolderUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5"
-              style={{ ...TYPE.secondary, color: 'var(--color-blue-700)' }}
-            >
-              <ExternalLink aria-hidden="true" size={14} />
-              Open Drive folder
-            </a>
-          ) : (
-            <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-              No Drive folder linked.
-            </span>
-          )}
+          <FormError message={error} />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" disabled={saving} onClick={(): void => setEditing(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" disabled={saving} onClick={(): void => void save()}>
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </div>
         </div>
-      </Card>
-
-      {/* Domains manager — editor tier only, and not for the internal workspace
-          (which is matched by internal domains, not client_domains). `file.upload`
-          is the editor-tier permission (admin + standard; viewers read-only). */}
-      {can('file.upload') && client.type !== 'internal' ? (
-        <ClientDomainsCard clientId={clientId} />
-      ) : null}
-    </div>
+      ) : client.description !== null && client.description !== '' ? (
+        <p style={{ ...TYPE.body, color: 'var(--text-primary)' }}>{client.description}</p>
+      ) : (
+        <EmptyState
+          title="No description yet"
+          description="Add a short description of this engagement to improve AI-generated documents."
+        />
+      )}
+    </Card>
   );
 }

@@ -8,6 +8,7 @@
 import 'server-only';
 
 import { getServerClient } from '@gracie/db';
+import type { Database } from '@gracie/db';
 import type {
   Client,
   ClientNote,
@@ -79,6 +80,52 @@ export async function getClientNotes(id: string): Promise<ClientNote[]> {
     .order('created_at', { ascending: false });
   if (error) throw new Error(`getClientNotes: ${error.message}`);
   return (data ?? []).map(mapClientNote);
+}
+
+/** Fetch a single client note by id, or null if not found (for ownership checks). */
+export async function getClientNote(id: string): Promise<ClientNote | null> {
+  const db = getServerClient();
+  const { data, error } = await db.from('client_notes').select('*').eq('id', id).maybeSingle();
+  if (error !== null) throw new Error(`getClientNote: ${error.message}`);
+  return data === null ? null : mapClientNote(data);
+}
+
+/** Create a client note (P2.1). `authorUserId` is the resolved request user (nullable pre-Logto). */
+export async function createClientNote(
+  clientId: string,
+  content: string,
+  authorUserId: string | null,
+): Promise<ClientNote> {
+  const db = getServerClient();
+  const insert: Database['public']['Tables']['client_notes']['Insert'] = {
+    client_id: clientId,
+    content: content.trim(),
+    author_user_id: authorUserId,
+  };
+  const { data, error } = await db.from('client_notes').insert(insert).select('*').single();
+  if (error !== null) throw new Error(`createClientNote: ${error.message}`);
+  return mapClientNote(data);
+}
+
+/** Edit a client note's content (P2.1). Ownership (author-or-admin) is gated by the API. */
+export async function updateClientNote(id: string, content: string): Promise<ClientNote> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('client_notes')
+    .update({ content: content.trim(), updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select('*')
+    .maybeSingle();
+  if (error !== null) throw new Error(`updateClientNote: ${error.message}`);
+  if (data === null) throw new Error('Unknown note');
+  return mapClientNote(data);
+}
+
+/** Delete a client note (P2.1). Ownership (author-or-admin) is gated by the API. */
+export async function deleteClientNote(id: string): Promise<void> {
+  const db = getServerClient();
+  const { error } = await db.from('client_notes').delete().eq('id', id);
+  if (error !== null) throw new Error(`deleteClientNote: ${error.message}`);
 }
 
 /** Master-record chronology for a client, newest first. */

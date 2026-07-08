@@ -1,15 +1,14 @@
 'use client';
 
 import { use, useEffect, useState } from 'react';
-import { Lock } from 'lucide-react';
 import type { Client, Task } from '@gracie/shared';
 
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
-import { feeTierDisplay, formatUsd } from '@/lib/client-display';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
+import { FinanceEditor } from '@/components/client/FinanceEditor';
 
 /**
  * Client tab 3 — Finance (docs/08 §9). ADMIN-ONLY. The tab is hidden from the
@@ -81,45 +80,10 @@ export default function ClientFinancePage({
   const completedCount = activeTasks.filter((task) => task.status === 'complete').length;
   const completionRate =
     activeTasks.length === 0 ? 0 : Math.round((completedCount / activeTasks.length) * 100);
-  const fee = feeTierDisplay(client.feeTier);
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-        <Card>
-          <p style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Fee Tier</p>
-          {fee !== null ? (
-            <p className="mt-2 flex items-center gap-2" style={{ ...TYPE.sectionHeader, color: fee.color }}>
-              <span aria-hidden="true">{fee.dot}</span>
-              {fee.label}
-            </p>
-          ) : (
-            <p className="mt-2" style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-              Not set
-            </p>
-          )}
-        </Card>
-
-        <Card accent="admin">
-          <p className="flex items-center gap-1.5" style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-            <Lock aria-hidden="true" size={12} />
-            Contract Value
-          </p>
-          <p className="mt-2" style={TYPE.sectionHeader}>
-            {formatUsd(client.contractValue)}
-          </p>
-        </Card>
-
-        <Card accent="admin">
-          <p className="flex items-center gap-1.5" style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-            <Lock aria-hidden="true" size={12} />
-            Billing Cadence
-          </p>
-          <p className="mt-2" style={TYPE.sectionHeader}>
-            {client.billingCadence ?? 'Not set'}
-          </p>
-        </Card>
-      </div>
+      <FinanceEditor client={client} onChange={setClient} />
 
       {/* Task completion rate */}
       <Card>

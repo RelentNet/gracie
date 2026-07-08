@@ -137,6 +137,83 @@ export async function createClient(input: NewClientInput): Promise<Client> {
 }
 
 /**
+ * A partial client edit (P2.1). Every field is optional — only the keys present are
+ * written. `feeTier`/`contractValue`/`billingCadence` are ADMIN-ONLY on write (mirrors
+ * {@link redactClientForRole} on read); {@link updateClient} drops them for non-admins.
+ * `null` clears a nullable field; empty strings on nullable text fields also clear.
+ */
+export interface ClientPatch {
+  readonly name?: string;
+  readonly initials?: string;
+  readonly type?: ClientType;
+  readonly primaryContact?: string | null;
+  readonly primaryContactEmail?: string | null;
+  readonly cadence?: ClientCadence;
+  readonly contractNumber?: string | null;
+  readonly driveFolderUrl?: string | null;
+  readonly description?: string | null;
+  /** ADMIN-ONLY. */
+  readonly feeTier?: FeeTier | null;
+  /** ADMIN-ONLY. */
+  readonly contractValue?: number | null;
+  /** ADMIN-ONLY. */
+  readonly billingCadence?: string | null;
+}
+
+/** Trim a nullable text field; empty/whitespace-only clears it to null. */
+function cleanNullableText(value: string | null): string | null {
+  if (value === null) return null;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+/**
+ * Update a client's editable fields (P2.1). Field-level permission gating: the
+ * admin-only fee fields are written ONLY when `opts.isAdmin` — a non-admin patch that
+ * carries them has them stripped here (defense-in-depth; the API route already 403s).
+ * Bumps `updated_at`. Returns the updated row. Throws `'Unknown client'` on a bad id.
+ */
+export async function updateClient(
+  id: string,
+  patch: ClientPatch,
+  opts: { readonly isAdmin: boolean },
+): Promise<Client> {
+  const db = getServerClient();
+  const update: Database['public']['Tables']['clients']['Update'] = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (patch.name !== undefined) update.name = patch.name.trim();
+  if (patch.initials !== undefined) update.initials = patch.initials.trim();
+  if (patch.type !== undefined) update.type = patch.type;
+  if (patch.cadence !== undefined) update.cadence = patch.cadence;
+  if (patch.primaryContact !== undefined) update.primary_contact = cleanNullableText(patch.primaryContact);
+  if (patch.primaryContactEmail !== undefined) {
+    update.primary_contact_email = cleanNullableText(patch.primaryContactEmail);
+  }
+  if (patch.contractNumber !== undefined) update.contract_number = cleanNullableText(patch.contractNumber);
+  if (patch.driveFolderUrl !== undefined) update.drive_folder_url = cleanNullableText(patch.driveFolderUrl);
+  if (patch.description !== undefined) update.description = cleanNullableText(patch.description);
+
+  // Admin-only fields — mirror redactClientForRole on WRITE.
+  if (opts.isAdmin) {
+    if (patch.feeTier !== undefined) update.fee_tier = patch.feeTier;
+    if (patch.contractValue !== undefined) update.contract_value = patch.contractValue;
+    if (patch.billingCadence !== undefined) update.billing_cadence = cleanNullableText(patch.billingCadence);
+  }
+
+  const { data, error } = await db
+    .from('clients')
+    .update(update)
+    .eq('id', id)
+    .select('*')
+    .maybeSingle();
+  if (error !== null) throw new Error(`updateClient: ${error.message}`);
+  if (data === null) throw new Error('Unknown client');
+  return mapClient(data);
+}
+
+/**
  * List an org's registered domains (P4.1), oldest-registered first. These are the
  * `client_domains` rows that match incoming meetings to this org by attendee
  * email domain.

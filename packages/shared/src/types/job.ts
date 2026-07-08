@@ -102,3 +102,18 @@ export interface BotDispatchJobPayload {
   /** Logical origin of the sweep — e.g. `'scheduler'` for the repeatable job. */
   readonly source: string;
 }
+
+/**
+ * Payload for a relationship-health recompute job (`QUEUE_NAMES.relationshipHealth`,
+ * P2.1). Two shapes share the queue: the nightly repeatable sweep recomputes every
+ * active client (`clientId` omitted), and event-triggered jobs recompute one client
+ * (`clientId` set) after a meeting is ingested or its tasks/notes/cadence change. The
+ * job also refreshes that client's `last_meeting_at`. Per-client jobs are deduped by
+ * a `health:<clientId>` BullMQ job id so event bursts collapse to one recompute.
+ */
+export interface RelationshipHealthJobPayload {
+  /** Logical origin — e.g. `'scheduler'`, `'calendar-scan'`, `'task'`, `'note'`, `'client-edit'`. */
+  readonly source: string;
+  /** A single client to recompute; omit for the nightly all-clients sweep. */
+  readonly clientId?: string;
+}
