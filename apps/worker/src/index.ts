@@ -12,7 +12,7 @@
 import type { Queue, Worker } from 'bullmq';
 import type { FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
-import { QUEUE_NAMES } from '@gracie/shared';
+import { JOB_NAMES, QUEUE_NAMES } from '@gracie/shared';
 
 import { loadEnv } from './lib/env.js';
 import { createRedisConnection } from './lib/redis.js';
@@ -22,6 +22,7 @@ import { createGenerateProcessor } from './processors/generate.processor.js';
 import { createHeartbeatProcessor } from './processors/heartbeat.processor.js';
 import { createIngestProcessor } from './processors/ingest.processor.js';
 import { createKbIngestProcessor } from './processors/kb-ingest.processor.js';
+import { createRelationshipHealthProcessor } from './processors/relationship-health.processor.js';
 import { createWatchdogProcessor } from './processors/watchdog.processor.js';
 import { createBotDispatchQueue, scheduleBotDispatch } from './queues/bot-dispatch.queue.js';
 import { createCalendarScanQueue, scheduleCalendarScan } from './queues/calendar-scan.queue.js';
@@ -30,6 +31,10 @@ import { createGenerateQueue } from './queues/generate.queue.js';
 import { createHeartbeatQueue, scheduleHeartbeat } from './queues/heartbeat.queue.js';
 import { createIngestQueue } from './queues/ingest.queue.js';
 import { createKbIngestQueue } from './queues/kb-ingest.queue.js';
+import {
+  createRelationshipHealthQueue,
+  scheduleRelationshipHealth,
+} from './queues/relationship-health.queue.js';
 import { createWatchdogQueue, scheduleTranscriptWatchdog } from './queues/watchdog.queue.js';
 import { buildServer } from './server.js';
 
@@ -86,6 +91,21 @@ async function start(): Promise<void> {
   const watchdogQueue = createWatchdogQueue(connection);
   const calendarScanQueue = createCalendarScanQueue(connection);
   const botDispatchQueue = createBotDispatchQueue(connection);
+  const relationshipHealthQueue = createRelationshipHealthQueue(connection);
+
+  /**
+   * Best-effort single-client health recompute, deduped by a `health:<clientId>` job
+   * id so bursts collapse. Passed to the generate pipeline so a completed meeting
+   * refreshes health; the nightly sweep is the backstop.
+   */
+  const enqueueHealthForClient = async (clientId: string): Promise<void> => {
+    await relationshipHealthQueue.add(
+      JOB_NAMES.relationshipHealthClient,
+      { source: 'worker', clientId },
+      { jobId: `health:${clientId}` },
+    );
+  };
+
   const app = buildServer({
     connection,
     queues: [
@@ -96,6 +116,7 @@ async function start(): Promise<void> {
       watchdogQueue,
       calendarScanQueue,
       botDispatchQueue,
+      relationshipHealthQueue,
     ],
   });
 
@@ -134,7 +155,7 @@ async function start(): Promise<void> {
   // Generate: meeting pipeline (transcript → 6 docs → tasks → notify, P5b).
   const generateWorker = createWorker(
     QUEUE_NAMES.generate,
-    createGenerateProcessor(app.log),
+    createGenerateProcessor(app.log, enqueueHealthForClient),
     connection,
   );
   generateWorker.on('failed', (job, error) => {
@@ -171,10 +192,21 @@ async function start(): Promise<void> {
     app.log.error({ jobId: job?.id, err: error }, 'bot-dispatch job failed');
   });
 
+  // Relationship health: nightly sweep + event-triggered single-client recompute (P2.1).
+  const relationshipHealthWorker = createWorker(
+    QUEUE_NAMES.relationshipHealth,
+    createRelationshipHealthProcessor(app.log),
+    connection,
+  );
+  relationshipHealthWorker.on('failed', (job, error) => {
+    app.log.error({ jobId: job?.id, err: error }, 'relationship-health job failed');
+  });
+
   await scheduleHeartbeat(heartbeatQueue);
   await scheduleTranscriptWatchdog(watchdogQueue);
   await scheduleCalendarScan(calendarScanQueue);
   await scheduleBotDispatch(botDispatchQueue);
+  await scheduleRelationshipHealth(relationshipHealthQueue);
 
   installShutdown({
     app,
@@ -187,6 +219,7 @@ async function start(): Promise<void> {
       watchdogQueue,
       calendarScanQueue,
       botDispatchQueue,
+      relationshipHealthQueue,
     ],
     workers: [
       heartbeatWorker,
@@ -196,6 +229,7 @@ async function start(): Promise<void> {
       watchdogWorker,
       calendarScanWorker,
       botDispatchWorker,
+      relationshipHealthWorker,
     ],
   });
 

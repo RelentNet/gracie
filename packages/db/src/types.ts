@@ -16,6 +16,7 @@ export const TABLE_NAMES = [
   'clients',
   'client_aliases',
   'client_domains',
+  'client_health_history',
   'meeting_type_rules',
   'meetings',
   'meeting_clients',

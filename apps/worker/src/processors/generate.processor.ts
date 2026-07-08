@@ -350,6 +350,13 @@ function buildDigest(content: string): string {
 /** Build the generation processor, logging through the worker's Fastify logger. */
 export function createGenerateProcessor(
   logger: FastifyBaseLogger,
+  /**
+   * Optional best-effort hook to refresh the client's relationship health after a
+   * meeting completes (P2.1). A completed meeting changes `last_meeting_at` and adds
+   * tasks + a master-record entry — all health inputs — so we enqueue a single-client
+   * recompute. Failure never fails the pipeline; the nightly sweep is the backstop.
+   */
+  enqueueHealthForClient?: (clientId: string) => Promise<void>,
 ): Processor<GenerationJobPayload, GenerateResult> {
   return async (job: Job<GenerationJobPayload>): Promise<GenerateResult> => {
     const db = getServerClient();
@@ -490,6 +497,15 @@ export function createGenerateProcessor(
         pipeline_completed_at: completedAt.toISOString(),
       });
       await notifyAttendees(db, meeting, typedClient, meetingDate);
+
+      // Refresh relationship health now the meeting is complete (P2.1) — best-effort.
+      if (enqueueHealthForClient !== undefined) {
+        try {
+          await enqueueHealthForClient(clientId);
+        } catch (healthError) {
+          log.warn({ err: healthError }, 'generate: health recompute enqueue failed');
+        }
+      }
 
       log.info(
         { documents: documents.length, tasks: tasksInserted, status: runStatus },

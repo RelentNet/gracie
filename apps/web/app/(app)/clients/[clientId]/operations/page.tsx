@@ -4,16 +4,15 @@ import { use, useEffect, useState } from 'react';
 import { FileText } from 'lucide-react';
 import type { Meeting, Task } from '@gracie/shared';
 
-import { getUserName } from '@/lib/mock';
 import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
-import { formatEasternDate, formatEasternDateTime } from '@/lib/format';
-import { priorityBadge, taskStatusLabel } from '@/lib/client-display';
-import { Card, CardHeader } from '@/components/ui/Card';
+import { formatEasternDateTime } from '@/lib/format';
 import { Badge } from '@/components/ui/Badge';
 import { Tabs } from '@/components/ui/Tabs';
 import { Table, THead, TBody, TRow, TH, TCell } from '@/components/ui/Table';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
+import { ClientTasksPanel } from '@/components/client/ClientTasksPanel';
 import type { PipelineStatus } from '@gracie/shared';
 
 /**
@@ -55,6 +54,7 @@ export default function ClientOperationsPage({
   readonly params: Promise<{ clientId: string }>;
 }): React.JSX.Element {
   const { clientId } = use(params);
+  const { canEdit } = useAuth();
 
   const [data, setData] = useState<OperationsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +93,7 @@ export default function ClientOperationsPage({
         {
           id: 'tasks',
           label: 'Tasks',
-          content: <TasksPanel tasks={tasks} />,
+          content: <ClientTasksPanel clientId={clientId} initialTasks={tasks} editable={canEdit()} />,
         },
         {
           id: 'pipeline',
@@ -107,49 +107,6 @@ export default function ClientOperationsPage({
         },
       ]}
     />
-  );
-}
-
-function TasksPanel({ tasks }: { readonly tasks: readonly Task[] }): React.JSX.Element {
-  return (
-    <Card className="p-0">
-      <div className="p-6 pb-3">
-        <CardHeader title="Client Tasks" description="All active tasks scoped to this client." />
-      </div>
-      {tasks.length === 0 ? (
-        <div className="p-6 pt-0">
-          <EmptyState title="No tasks" description="No active tasks for this client." />
-        </div>
-      ) : (
-        <Table>
-          <THead>
-            <TH>Task</TH>
-            <TH>Owner</TH>
-            <TH>Due</TH>
-            <TH>Status</TH>
-            <TH>Priority</TH>
-          </THead>
-          <TBody>
-            {tasks.map((task) => {
-              const badge = priorityBadge(task.hasPriorityFlag);
-              return (
-                <TRow key={task.id}>
-                  <TCell>{task.description}</TCell>
-                  <TCell>{getUserName(task.ownerUserId)}</TCell>
-                  <TCell>{task.dueDate !== null ? formatEasternDate(task.dueDate) : '—'}</TCell>
-                  <TCell>{taskStatusLabel(task.status)}</TCell>
-                  <TCell>
-                    <Badge bg={badge.bg} fg={badge.fg}>
-                      {badge.label}
-                    </Badge>
-                  </TCell>
-                </TRow>
-              );
-            })}
-          </TBody>
-        </Table>
-      )}
-    </Card>
   );
 }
 

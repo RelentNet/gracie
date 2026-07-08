@@ -215,6 +215,37 @@ export type Database = {
           },
         ]
       }
+      client_health_history: {
+        Row: {
+          breakdown: Json | null
+          client_id: string
+          computed_at: string
+          id: string
+          score: number
+        }
+        Insert: {
+          breakdown?: Json | null
+          client_id: string
+          computed_at?: string
+          id?: string
+          score: number
+        }
+        Update: {
+          breakdown?: Json | null
+          client_id?: string
+          computed_at?: string
+          id?: string
+          score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_health_history_client_id_fkey"
+            columns: ["client_id"]
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_notes: {
         Row: {
           author_user_id: string | null
@@ -302,6 +333,8 @@ export type Database = {
           description: string | null
           drive_folder_url: string | null
           fee_tier: Database["public"]["Enums"]["fee_tier"] | null
+          health_adjustments: Json | null
+          health_updated_at: string | null
           id: string
           initials: string
           last_meeting_at: string | null
@@ -324,6 +357,8 @@ export type Database = {
           description?: string | null
           drive_folder_url?: string | null
           fee_tier?: Database["public"]["Enums"]["fee_tier"] | null
+          health_adjustments?: Json | null
+          health_updated_at?: string | null
           id?: string
           initials: string
           last_meeting_at?: string | null
@@ -346,6 +381,8 @@ export type Database = {
           description?: string | null
           drive_folder_url?: string | null
           fee_tier?: Database["public"]["Enums"]["fee_tier"] | null
+          health_adjustments?: Json | null
+          health_updated_at?: string | null
           id?: string
           initials?: string
           last_meeting_at?: string | null

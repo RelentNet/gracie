@@ -6,3 +6,4 @@ export * from './types/index.js';
 export * from './constants/index.js';
 export * from './domains/index.js';
 export * from './ai/index.js';
+export * from './health/index.js';

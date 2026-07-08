@@ -24,6 +24,8 @@ export const QUEUE_NAMES = {
   calendarScan: 'calendar-scan',
   /** Bot dispatch: dispatch one Recall bot per due, opted-in meeting (P4, docs/07 §1). */
   botDispatch: 'bot-dispatch',
+  /** Relationship-health recompute: score signals → clients.relationship_health + trend (P2.1). */
+  relationshipHealth: 'relationship-health',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -37,6 +39,10 @@ export const JOB_NAMES = {
   watchdog: 'watchdog.transcript',
   calendarScan: 'calendar-scan.sweep',
   botDispatch: 'bot-dispatch.sweep',
+  /** Nightly sweep — recompute every active client's health. */
+  relationshipHealthSweep: 'relationship-health.sweep',
+  /** Single-client recompute enqueued on events (meeting ingest, task/note change). */
+  relationshipHealthClient: 'relationship-health.client',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
@@ -51,6 +57,7 @@ export const JOB_SCHEDULER_IDS = {
   transcriptWatchdog: 'watchdog.transcript.every-15m',
   calendarScan: 'calendar-scan.every-30m',
   botDispatch: 'bot-dispatch.every-60s',
+  relationshipHealth: 'relationship-health.nightly',
 } as const;
 
 /** Heartbeat repeat interval (ms) — ~every 30s. A liveness signal, not real work. */
@@ -77,3 +84,10 @@ export const CALENDAR_SCAN_INTERVAL_MS = 30 * 60_000;
  * so a bot can be dispatched within the ≤5-min-before-start window.
  */
 export const BOT_DISPATCH_INTERVAL_MS = 60_000;
+
+/**
+ * Relationship-health nightly recompute interval (ms) — ~every 24h (P2.1). Between
+ * sweeps the score is also refreshed per-client on events (meeting ingested, tasks
+ * or notes changed), so the nightly run is the backstop, not the only trigger.
+ */
+export const RELATIONSHIP_HEALTH_INTERVAL_MS = 24 * 60 * 60_000;
