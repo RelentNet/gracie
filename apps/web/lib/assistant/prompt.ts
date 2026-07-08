@@ -8,6 +8,8 @@
  */
 import type { AIProvider, AIMessage } from '@gracie/shared';
 
+import { webAccessGuidance } from '../ai/web-prompt.js';
+
 /**
  * Base general-assistant persona (docs §1: native to Gracie, replaces ChatGPT
  * seats). Exported for callers/tests that only need the persona; the company-aware
@@ -27,10 +29,14 @@ export const ASSISTANT_SYSTEM_PROMPT = [
  * Assemble the full system prompt for a company-aware turn. Folds the firm
  * description (read from `settings.ga_company_description`, never hardcoded here)
  * into the persona and states the READ-ONLY, ground-and-cite, access-scoped
- * contract the tools enforce. `gaCompanyDescription` is passed in so this stays a
- * pure function.
+ * contract the tools enforce. `webEnabled` reflects the per-chat "Web" toggle and
+ * switches in the internet-access guidance. `gaCompanyDescription` is passed in so
+ * this stays a pure function.
  */
-export function buildAssistantSystemPrompt(gaCompanyDescription: string): string {
+export function buildAssistantSystemPrompt(
+  gaCompanyDescription: string,
+  webEnabled: boolean,
+): string {
   return [
     ASSISTANT_SYSTEM_PROMPT,
     '',
@@ -54,6 +60,8 @@ export function buildAssistantSystemPrompt(gaCompanyDescription: string): string
     '- Ground every company answer in tool or search results, and briefly cite what you',
     '  used (e.g. the client, document title, or that it came from the Knowledge Base).',
     '- You have no access to system settings, API keys, or other users’ conversations.',
+    '',
+    webAccessGuidance(webEnabled),
   ].join('\n');
 }
 

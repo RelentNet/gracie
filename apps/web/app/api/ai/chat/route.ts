@@ -17,6 +17,9 @@ import { getActiveProvider } from '@gracie/db';
 import { assembleChatPrompt, type AIMessage } from '@gracie/shared';
 
 import { getRequestUser } from '@/lib/api-auth';
+import { resolveTools } from '@/lib/ai/tool-loop';
+import { WEB_TOOLS, executeWebTool } from '@/lib/ai/web-tools';
+import { webAccessGuidance } from '@/lib/ai/web-prompt';
 import {
   getChatClient,
   getGaCompanyDescription,
@@ -53,6 +56,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     const clientId = typeof body.clientId === 'string' ? body.clientId : '';
     const message = typeof body.message === 'string' ? body.message.trim() : '';
     const includeKnowledgeBase = body.includeKnowledgeBase === true;
+    // Per-chat "Web" toggle — advertises the on-demand web tools this turn.
+    const webAccess = body.webAccess === true;
     const history = parseHistory(body.history);
 
     if (clientId === '') return jsonError('bad_request', 'clientId is required', 400);
@@ -77,6 +82,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       history,
       message,
     });
+    // Fold in the internet-access guidance for the per-chat "Web" toggle.
+    const systemPrompt = `${system}\n\n${webAccessGuidance(webAccess)}`;
 
     // Resolve the provider before opening the stream so a missing-key failure
     // returns a clean JSON error rather than an empty 200 stream.
@@ -87,7 +94,33 @@ export async function POST(req: NextRequest): Promise<Response> {
       async start(controller): Promise<void> {
         let produced = 0;
         try {
-          for await (const token of provider.stream({ model, system, messages, temperature: 0.3 })) {
+          // Phase 1 (buffered): when the Web toggle is on, let the model call the
+          // web tools; degrade to a plain answer if resolution fails. Retrieval is
+          // already role-gated upstream — web tools add only public-internet data.
+          let turnMessages: readonly AIMessage[] = messages;
+          if (webAccess) {
+            try {
+              const resolved = await resolveTools({
+                provider,
+                model,
+                system: systemPrompt,
+                baseMessages: messages,
+                tools: WEB_TOOLS,
+                execute: executeWebTool,
+                temperature: 0.3,
+              });
+              turnMessages = resolved.messages;
+            } catch (toolError) {
+              console.error('intelligence tool resolution failed, answering without web:', toolError);
+            }
+          }
+          // Phase 2 (streamed): final answer with tools off.
+          for await (const token of provider.stream({
+            model,
+            system: systemPrompt,
+            messages: turnMessages,
+            temperature: 0.3,
+          })) {
             produced += 1;
             controller.enqueue(encoder.encode(token));
           }
