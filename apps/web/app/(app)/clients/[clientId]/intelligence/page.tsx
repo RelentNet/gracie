@@ -1,13 +1,14 @@
 'use client';
 
 import { use, useEffect, useRef, useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Globe, Sparkles } from 'lucide-react';
 
 import type { Client } from '@gracie/shared';
 
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
 import { Card } from '@/components/ui/Card';
+import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { ChatThread } from '@/components/chat/ChatThread';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import type { ChatMessage } from '@/components/chat/types';
@@ -39,6 +40,7 @@ export default function ClientIntelligencePage({
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [includeKnowledgeBase, setIncludeKnowledgeBase] = useState(false);
+  const [webAccess, setWebAccess] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,7 +86,7 @@ export default function ClientIntelligencePage({
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, message: text, includeKnowledgeBase, history }),
+        body: JSON.stringify({ clientId, message: text, includeKnowledgeBase, webAccess, history }),
       });
       if (!res.ok || res.body === null) {
         const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
@@ -126,29 +128,21 @@ export default function ClientIntelligencePage({
           <Sparkles aria-hidden="true" size={16} style={{ color: 'var(--color-blue-700)' }} />
           <span style={TYPE.bodyStrong}>Scoped to {client.name}</span>
         </span>
-        <label className="flex cursor-pointer items-center gap-2">
-          <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>Knowledge Base</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={includeKnowledgeBase}
-            aria-label="Include Knowledge Base in answers"
-            onClick={(): void => setIncludeKnowledgeBase((v) => !v)}
-            className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
-            style={{
-              backgroundColor: includeKnowledgeBase
-                ? 'var(--color-blue-600)'
-                : 'var(--color-slate-100)',
-              border: '1px solid var(--border-subtle)',
-            }}
-          >
-            <span
-              aria-hidden="true"
-              className="inline-block size-4 rounded-full bg-white shadow-sm transition-transform"
-              style={{ transform: includeKnowledgeBase ? 'translateX(1rem)' : 'translateX(0.125rem)' }}
-            />
-          </button>
-        </label>
+        <span className="flex items-center gap-4">
+          <ToggleSwitch
+            checked={includeKnowledgeBase}
+            onChange={setIncludeKnowledgeBase}
+            label="Knowledge Base"
+            ariaLabel="Include Knowledge Base in answers"
+          />
+          <ToggleSwitch
+            checked={webAccess}
+            onChange={setWebAccess}
+            label="Web"
+            ariaLabel="Allow internet access in answers"
+            icon={<Globe aria-hidden="true" size={14} style={{ color: 'var(--text-secondary)' }} />}
+          />
+        </span>
       </Card>
 
       {/* Chat thread */}

@@ -17,8 +17,10 @@ import { getActiveProvider } from '@gracie/db';
 import type { AIMessage } from '@gracie/shared';
 
 import { getAssistantUser } from '@/lib/assistant/user';
-import { resolveCompanyTools } from '@/lib/assistant/company/agent';
 import { toCompanyCaller } from '@/lib/assistant/company/access';
+import { COMPANY_TOOLS, executeCompanyTool } from '@/lib/assistant/company/tools';
+import { WEB_TOOLS, WEB_TOOL_NAMES, executeWebTool } from '@/lib/ai/web-tools';
+import { resolveTools, type ToolExecutor } from '@/lib/ai/tool-loop';
 import {
   assembleAssistantMessages,
   buildAssistantSystemPrompt,
@@ -67,6 +69,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     const chatId = typeof body.chatId === 'string' && body.chatId !== '' ? body.chatId : null;
     const message = typeof body.message === 'string' ? body.message.trim() : '';
     const attachmentIds = parseAttachmentIds(body.attachmentIds);
+    // Per-chat "Web" toggle — advertises the on-demand web tools this turn.
+    const webAccess = body.webAccess === true;
 
     if (message === '') return jsonError('bad_request', 'message is required', 400);
 
@@ -104,7 +108,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     // hardcoded) and the read-only tool contract. Resolved before the stream so a
     // failure is a clean JSON error, not an empty 200.
     const gaCompanyDescription = await getGaCompanyDescription();
-    const system = buildAssistantSystemPrompt(gaCompanyDescription);
+    const system = buildAssistantSystemPrompt(gaCompanyDescription, webAccess);
 
     // Persist the user's message up front so it survives a stream failure.
     await insertMessage({ chatId: chatIdResolved, role: 'user', content: message, attachmentIds });
@@ -122,12 +126,19 @@ export async function POST(req: NextRequest): Promise<Response> {
           // tools. Degrade to a plain answer if resolution fails so a tool hiccup
           // never breaks the chat.
           try {
-            const resolved = await resolveCompanyTools({
+            // Company tools always; web tools only when the Web toggle is on.
+            const tools = webAccess ? [...COMPANY_TOOLS, ...WEB_TOOLS] : COMPANY_TOOLS;
+            const execute: ToolExecutor = (name, args) =>
+              WEB_TOOL_NAMES.has(name)
+                ? executeWebTool(name, args)
+                : executeCompanyTool(name, args, caller);
+            const resolved = await resolveTools({
               provider,
               model,
               system,
               baseMessages: messages,
-              caller,
+              tools,
+              execute,
               temperature: TEMPERATURE,
             });
             resolvedMessages = resolved.messages;

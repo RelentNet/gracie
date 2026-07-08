@@ -1,11 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MessageSquare, Paperclip, X } from 'lucide-react';
+import { Globe, MessageSquare, Paperclip, X } from 'lucide-react';
 
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
 import { Card } from '@/components/ui/Card';
+import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { ChatThread } from '@/components/chat/ChatThread';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import type { ChatMessage } from '@/components/chat/types';
@@ -45,6 +46,7 @@ export default function AssistantPage(): React.JSX.Element {
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [webAccess, setWebAccess] = useState(false);
 
   const [attachments, setAttachments] = useState<readonly PendingAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -151,6 +153,7 @@ export default function AssistantPage(): React.JSX.Element {
           chatId: activeChatId ?? undefined,
           message: text,
           attachmentIds,
+          webAccess,
         }),
       });
       if (!res.ok || res.body === null) {
@@ -232,6 +235,15 @@ export default function AssistantPage(): React.JSX.Element {
       </Card>
 
       <Card className="flex flex-1 flex-col gap-3 p-4">
+        <div className="flex items-center justify-end border-b pb-2" style={{ borderColor: 'var(--border-subtle)' }}>
+          <ToggleSwitch
+            checked={webAccess}
+            onChange={setWebAccess}
+            label="Web"
+            ariaLabel="Allow internet access in answers"
+            icon={<Globe aria-hidden="true" size={14} style={{ color: 'var(--text-secondary)' }} />}
+          />
+        </div>
         {messagesLoading ? (
           <div className="flex flex-1 items-center">
             <LoadingState label="Loading conversation…" />
