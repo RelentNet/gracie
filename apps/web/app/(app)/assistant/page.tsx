@@ -46,7 +46,7 @@ export default function AssistantPage(): React.JSX.Element {
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [webAccess, setWebAccess] = useState(false);
+  const [webAccess, setWebAccess] = useState(true);
 
   const [attachments, setAttachments] = useState<readonly PendingAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
