@@ -8,6 +8,7 @@ import {
   Sunrise,
   BookOpen,
   MessageSquare,
+  Map,
   Settings,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -25,6 +26,12 @@ export interface NavItem {
   readonly Icon: LucideIcon;
   /** Permission required to see this item; undefined = visible to all roles. */
   readonly requires?: Permission;
+  /**
+   * Open in a new tab via a plain anchor instead of client-side routing. Set for
+   * targets that are not app-router pages (e.g. /roadmap is a raw-HTML route
+   * handler) so `<Link>` prefetch/RSC navigation is bypassed.
+   */
+  readonly external?: boolean;
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
@@ -38,6 +45,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Knowledge Base', href: '/knowledge-base', Icon: BookOpen },
   // Assistant (Module 14) — general AI chat, all roles (docs/08 §M14).
   { label: 'Assistant', href: '/assistant', Icon: MessageSquare },
+  // Roadmap — the self-contained build-roadmap document (raw-HTML route handler),
+  // visible to all authenticated roles; opens in a new tab (external).
+  { label: 'Roadmap', href: '/roadmap', Icon: Map, external: true },
   // Settings is Admin-only (docs/08 §6, D14): gated by settings.access.
   { label: 'Settings', href: '/settings', Icon: Settings, requires: 'settings.access' },
 ] as const;

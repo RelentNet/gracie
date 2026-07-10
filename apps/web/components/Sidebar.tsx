@@ -52,6 +52,12 @@ export function Sidebar(): React.JSX.Element {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  // External targets (e.g. /roadmap, a raw-HTML route handler) open
+                  // in a new tab and skip prefetch/RSC navigation, which would break
+                  // on a non-page route.
+                  target={item.external ? '_blank' : undefined}
+                  rel={item.external ? 'noopener noreferrer' : undefined}
+                  prefetch={item.external ? false : undefined}
                   aria-current={isActive ? 'page' : undefined}
                   className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors"
                   style={{
