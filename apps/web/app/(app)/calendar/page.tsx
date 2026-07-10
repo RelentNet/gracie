@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Building2,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Link2,
@@ -182,6 +183,23 @@ interface AutoJoinResponse {
 interface CalendarSettingsResponse {
   readonly botDispatchEnabled: boolean;
 }
+interface ManualJoinStateResponse {
+  readonly enabled: boolean;
+}
+interface JoinMeetingResponse {
+  readonly meeting: {
+    readonly meetingId: string;
+    readonly title: string;
+    readonly dateTime: string;
+    readonly botDispatched: boolean;
+    readonly pipelineStatus: PipelineStatus;
+  };
+}
+/** One selectable org in the Join-a-meeting client picker. */
+interface JoinOrgOption {
+  readonly id: string;
+  readonly label: string;
+}
 
 export default function CalendarPage(): React.JSX.Element {
   const { hasRole, canEdit } = useAuth();
@@ -199,6 +217,26 @@ export default function CalendarPage(): React.JSX.Element {
   // Bumped after a link/create-org action to refetch the visible window in place.
   const [reloadToken, setReloadToken] = useState(0);
   const reload = useCallback((): void => setReloadToken((t) => t + 1), []);
+
+  // On-demand meeting join (P4.2). The master switch (any user may READ it) gates
+  // whether the "Join a meeting" control appears; Admins flip it in the panel.
+  const [manualJoinEnabled, setManualJoinEnabled] = useState<boolean | null>(null);
+  const [joinOpen, setJoinOpen] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    apiClient
+      .get<ManualJoinStateResponse>('/api/calendar/manual-join')
+      .then((d) => {
+        if (active) setManualJoinEnabled(d.enabled);
+      })
+      .catch(() => {
+        if (active) setManualJoinEnabled(false);
+      });
+    return (): void => {
+      active = false;
+    };
+  }, []);
 
   // GA-member filter (client-side): show only meetings a chosen member is on (as
   // lead or attendee). Options accumulate across visited months so the current
@@ -324,7 +362,28 @@ export default function CalendarPage(): React.JSX.Element {
             Clear filter
           </button>
         ) : null}
+        {manualJoinEnabled === true ? (
+          <Button
+            className="ml-auto"
+            variant="primary"
+            size="sm"
+            icon={<Video size={14} aria-hidden="true" />}
+            onClick={(): void => setJoinOpen(true)}
+          >
+            Join a meeting
+          </Button>
+        ) : null}
       </div>
+
+      {joinOpen ? (
+        <JoinMeetingModal
+          onClose={(): void => setJoinOpen(false)}
+          onJoined={(): void => {
+            setJoinOpen(false);
+            reload();
+          }}
+        />
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -374,7 +433,12 @@ export default function CalendarPage(): React.JSX.Element {
             editable={editable}
             onChanged={reload}
           />
-          <ConnectionPanel isAdmin={isAdmin} onSynced={reload} />
+          <ConnectionPanel
+            isAdmin={isAdmin}
+            onSynced={reload}
+            manualJoinEnabled={manualJoinEnabled}
+            onManualJoinChanged={setManualJoinEnabled}
+          />
         </div>
       </div>
 
@@ -1003,6 +1067,207 @@ function LinkExistingModal({
   );
 }
 
+/**
+ * Client-side mirror of the route's URL guard: parseable, http(s), dotted host.
+ * Only gates the button for fast feedback — the route re-validates authoritatively.
+ */
+function isPlausibleJoinUrl(raw: string): boolean {
+  try {
+    const parsed = new URL(raw.trim());
+    return (parsed.protocol === 'https:' || parsed.protocol === 'http:') && parsed.hostname.includes('.');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * On-demand meeting join (P4.2). Paste a meeting link + optional title + optional
+ * org, confirm ("Gracie will join and record this meeting"), then dispatch a
+ * Recall bot immediately via `POST /api/calendar/join`. Shown only when the Admin
+ * master switch is on. The Assistant stays read-only — this lives on Calendar.
+ */
+function JoinMeetingModal({
+  onClose,
+  onJoined,
+}: {
+  readonly onClose: () => void;
+  readonly onJoined: () => void;
+}): React.JSX.Element {
+  const [url, setUrl] = useState('');
+  const [title, setTitle] = useState('');
+  const [clientId, setClientId] = useState(''); // '' = Unassigned (external)
+  const [orgs, setOrgs] = useState<readonly JoinOrgOption[] | null>(null);
+  const [orgError, setOrgError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [joined, setJoined] = useState<JoinMeetingResponse['meeting'] | null>(null);
+
+  // Org picker options: the GA internal workspace + every non-internal party.
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      apiClient.get<{ clients: readonly Client[] }>('/api/clients?type=all'),
+      apiClient.get<{ clients: readonly Client[] }>('/api/clients?type=internal'),
+    ])
+      .then(([all, internal]) => {
+        if (!active) return;
+        const options: JoinOrgOption[] = [
+          ...internal.clients.map((c) => ({ id: c.id, label: 'Internal (GA)' })),
+          ...all.clients.map((c) => ({
+            id: c.id,
+            label: c.type !== 'client' ? `${c.name} (${orgTypeLabel(c.type)})` : c.name,
+          })),
+        ];
+        setOrgs(options);
+      })
+      .catch((e: unknown) => {
+        if (active) setOrgError(e instanceof Error ? e.message : 'Failed to load orgs');
+      });
+    return (): void => {
+      active = false;
+    };
+  }, []);
+
+  const urlValid = isPlausibleJoinUrl(url);
+  const locked = confirming || submitting;
+
+  const submit = useCallback((): void => {
+    setSubmitting(true);
+    setError(null);
+    apiClient
+      .post<JoinMeetingResponse>('/api/calendar/join', {
+        url: url.trim(),
+        title: title.trim() !== '' ? title.trim() : undefined,
+        clientId: clientId !== '' ? clientId : undefined,
+      })
+      .then((d) => setJoined(d.meeting))
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : 'Failed to join meeting');
+        setConfirming(false); // let the user fix input and retry
+      })
+      .finally(() => setSubmitting(false));
+  }, [url, title, clientId]);
+
+  const inputClass = 'w-full rounded-lg border bg-white px-3 py-2';
+  const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body };
+
+  const footer =
+    joined !== null ? (
+      <Button variant="primary" onClick={onJoined}>
+        Done
+      </Button>
+    ) : confirming ? (
+      <>
+        <Button variant="secondary" onClick={(): void => setConfirming(false)} disabled={submitting}>
+          Back
+        </Button>
+        <Button variant="primary" onClick={submit} disabled={submitting}>
+          {submitting ? 'Sending Gracie…' : 'Join & record now'}
+        </Button>
+      </>
+    ) : (
+      <>
+        <Button variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={(): void => setConfirming(true)} disabled={!urlValid}>
+          Continue
+        </Button>
+      </>
+    );
+
+  return (
+    <Modal isOpen onClose={onClose} title="Join a meeting" footer={footer}>
+      {joined !== null ? (
+        <div className="flex flex-col items-center gap-3 py-2 text-center">
+          <CheckCircle2 size={40} aria-hidden="true" style={{ color: 'var(--color-emerald-500)' }} />
+          <div className="flex flex-col gap-1">
+            <span style={TYPE.bodyStrong}>Gracie is joining “{joined.title}”.</span>
+            <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+              A notetaker bot has been dispatched. The meeting appears on today’s calendar now, and
+              its notes, docs, and tasks generate automatically once it ends.
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Meeting link</span>
+            <input
+              type="url"
+              inputMode="url"
+              placeholder="https://…"
+              className={inputClass}
+              style={inputStyle}
+              value={url}
+              disabled={locked}
+              onChange={(e): void => setUrl(e.target.value)}
+              aria-label="Meeting link"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Title (optional)</span>
+            <input
+              type="text"
+              placeholder="Ad-hoc meeting"
+              className={inputClass}
+              style={inputStyle}
+              value={title}
+              disabled={locked}
+              onChange={(e): void => setTitle(e.target.value)}
+              aria-label="Meeting title"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Client (optional)</span>
+            <select
+              className={inputClass}
+              style={inputStyle}
+              value={clientId}
+              disabled={locked || orgs === null}
+              onChange={(e): void => setClientId(e.target.value)}
+              aria-label="Client"
+            >
+              <option value="">Unassigned (external)</option>
+              {(orgs ?? []).map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {orgError !== null ? (
+              <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+                Couldn’t load orgs — you can still join as unassigned.
+              </span>
+            ) : null}
+          </label>
+
+          {confirming ? (
+            <div
+              className="flex items-start gap-2 rounded-lg border p-3"
+              style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--surface-muted, #f8fafc)' }}
+              role="status"
+            >
+              <Video size={16} aria-hidden="true" style={{ color: 'var(--color-blue-600)', marginTop: 2 }} />
+              <span style={{ ...TYPE.secondary, color: 'var(--text-primary)' }}>
+                Gracie will join and record this meeting. A real notetaker bot joins immediately and
+                is visible to attendees.
+              </span>
+            </div>
+          ) : null}
+
+          {error !== null ? (
+            <span role="alert" style={{ ...TYPE.secondary, color: 'var(--color-red-600)' }}>
+              {error}
+            </span>
+          ) : null}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function PeopleRow({ people }: { readonly people: readonly CalendarPerson[] }): React.JSX.Element {
   const shown = people.slice(0, 5);
   return (
@@ -1022,9 +1287,15 @@ function PeopleRow({ people }: { readonly people: readonly CalendarPerson[] }): 
 function ConnectionPanel({
   isAdmin,
   onSynced,
+  manualJoinEnabled,
+  onManualJoinChanged,
 }: {
   readonly isAdmin: boolean;
   readonly onSynced?: () => void;
+  /** On-demand-join master switch (P4.2); null until loaded. */
+  readonly manualJoinEnabled: boolean | null;
+  /** Notify the page when an Admin flips the master switch (updates the toolbar). */
+  readonly onManualJoinChanged: (enabled: boolean) => void;
 }): React.JSX.Element {
   const [status, setStatus] = useState<CalendarConnectionStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1164,10 +1435,68 @@ function ConnectionPanel({
             </p>
           )}
           {isAdmin ? <BotDispatchToggle /> : null}
+          {isAdmin ? (
+            <ManualJoinToggle enabled={manualJoinEnabled} onChanged={onManualJoinChanged} />
+          ) : null}
           <AutoJoinToggle />
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Admin-only master switch for on-demand meeting join (P4.2). INDEPENDENT of the
+ * auto-dispatch kill-switch above: this governs the explicit "paste a link →
+ * Gracie joins now" action, not the automatic calendar cron. Fail-safe OFF.
+ * Controlled by the page so flipping it shows/hides the toolbar control at once.
+ */
+function ManualJoinToggle({
+  enabled,
+  onChanged,
+}: {
+  readonly enabled: boolean | null;
+  readonly onChanged: (enabled: boolean) => void;
+}): React.JSX.Element {
+  const [saving, setSaving] = useState<boolean>(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const onToggle = useCallback(
+    (next: boolean): void => {
+      setSaving(true);
+      setNote(null);
+      apiClient
+        .patch<ManualJoinStateResponse>('/api/calendar/manual-join', { enabled: next })
+        .then((data) => onChanged(data.enabled))
+        .catch((e: unknown) => setNote(e instanceof Error ? e.message : 'Could not save setting'))
+        .finally(() => setSaving(false));
+    },
+    [onChanged],
+  );
+
+  return (
+    <div className="flex flex-col gap-1 border-t pt-3" style={{ borderColor: 'var(--border-subtle)' }}>
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={enabled ?? false}
+          disabled={enabled === null || saving}
+          onChange={(event): void => onToggle(event.target.checked)}
+          className="size-4 rounded border"
+          style={{ borderColor: 'var(--border-subtle)', accentColor: 'var(--color-blue-500)' }}
+        />
+        <span style={TYPE.body}>On-demand meeting join</span>
+      </label>
+      <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+        When on, staff can paste a meeting link and have Gracie join and record it immediately.
+        Independent of the auto-join switch — this is an explicit, per-meeting action.
+      </span>
+      {note !== null ? (
+        <span role="alert" style={{ ...TYPE.label, color: 'var(--color-red-600)' }}>
+          {note}
+        </span>
+      ) : null}
+    </div>
   );
 }
 

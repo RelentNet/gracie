@@ -10,7 +10,8 @@
     "./types": "./src/types/index.ts",
     "./constants": "./src/constants/index.ts",
     "./storage": "./src/storage/index.ts",
-    "./extract": "./src/extract/index.ts"
+    "./extract": "./src/extract/index.ts",
+    "./recall": "./src/recall/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
