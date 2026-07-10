@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import { getLogtoContext } from '@logto/next/server-actions';
 
+import { NotificationBell } from '@/components/NotificationBell';
 import { Sidebar } from '@/components/Sidebar';
 import { isLogtoConfigured, logtoConfig } from '@/lib/logto';
 
@@ -25,7 +26,15 @@ export default async function AppLayout({
   return (
     <div className="flex min-h-dvh">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto p-8">{children}</main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header
+          className="flex h-14 shrink-0 items-center justify-end border-b bg-white px-8"
+          style={{ borderColor: 'var(--border-subtle)' }}
+        >
+          <NotificationBell />
+        </header>
+        <main className="flex-1 overflow-y-auto p-8">{children}</main>
+      </div>
     </div>
   );
 }

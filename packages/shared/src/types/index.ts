@@ -10,3 +10,4 @@ export * from './task.js';
 export * from './file.js';
 export * from './system.js';
 export * from './job.js';
+export * from './daily-sync.js';

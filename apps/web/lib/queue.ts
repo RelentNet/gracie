@@ -16,6 +16,7 @@ import {
   JOB_NAMES,
   QUEUE_NAMES,
   type CalendarScanJobPayload,
+  type DailySyncJobPayload,
   type GenerationJobPayload,
   type IngestJobPayload,
   type KbIngestJobPayload,
@@ -36,6 +37,7 @@ let kbIngestQueue: Queue<KbIngestJobPayload> | undefined;
 let generateQueue: Queue<GenerationJobPayload> | undefined;
 let calendarScanQueue: Queue<CalendarScanJobPayload> | undefined;
 let relationshipHealthQueue: Queue<RelationshipHealthJobPayload> | undefined;
+let dailySyncQueue: Queue<DailySyncJobPayload> | undefined;
 
 function getConnection(): Redis {
   if (connection !== undefined) return connection;
@@ -133,5 +135,24 @@ export async function enqueueRelationshipHealth(clientId: string, source: string
     { source, clientId },
     { jobId: `health:${clientId}` },
   );
+  return job.id ?? '';
+}
+
+function getDailySyncQueue(): Queue<DailySyncJobPayload> {
+  if (dailySyncQueue !== undefined) return dailySyncQueue;
+  dailySyncQueue = new Queue<DailySyncJobPayload>(QUEUE_NAMES.dailySync, {
+    connection: getConnection(),
+    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+  });
+  return dailySyncQueue;
+}
+
+/**
+ * Enqueue a one-off daily-sync run ("Generate now", P7). A `source: 'manual'` run
+ * bypasses the 6 AM ET send-hour gate and runs immediately (the worker consumes the
+ * SAME repeatable schedule otherwise). Returns the BullMQ job id.
+ */
+export async function enqueueDailySync(payload: DailySyncJobPayload): Promise<string> {
+  const job = await getDailySyncQueue().add(JOB_NAMES.dailySync, payload);
   return job.id ?? '';
 }

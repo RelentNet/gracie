@@ -51,10 +51,18 @@ import {
   resolveMeetingOrgs,
   type OrgDomainEntry,
 } from '../lib/calendar-match.js';
+import { emailAdminsForAlert } from '../lib/email.js';
 import { createGraphClient, getGraphConfig, type GraphEvent } from '../lib/graph.js';
 
 type MeetingInsert = Database['public']['Tables']['meetings']['Insert'];
 type MeetingUpdate = Database['public']['Tables']['meetings']['Update'];
+type NotificationInsert = Database['public']['Tables']['notifications']['Insert'];
+
+/** A user whose calendar connection flipped true → false this sweep. */
+interface DisconnectedUser {
+  readonly id: string;
+  readonly name: string;
+}
 
 /** Cast typed external attendees to the raw jsonb column type for a DB write. */
 function toJson(attendees: readonly ExternalAttendee[]): Json {
@@ -151,7 +159,8 @@ export function createCalendarScanProcessor(
     const members = await graph.listGroupMembers();
     const memberEmails = new Set(members.map((m) => m.email));
     const users = await loadUsers(db);
-    await syncCalendarConnected(db, memberEmails, log);
+    const disconnected = await syncCalendarConnected(db, memberEmails, log);
+    if (disconnected.length > 0) await notifyCalendarDisconnects(db, disconnected, log);
 
     // 2. Matcher context: internal domains, domain→org map, GA internal org.
     const ctx = await loadScanContext(db);
@@ -371,14 +380,17 @@ async function loadUsers(db: ServerClient): Promise<UserLite[]> {
 /**
  * Sync `users.calendar_connected` to reflect group membership (D5: "connected" =
  * being in the access group). Only writes rows whose flag actually changed.
+ * Returns the users whose connection flipped true → false this sweep (a real
+ * "calendar disconnected" event) so the caller can alert (P7 §5).
  */
 async function syncCalendarConnected(
   db: ServerClient,
   memberEmails: ReadonlySet<string>,
   log: FastifyBaseLogger,
-): Promise<void> {
-  const { data, error } = await db.from('users').select('id, email, calendar_connected');
+): Promise<DisconnectedUser[]> {
+  const { data, error } = await db.from('users').select('id, name, email, calendar_connected');
   if (error !== null) throw new Error(`calendar-scan: load connection flags: ${error.message}`);
+  const disconnected: DisconnectedUser[] = [];
   let changed = 0;
   for (const row of data ?? []) {
     const desired = memberEmails.has(row.email.trim().toLowerCase());
@@ -387,9 +399,44 @@ async function syncCalendarConnected(
     if (patched.error !== null) {
       throw new Error(`calendar-scan: update calendar_connected: ${patched.error.message}`);
     }
+    if (!desired && row.calendar_connected) disconnected.push({ id: row.id, name: row.name });
     changed += 1;
   }
   if (changed > 0) log.info({ changed }, 'calendar-scan: synced calendar_connected');
+  return disconnected;
+}
+
+/**
+ * A member's calendar disconnected (they left the access group): raise a
+ * `calendar_disconnect` in-app notification for that user and email the Admins
+ * (allowlist-gated, best-effort) — P7 §5.
+ */
+async function notifyCalendarDisconnects(
+  db: ServerClient,
+  disconnected: readonly DisconnectedUser[],
+  log: FastifyBaseLogger,
+): Promise<void> {
+  const rows: NotificationInsert[] = disconnected.map((u) => ({
+    user_id: u.id,
+    type: 'calendar_disconnect',
+    title: 'Your calendar is no longer connected',
+    body: 'Gracie stopped syncing your calendar (you left the calendar access group). Re-join it to resume automated meeting capture.',
+    link: '/calendar',
+  }));
+  const { error } = await db.from('notifications').insert(rows);
+  if (error !== null) log.warn({ err: error.message }, 'calendar-scan: could not insert calendar_disconnect notifications');
+
+  for (const u of disconnected) {
+    await emailAdminsForAlert(
+      {
+        type: 'calendar_disconnect',
+        title: `${u.name}'s calendar disconnected`,
+        body: `${u.name} is no longer in the calendar access group; Gracie stopped syncing their calendar.`,
+        link: '/calendar',
+      },
+      { logger: log, db },
+    );
+  }
 }
 
 /**

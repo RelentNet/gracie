@@ -26,6 +26,8 @@ export const QUEUE_NAMES = {
   botDispatch: 'bot-dispatch',
   /** Relationship-health recompute: score signals → clients.relationship_health + trend (P2.1). */
   relationshipHealth: 'relationship-health',
+  /** Daily sync: 6 AM ET digest + that day's pre-meeting briefs → email active staff (P7). */
+  dailySync: 'daily-sync',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -43,6 +45,8 @@ export const JOB_NAMES = {
   relationshipHealthSweep: 'relationship-health.sweep',
   /** Single-client recompute enqueued on events (meeting ingest, task/note change). */
   relationshipHealthClient: 'relationship-health.client',
+  /** Daily-sync run — gather digest + briefs, then email active staff (P7). */
+  dailySync: 'daily-sync.run',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
@@ -58,6 +62,7 @@ export const JOB_SCHEDULER_IDS = {
   calendarScan: 'calendar-scan.every-30m',
   botDispatch: 'bot-dispatch.every-60s',
   relationshipHealth: 'relationship-health.nightly',
+  dailySync: 'daily-sync.every-15m',
 } as const;
 
 /** Heartbeat repeat interval (ms) — ~every 30s. A liveness signal, not real work. */
@@ -91,3 +96,12 @@ export const BOT_DISPATCH_INTERVAL_MS = 60_000;
  * or notes changed), so the nightly run is the backstop, not the only trigger.
  */
 export const RELATIONSHIP_HEALTH_INTERVAL_MS = 24 * 60 * 60_000;
+
+/**
+ * Daily-sync sweep interval (ms) — ~every 15 min (P7). The repeatable fires around
+ * the clock but the processor only does work during the configured send hour in ET
+ * (default 6 AM, `settings.daily_sync_hour_et`) and is idempotent per `sync_date`,
+ * so the first sweep in that hour sends and later sweeps no-op. A `source='manual'`
+ * run bypasses the hour gate (for testing / an Admin "Generate now").
+ */
+export const DAILY_SYNC_INTERVAL_MS = 15 * 60_000;
