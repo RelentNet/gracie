@@ -132,3 +132,14 @@ export interface DailySyncJobPayload {
    */
   readonly source: string;
 }
+
+/**
+ * Payload for the repeatable contact-suggestions sweep (`QUEUE_NAMES.contactSuggestions`,
+ * phase `CO`). No per-item data — each sweep scans `meetings.external_attendees`, skips
+ * emails already a contact / already a pending-or-dismissed suggestion / free-email, and
+ * upserts pending `contact_suggestions` rows (guessing the org by domain). Idempotent.
+ */
+export interface ContactSuggestionsJobPayload {
+  /** Logical origin — e.g. `'scheduler'` for the repeatable sweep, `'calendar-scan'`. */
+  readonly source: string;
+}

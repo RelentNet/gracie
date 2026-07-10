@@ -25,8 +25,10 @@ export const PERMISSIONS = [
   'ai.chat',
   'notes.read',
   'task.completeOwn',
+  'contacts.view',
   // --- editor (admin + standard) ---
   'file.upload',
+  'contacts.edit',
   'folder.manage',
   'file.move',
   'file.deleteOwn',
@@ -66,9 +68,12 @@ export const PERMISSION_MATRIX: Readonly<
   'ai.chat': { admin: true, standard: true, viewer: true },
   'notes.read': { admin: true, standard: true, viewer: true },
   'task.completeOwn': { admin: true, standard: true, viewer: true },
+  // Contacts & Org Charts (phase CO): read = all roles; edit = editor tier.
+  'contacts.view': { admin: true, standard: true, viewer: true },
 
   // editor — admin + standard
   'file.upload': { admin: true, standard: true, viewer: false },
+  'contacts.edit': { admin: true, standard: true, viewer: false },
   'folder.manage': { admin: true, standard: true, viewer: false },
   'file.move': { admin: true, standard: true, viewer: false },
   'file.deleteOwn': { admin: true, standard: true, viewer: false },
