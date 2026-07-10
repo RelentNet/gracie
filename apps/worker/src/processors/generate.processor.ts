@@ -35,6 +35,7 @@ import {
 import { putObject } from '@gracie/shared/storage';
 
 import { chunkText } from '../lib/chunk.js';
+import { emailAdminsForAlert } from '../lib/email.js';
 import { generateDocuments, type GeneratedDocument } from '../lib/generate.js';
 import { fetchRecallTranscript } from '../lib/recall.js';
 
@@ -521,7 +522,7 @@ export function createGenerateProcessor(
       const message = error instanceof Error ? error.message : String(error);
       log.error({ err: message, attempt: job.attemptsMade + 1, isLastAttempt }, 'generate failed');
       if (isLastAttempt) {
-        await markRunFailed(db, meetingId, startedAt, message).catch((e: unknown) =>
+        await markRunFailed(db, meetingId, startedAt, message, log).catch((e: unknown) =>
           log.error({ err: e }, 'generate: failed to record failure state'),
         );
       }
@@ -548,12 +549,17 @@ async function notifyAttendees(
   if (error !== null) throw new Error(`generate: insert notifications: ${error.message}`);
 }
 
-/** On the final failed attempt: flag the meeting + write a failed `pipeline_runs` row. */
+/**
+ * On the final failed attempt: flag the meeting, write a failed `pipeline_runs`
+ * row, raise a `pipeline_failed` in-app notification to the meeting lead (else
+ * attendees), and email the Admins (allowlist-gated, best-effort) — P7 §5.
+ */
 async function markRunFailed(
   db: ServerClient,
   meetingId: string,
   startedAt: Date,
   message: string,
+  log: FastifyBaseLogger,
 ): Promise<void> {
   const status: PipelineStatus = 'needs_attention';
   await db.from('meetings').update({ pipeline_status: status }).eq('id', meetingId);
@@ -568,4 +574,32 @@ async function markRunFailed(
     status: 'failed',
     error_message: message.slice(0, 1000),
   });
+
+  // Alert: in-app to the relevant user(s) + email to admins.
+  const { data: meeting } = await db
+    .from('meetings')
+    .select('title, meeting_lead_user_id, attendee_user_ids, client_id')
+    .eq('id', meetingId)
+    .maybeSingle();
+  const label = meeting?.title ?? 'a meeting';
+  const link = meeting?.client_id != null ? `/clients/${meeting.client_id}` : '/pipeline';
+  const recipients =
+    meeting?.meeting_lead_user_id != null
+      ? [meeting.meeting_lead_user_id]
+      : meeting?.attendee_user_ids ?? [];
+  if (recipients.length > 0) {
+    const rows: NotificationInsert[] = recipients.map((userId) => ({
+      user_id: userId,
+      type: 'pipeline_failed',
+      title: `Generation failed for ${label}`,
+      body: 'The meeting pipeline failed after retries. Review or re-run it from the Pipeline.',
+      link,
+    }));
+    const { error } = await db.from('notifications').insert(rows);
+    if (error !== null) log.warn({ err: error.message }, 'generate: could not insert pipeline_failed notification');
+  }
+  await emailAdminsForAlert(
+    { type: 'pipeline_failed', title: `Generation failed for ${label}`, body: message.slice(0, 300), link },
+    { logger: log, db },
+  );
 }

@@ -5,8 +5,9 @@
  * gets an in-app `needs_attention` notification so they can dismiss or upload the
  * transcript manually.
  *
- * P7 follow-up (TODO): docs/06 §8 also calls for a Resend email alert to the lead.
- * Resend is not configured until P7 — this does in-app + log only for now.
+ * P7: in addition to the in-app `needs_attention` to the lead, each newly-flagged
+ * meeting emails the Admins (allowlist-gated) via `emailAdminsForAlert` (§5). The
+ * in-app row still goes to the relevant user; only the email is admin-scoped.
  */
 import type { Job, Processor } from 'bullmq';
 import type { FastifyBaseLogger } from 'fastify';
@@ -14,6 +15,8 @@ import type { FastifyBaseLogger } from 'fastify';
 import { getServerClient } from '@gracie/db';
 import type { Database, ServerClient } from '@gracie/db';
 import { TRANSCRIPT_TIMEOUT_MINUTES, type WatchdogJobPayload } from '@gracie/shared';
+
+import { emailAdminsForAlert } from '../lib/email.js';
 
 type NotificationInsert = Database['public']['Tables']['notifications']['Insert'];
 
@@ -91,6 +94,16 @@ export function createWatchdogProcessor(
         throw new Error(`watchdog: flag meeting ${meeting.id}: ${patched.error.message}`);
       }
       await notifyLead(db, meeting);
+      const label = meeting.title ?? 'a meeting';
+      await emailAdminsForAlert(
+        {
+          type: 'needs_attention',
+          title: `Transcript overdue for ${label}`,
+          body: `No transcript arrived within ${TRANSCRIPT_TIMEOUT_MINUTES} minutes. Review or upload it manually.`,
+          link: meeting.client_id !== null ? `/clients/${meeting.client_id}` : null,
+        },
+        { logger: log, db },
+      );
       flagged += 1;
       log.warn({ meetingId: meeting.id }, 'watchdog: transcript overdue → needs_attention');
     }

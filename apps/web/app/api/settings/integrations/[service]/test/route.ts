@@ -24,6 +24,16 @@ async function testConnection(service: IntegrationKey, key: string): Promise<Tes
       ? { ok: true, message: 'OpenAI key is valid.' }
       : { ok: false, message: `OpenAI rejected the key (HTTP ${res.status}).` };
   }
+  if (service === 'resend') {
+    // Lightweight live probe: listing domains validates the key without sending
+    // any email (P7 §4). A valid key returns 200; an invalid one 401/403.
+    const res = await fetch('https://api.resend.com/domains', {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    return res.ok
+      ? { ok: true, message: 'Resend key is valid.' }
+      : { ok: false, message: `Resend rejected the key (HTTP ${res.status}).` };
+  }
   // Other services: a live probe lands with each provider's phase. For now the
   // stored key is accepted as configured.
   return {

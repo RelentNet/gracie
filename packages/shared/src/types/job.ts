@@ -117,3 +117,18 @@ export interface RelationshipHealthJobPayload {
   /** A single client to recompute; omit for the nightly all-clients sweep. */
   readonly clientId?: string;
 }
+
+/**
+ * Payload for the repeatable daily-sync job (`QUEUE_NAMES.dailySync`, P7). The
+ * gated sweep gathers the morning digest + that day's pre-meeting briefs and emails
+ * all active staff (allowlist-gated). No per-run data — the processor reads
+ * everything from the DB and is idempotent per `sync_date`.
+ */
+export interface DailySyncJobPayload {
+  /**
+   * Logical origin — `'scheduler'` for the repeatable sweep (honours the ET send-hour
+   * gate + `daily_sync_enabled`), or `'manual'` for an Admin "Generate now" / test run,
+   * which bypasses the gate and runs immediately.
+   */
+  readonly source: string;
+}

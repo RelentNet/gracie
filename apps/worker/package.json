@@ -9,7 +9,8 @@
     "start": "tsx --env-file-if-exists=.env.local src/index.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --max-warnings 0"
+    "lint": "eslint . --max-warnings 0",
+    "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@bull-board/api": "^6.7.0",
