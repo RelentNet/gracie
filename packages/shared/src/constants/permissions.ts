@@ -26,6 +26,7 @@ export const PERMISSIONS = [
   'notes.read',
   'task.completeOwn',
   'contacts.view',
+  'automations.view',
   // --- editor (admin + standard) ---
   'file.upload',
   'contacts.edit',
@@ -35,6 +36,7 @@ export const PERMISSIONS = [
   'task.edit',
   'notes.add',
   'task.updateAny',
+  'automations.edit',
   // --- admin only ---
   'folder.viewRestricted',
   'finance.view',
@@ -45,6 +47,7 @@ export const PERMISSIONS = [
   'pipeline.triggerManual',
   'pipeline.viewErrors',
   'calendar.configure',
+  'automations.externalSend',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -70,6 +73,9 @@ export const PERMISSION_MATRIX: Readonly<
   'task.completeOwn': { admin: true, standard: true, viewer: true },
   // Contacts & Org Charts (phase CO): read = all roles; edit = editor tier.
   'contacts.view': { admin: true, standard: true, viewer: true },
+  // Automations (P8): view = all roles (viewer read-only); the row-scope (own vs all)
+  // is enforced in the data layer, not here.
+  'automations.view': { admin: true, standard: true, viewer: true },
 
   // editor — admin + standard
   'file.upload': { admin: true, standard: true, viewer: false },
@@ -80,6 +86,8 @@ export const PERMISSION_MATRIX: Readonly<
   'task.edit': { admin: true, standard: true, viewer: false },
   'notes.add': { admin: true, standard: true, viewer: false },
   'task.updateAny': { admin: true, standard: true, viewer: false },
+  // Automations (P8): create/manage own automations (Confirm/run-now/pause/delete).
+  'automations.edit': { admin: true, standard: true, viewer: false },
 
   // admin only
   'folder.viewRestricted': { admin: true, standard: false, viewer: false },
@@ -91,6 +99,8 @@ export const PERMISSION_MATRIX: Readonly<
   'pipeline.triggerManual': { admin: true, standard: false, viewer: false },
   'pipeline.viewErrors': { admin: true, standard: false, viewer: false },
   'calendar.configure': { admin: true, standard: false, viewer: false },
+  // Automations (P8): the customer-contact exception — approve an EXTERNAL send.
+  'automations.externalSend': { admin: true, standard: false, viewer: false },
 } as const;
 
 /** Returns true if `role` holds `permission`. */

@@ -159,6 +159,159 @@ export type Database = {
           },
         ]
       }
+      automation_requests: {
+        Row: {
+          created_at: string
+          id: string
+          intent: string
+          notes: string | null
+          requested_by_user_id: string | null
+          resolved_at: string | null
+          resolved_by_user_id: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          intent: string
+          notes?: string | null
+          requested_by_user_id?: string | null
+          resolved_at?: string | null
+          resolved_by_user_id?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          intent?: string
+          notes?: string | null
+          requested_by_user_id?: string | null
+          resolved_at?: string | null
+          resolved_by_user_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_requests_requested_by_user_id_fkey"
+            columns: ["requested_by_user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_requests_resolved_by_user_id_fkey"
+            columns: ["resolved_by_user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_runs: {
+        Row: {
+          automation_id: string
+          created_at: string
+          detail: string | null
+          external_recipients: string[]
+          finished_at: string | null
+          id: string
+          started_at: string
+          status: string
+        }
+        Insert: {
+          automation_id: string
+          created_at?: string
+          detail?: string | null
+          external_recipients?: string[]
+          finished_at?: string | null
+          id?: string
+          started_at?: string
+          status: string
+        }
+        Update: {
+          automation_id?: string
+          created_at?: string
+          detail?: string | null
+          external_recipients?: string[]
+          finished_at?: string | null
+          id?: string
+          started_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_runs_automation_id_fkey"
+            columns: ["automation_id"]
+            referencedRelation: "automations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automations: {
+        Row: {
+          confirmed_at: string | null
+          created_at: string
+          enabled: boolean
+          has_external_recipient: boolean
+          id: string
+          intent: string | null
+          last_run_at: string | null
+          last_run_status: string | null
+          next_run_at: string | null
+          owner_user_id: string
+          params: Json
+          recipients: Json
+          schedule: Json
+          status: string
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          confirmed_at?: string | null
+          created_at?: string
+          enabled?: boolean
+          has_external_recipient?: boolean
+          id?: string
+          intent?: string | null
+          last_run_at?: string | null
+          last_run_status?: string | null
+          next_run_at?: string | null
+          owner_user_id: string
+          params?: Json
+          recipients?: Json
+          schedule?: Json
+          status?: string
+          title: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          confirmed_at?: string | null
+          created_at?: string
+          enabled?: boolean
+          has_external_recipient?: boolean
+          id?: string
+          intent?: string | null
+          last_run_at?: string | null
+          last_run_status?: string | null
+          next_run_at?: string | null
+          owner_user_id?: string
+          params?: Json
+          recipients?: Json
+          schedule?: Json
+          status?: string
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automations_owner_user_id_fkey"
+            columns: ["owner_user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_aliases: {
         Row: {
           alias: string
@@ -1513,6 +1666,7 @@ export type Database = {
         | "kb_expiring"
         | "calendar_disconnect"
         | "pipeline_failed"
+        | "automation"
       pipeline_run_source: "recall" | "manual_upload"
       pipeline_run_status: "success" | "failed" | "partial"
       pipeline_status:
@@ -1705,6 +1859,7 @@ export const Constants = {
         "kb_expiring",
         "calendar_disconnect",
         "pipeline_failed",
+        "automation",
       ],
       pipeline_run_source: ["recall", "manual_upload"],
       pipeline_run_status: ["success", "failed", "partial"],

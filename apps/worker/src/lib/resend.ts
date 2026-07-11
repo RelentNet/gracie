@@ -119,6 +119,19 @@ export interface SendEmailInput {
   readonly html: string;
   /** Optional plain-text alternative (recommended for deliverability). */
   readonly text?: string;
+  /**
+   * The customer-contact EXCEPTION (P8 §2b). Addresses here — and ONLY these — are
+   * permitted to receive this email even though they are NOT on the GA allowlist.
+   * The caller must have already gated this on ALL of: an explicitly user-initiated
+   * automation, the `automations_external_send_enabled` admin master switch, an
+   * `automations.externalSend` (admin) confirmer, and an explicit extra confirmation
+   * — and MUST audit the delivered externals into `automation_runs.external_recipients`.
+   *
+   * Mechanism (never a second email path): the allowlist filter stays pure; this set
+   * merely rescues matching addresses from `dropped` into the send. Anything not in
+   * this set is still dropped — the GA floor holds for every other recipient.
+   */
+  readonly approvedExternalRecipients?: readonly string[];
 }
 
 /** Injectable dependencies for {@link sendEmail} (all optional; real defaults). */
@@ -136,10 +149,16 @@ export interface SendEmailDeps {
 export interface SendEmailResult {
   /** The Resend message id, or null when the send was skipped (no allowed recipient). */
   readonly id: string | null;
-  /** Recipients the email was actually sent to (all allowlisted). */
+  /** Recipients the email was actually sent to (allowlisted + approved externals). */
   readonly delivered: string[];
-  /** Recipients dropped by the allowlist. */
+  /** Recipients dropped by the allowlist (excludes any approved externals). */
   readonly dropped: string[];
+  /**
+   * Externals delivered under the §2b customer-contact exception — the caller MUST
+   * write these to `automation_runs.external_recipients` for audit. Empty for every
+   * normal (internal-only) send.
+   */
+  readonly externalDelivered: string[];
 }
 
 /**
@@ -154,7 +173,22 @@ export async function sendEmail(
 ): Promise<SendEmailResult> {
   const { logger } = deps;
   const allowedDomains = deps.allowedDomains ?? (await loadAllowedDomains());
-  const { allowed, dropped } = filterAllowedRecipients(input.to, allowedDomains);
+  const filtered = filterAllowedRecipients(input.to, allowedDomains);
+  const allowed = filtered.allowed;
+
+  // §2b customer-contact exception: rescue ONLY the explicitly-approved externals
+  // from the dropped set. Everything else stays dropped — the GA floor is intact.
+  const approvedSet = new Set(
+    (input.approvedExternalRecipients ?? [])
+      .map((a) => a.trim().toLowerCase())
+      .filter((a) => a !== ''),
+  );
+  const approvedExternal: string[] = [];
+  const dropped: string[] = [];
+  for (const recipient of filtered.dropped) {
+    if (approvedSet.has(recipient.trim().toLowerCase())) approvedExternal.push(recipient);
+    else dropped.push(recipient);
+  }
 
   for (const recipient of dropped) {
     logger.warn(
@@ -162,13 +196,20 @@ export async function sendEmail(
       'sendEmail: dropped non-allowlisted recipient (internal/team email only)',
     );
   }
+  for (const recipient of approvedExternal) {
+    logger.warn(
+      { recipient, subject: input.subject },
+      'sendEmail: EXTERNAL recipient approved under the customer-contact exception (audited)',
+    );
+  }
 
-  if (allowed.length === 0) {
+  const finalRecipients = [...allowed, ...approvedExternal];
+  if (finalRecipients.length === 0) {
     logger.info(
       { subject: input.subject, droppedCount: dropped.length },
       'sendEmail: no allowlisted recipients — skipping Resend send',
     );
-    return { id: null, delivered: [], dropped };
+    return { id: null, delivered: [], dropped, externalDelivered: [] };
   }
 
   const apiKey = deps.apiKey ?? (await getCredential('resend'));
@@ -186,7 +227,7 @@ export async function sendEmail(
     },
     body: JSON.stringify({
       from: input.from,
-      to: allowed,
+      to: finalRecipients,
       subject: input.subject,
       html: input.html,
       ...(input.text !== undefined ? { text: input.text } : {}),
@@ -199,6 +240,9 @@ export async function sendEmail(
   }
 
   const data = (await res.json()) as { id?: string };
-  logger.info({ id: data.id ?? null, delivered: allowed.length, dropped: dropped.length }, 'sendEmail: sent');
-  return { id: data.id ?? null, delivered: allowed, dropped };
+  logger.info(
+    { id: data.id ?? null, delivered: finalRecipients.length, dropped: dropped.length, external: approvedExternal.length },
+    'sendEmail: sent',
+  );
+  return { id: data.id ?? null, delivered: finalRecipients, dropped, externalDelivered: approvedExternal };
 }

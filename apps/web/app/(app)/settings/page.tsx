@@ -6,6 +6,7 @@ import { TYPE } from '@/lib/typography';
 import { useAuth } from '@/lib/auth';
 
 import { ApiSettingsPanel } from './ApiSettingsPanel';
+import { AutomationsSettingsPanel } from './AutomationsSettingsPanel';
 import { BotSettingsPanel } from './BotSettingsPanel';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel';
 import { UsersPanel } from './UsersPanel';
@@ -68,6 +69,14 @@ export default function SettingsPage(): React.JSX.Element {
           storageKey="settings-notifications"
         >
           <NotificationSettingsPanel />
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          title="Automations"
+          description="The customer-contact master switch for Gracie's automations (off by default)."
+          storageKey="settings-automations"
+        >
+          <AutomationsSettingsPanel />
         </CollapsibleSection>
 
         <CollapsibleSection

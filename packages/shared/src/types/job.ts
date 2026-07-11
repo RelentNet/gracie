@@ -143,3 +143,20 @@ export interface ContactSuggestionsJobPayload {
   /** Logical origin — e.g. `'scheduler'` for the repeatable sweep, `'calendar-scan'`. */
   readonly source: string;
 }
+
+/**
+ * Payload for the automations engine (`QUEUE_NAMES.automations`, P8). Two shapes
+ * share the queue, mirroring relationship-health:
+ *  - the repeatable DUE-SWEEP (`automationId` omitted) selects every enabled+active
+ *    automation whose `next_run_at <= now`, runs each, writes an `automation_runs`
+ *    audit row, and advances `next_run_at`;
+ *  - a single RUN-NOW job (`automationId` set, `source: 'manual'`) runs exactly one
+ *    automation immediately regardless of its schedule (the GUI "Run now" + a `once`
+ *    confirm that should fire straight away).
+ */
+export interface AutomationJobPayload {
+  /** Logical origin — `'scheduler'` for the sweep, `'manual'` for a Run-now/confirm. */
+  readonly source: string;
+  /** A single automation to run now; omit for the due-sweep. */
+  readonly automationId?: string;
+}

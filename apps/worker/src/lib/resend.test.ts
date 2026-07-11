@@ -117,6 +117,38 @@ test('sendEmail no-ops (never calls Resend) when ALL recipients are external', a
   assert.deepEqual(result.dropped, ['client@va.gov', 'someone@gmail.com']);
 });
 
+test('sendEmail rescues ONLY approved externals (§2b), still drops the rest', async () => {
+  const { fetchImpl, calls } = makeFetchStub();
+  const result = await sendEmail(
+    {
+      ...baseInput(['client@va.gov', 'lead@graceandassociates.com', 'someone@gmail.com']),
+      // Only the va.gov client is pre-approved; gmail is NOT and must still drop.
+      approvedExternalRecipients: ['CLIENT@va.gov'],
+    },
+    { logger: silentLogger, apiKey: 'key_test', allowedDomains: GA, fetchImpl },
+  );
+
+  assert.equal(calls.length, 1, 'Resend called exactly once');
+  // GA internal + the one approved external are sent; gmail is not.
+  assert.deepEqual(calls[0]?.body.to, ['lead@graceandassociates.com', 'client@va.gov']);
+  assert.deepEqual(result.delivered, ['lead@graceandassociates.com', 'client@va.gov']);
+  assert.deepEqual(result.externalDelivered, ['client@va.gov'], 'audited externals');
+  assert.deepEqual(result.dropped, ['someone@gmail.com'], 'non-approved external still dropped');
+});
+
+test('sendEmail without approvals leaves the GA floor intact (no externalDelivered)', async () => {
+  const { fetchImpl, calls } = makeFetchStub();
+  const result = await sendEmail(baseInput(['client@va.gov', 'lead@graceandassociates.com']), {
+    logger: silentLogger,
+    apiKey: 'key_test',
+    allowedDomains: GA,
+    fetchImpl,
+  });
+  assert.deepEqual(calls[0]?.body.to, ['lead@graceandassociates.com']);
+  assert.deepEqual(result.externalDelivered, [], 'no externals without explicit approval');
+  assert.deepEqual(result.dropped, ['client@va.gov']);
+});
+
 test('sendEmail throws on a non-OK Resend response (so BullMQ retries)', async () => {
   const failing = ((): Promise<Response> =>
     Promise.resolve({
