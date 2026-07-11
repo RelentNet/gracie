@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 
 import { ApiSettingsPanel } from './ApiSettingsPanel';
 import { BotSettingsPanel } from './BotSettingsPanel';
+import { NotificationSettingsPanel } from './NotificationSettingsPanel';
 import { UsersPanel } from './UsersPanel';
 
 /**
@@ -59,6 +60,14 @@ export default function SettingsPage(): React.JSX.Element {
           storageKey="settings-bot"
         >
           <BotSettingsPanel />
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          title="Notifications"
+          description="Which internal emails Gracie sends. She only ever emails your own team."
+          storageKey="settings-notifications"
+        >
+          <NotificationSettingsPanel />
         </CollapsibleSection>
 
         <CollapsibleSection
