@@ -21,7 +21,7 @@
 import type { Job, Processor } from 'bullmq';
 import type { FastifyBaseLogger } from 'fastify';
 
-import { getCredential, getServerClient } from '@gracie/db';
+import { getBotConfig, getCredential, getServerClient } from '@gracie/db';
 import type { ServerClient } from '@gracie/db';
 import type { BotDispatchJobPayload } from '@gracie/shared';
 
@@ -100,6 +100,11 @@ export function createBotDispatchProcessor(
     }
     const region = process.env.RECALL_REGION;
 
+    // Resolve the meeting-bot appearance/behavior once per sweep (name, avatar,
+    // auto-leave). Admins change these in Settings → Meeting Bot; applied here.
+    const botConfig = await getBotConfig();
+    const botAvatarJpegB64 = botConfig.avatarEnabled ? botConfig.avatarJpegB64 : null;
+
     let dispatched = 0;
     let skippedOptOut = 0;
 
@@ -122,7 +127,14 @@ export function createBotDispatchProcessor(
       if ((claim.data ?? []).length === 0) continue; // already claimed elsewhere
 
       try {
-        const botJobId = await dispatchRecallBot({ meetingUrl: meeting.video_link, apiKey, region });
+        const botJobId = await dispatchRecallBot({
+          meetingUrl: meeting.video_link,
+          apiKey,
+          region,
+          botName: botConfig.name,
+          botAvatarJpegB64,
+          autoLeave: botConfig.autoLeave,
+        });
         const stored = await db.from('meetings').update({ bot_job_id: botJobId }).eq('id', meeting.id);
         if (stored.error !== null) throw new Error(stored.error.message);
         dispatched += 1;

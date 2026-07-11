@@ -1,10 +1,12 @@
 'use client';
 
+import { CollapsibleSection } from '@/components/ui/CollapsibleSection';
 import { ErrorState } from '@/components/ui/StateViews';
 import { TYPE } from '@/lib/typography';
 import { useAuth } from '@/lib/auth';
 
 import { ApiSettingsPanel } from './ApiSettingsPanel';
+import { BotSettingsPanel } from './BotSettingsPanel';
 import { UsersPanel } from './UsersPanel';
 
 /**
@@ -42,18 +44,30 @@ export default function SettingsPage(): React.JSX.Element {
         </p>
       </header>
 
-      <div className="flex flex-col gap-3">
-        <h2 style={TYPE.sectionHeader}>Users</h2>
-        <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          Manage who is an admin, standard, or viewer, and offboard accounts. Admins can change any
-          user&rsquo;s role.
-        </p>
-        <UsersPanel />
-      </div>
+      <div className="flex flex-col gap-4">
+        <CollapsibleSection
+          title="Users"
+          description="Manage who is an admin, standard, or viewer, and offboard accounts."
+          storageKey="settings-users"
+        >
+          <UsersPanel />
+        </CollapsibleSection>
 
-      <div className="flex flex-col gap-3">
-        <h2 style={TYPE.sectionHeader}>API Settings</h2>
-        <ApiSettingsPanel />
+        <CollapsibleSection
+          title="Meeting Bot"
+          description="How Gracie appears and behaves when she joins a call — name, image tile, and auto-leave."
+          storageKey="settings-bot"
+        >
+          <BotSettingsPanel />
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          title="API Settings"
+          description="Third-party integration keys. Encrypted at rest and never displayed."
+          storageKey="settings-api"
+        >
+          <ApiSettingsPanel />
+        </CollapsibleSection>
       </div>
     </section>
   );
