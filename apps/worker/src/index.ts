@@ -18,6 +18,7 @@ import { loadEnv } from './lib/env.js';
 import { createRedisConnection } from './lib/redis.js';
 import { createBotDispatchProcessor } from './processors/bot-dispatch.processor.js';
 import { createCalendarScanProcessor } from './processors/calendar-scan.processor.js';
+import { createContactSuggestionsProcessor } from './processors/contact-suggestions.processor.js';
 import { createDailySyncProcessor } from './processors/daily-sync.processor.js';
 import { createGenerateProcessor } from './processors/generate.processor.js';
 import { createHeartbeatProcessor } from './processors/heartbeat.processor.js';
@@ -27,6 +28,10 @@ import { createRelationshipHealthProcessor } from './processors/relationship-hea
 import { createWatchdogProcessor } from './processors/watchdog.processor.js';
 import { createBotDispatchQueue, scheduleBotDispatch } from './queues/bot-dispatch.queue.js';
 import { createCalendarScanQueue, scheduleCalendarScan } from './queues/calendar-scan.queue.js';
+import {
+  createContactSuggestionsQueue,
+  scheduleContactSuggestions,
+} from './queues/contact-suggestions.queue.js';
 import { createDailySyncQueue, scheduleDailySync } from './queues/daily-sync.queue.js';
 import { createWorker } from './queues/factory.js';
 import { createGenerateQueue } from './queues/generate.queue.js';
@@ -95,6 +100,7 @@ async function start(): Promise<void> {
   const botDispatchQueue = createBotDispatchQueue(connection);
   const relationshipHealthQueue = createRelationshipHealthQueue(connection);
   const dailySyncQueue = createDailySyncQueue(connection);
+  const contactSuggestionsQueue = createContactSuggestionsQueue(connection);
 
   /**
    * Best-effort single-client health recompute, deduped by a `health:<clientId>` job
@@ -121,6 +127,7 @@ async function start(): Promise<void> {
       botDispatchQueue,
       relationshipHealthQueue,
       dailySyncQueue,
+      contactSuggestionsQueue,
     ],
   });
 
@@ -216,12 +223,23 @@ async function start(): Promise<void> {
     app.log.error({ jobId: job?.id, err: error }, 'daily-sync job failed');
   });
 
+  // Contact suggestions: nightly scan of meeting external attendees → suggestions inbox (CO).
+  const contactSuggestionsWorker = createWorker(
+    QUEUE_NAMES.contactSuggestions,
+    createContactSuggestionsProcessor(app.log),
+    connection,
+  );
+  contactSuggestionsWorker.on('failed', (job, error) => {
+    app.log.error({ jobId: job?.id, err: error }, 'contact-suggestions job failed');
+  });
+
   await scheduleHeartbeat(heartbeatQueue);
   await scheduleTranscriptWatchdog(watchdogQueue);
   await scheduleCalendarScan(calendarScanQueue);
   await scheduleBotDispatch(botDispatchQueue);
   await scheduleRelationshipHealth(relationshipHealthQueue);
   await scheduleDailySync(dailySyncQueue);
+  await scheduleContactSuggestions(contactSuggestionsQueue);
 
   installShutdown({
     app,
@@ -236,6 +254,7 @@ async function start(): Promise<void> {
       botDispatchQueue,
       relationshipHealthQueue,
       dailySyncQueue,
+      contactSuggestionsQueue,
     ],
     workers: [
       heartbeatWorker,
@@ -247,6 +266,7 @@ async function start(): Promise<void> {
       botDispatchWorker,
       relationshipHealthWorker,
       dailySyncWorker,
+      contactSuggestionsWorker,
     ],
   });
 

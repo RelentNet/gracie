@@ -398,6 +398,189 @@ export type Database = {
         }
         Relationships: []
       }
+      contact_affiliations: {
+        Row: {
+          client_id: string
+          contact_id: string
+          created_at: string
+          ended_on: string | null
+          id: string
+          is_current: boolean
+          notes: string | null
+          office_id: string | null
+          org_email: string | null
+          org_phone: string | null
+          started_on: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          contact_id: string
+          created_at?: string
+          ended_on?: string | null
+          id?: string
+          is_current?: boolean
+          notes?: string | null
+          office_id?: string | null
+          org_email?: string | null
+          org_phone?: string | null
+          started_on?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          contact_id?: string
+          created_at?: string
+          ended_on?: string | null
+          id?: string
+          is_current?: boolean
+          notes?: string | null
+          office_id?: string | null
+          org_email?: string | null
+          org_phone?: string | null
+          started_on?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_affiliations_client_id_fkey"
+            columns: ["client_id"]
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_affiliations_contact_id_fkey"
+            columns: ["contact_id"]
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_affiliations_office_id_fkey"
+            columns: ["office_id"]
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_suggestions: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          id: string
+          meeting_id: string | null
+          office_id: string | null
+          payload: Json
+          resolved_at: string | null
+          resolved_by_user_id: string | null
+          source: string
+          status: string
+          suggested_domain: string | null
+          suggested_email: string | null
+          suggested_name: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          meeting_id?: string | null
+          office_id?: string | null
+          payload?: Json
+          resolved_at?: string | null
+          resolved_by_user_id?: string | null
+          source: string
+          status?: string
+          suggested_domain?: string | null
+          suggested_email?: string | null
+          suggested_name?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          meeting_id?: string | null
+          office_id?: string | null
+          payload?: Json
+          resolved_at?: string | null
+          resolved_by_user_id?: string | null
+          source?: string
+          status?: string
+          suggested_domain?: string | null
+          suggested_email?: string | null
+          suggested_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_suggestions_client_id_fkey"
+            columns: ["client_id"]
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_suggestions_meeting_id_fkey"
+            columns: ["meeting_id"]
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_suggestions_office_id_fkey"
+            columns: ["office_id"]
+            referencedRelation: "offices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_suggestions_resolved_by_user_id_fkey"
+            columns: ["resolved_by_user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contacts: {
+        Row: {
+          created_at: string
+          created_by_user_id: string | null
+          email: string | null
+          full_name: string
+          id: string
+          linkedin_url: string | null
+          notes: string | null
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id?: string | null
+          email?: string | null
+          full_name: string
+          id?: string
+          linkedin_url?: string | null
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string | null
+          email?: string | null
+          full_name?: string
+          id?: string
+          linkedin_url?: string | null
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_syncs: {
         Row: {
           content: Json
@@ -911,6 +1094,55 @@ export type Database = {
             foreignKeyName: "notifications_user_id_fkey"
             columns: ["user_id"]
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      offices: {
+        Row: {
+          client_id: string
+          created_at: string
+          description: string | null
+          id: string
+          is_key: boolean
+          parent_office_id: string | null
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_key?: boolean
+          parent_office_id?: string | null
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_key?: boolean
+          parent_office_id?: string | null
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offices_client_id_fkey"
+            columns: ["client_id"]
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "offices_parent_office_id_fkey"
+            columns: ["parent_office_id"]
+            referencedRelation: "offices"
             referencedColumns: ["id"]
           },
         ]

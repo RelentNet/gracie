@@ -28,6 +28,8 @@ export const QUEUE_NAMES = {
   relationshipHealth: 'relationship-health',
   /** Daily sync: 6 AM ET digest + that day's pre-meeting briefs → email active staff (P7). */
   dailySync: 'daily-sync',
+  /** Contact suggestions: scan meeting external attendees → upsert `contact_suggestions` (CO). */
+  contactSuggestions: 'contact-suggestions',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -47,6 +49,8 @@ export const JOB_NAMES = {
   relationshipHealthClient: 'relationship-health.client',
   /** Daily-sync run — gather digest + briefs, then email active staff (P7). */
   dailySync: 'daily-sync.run',
+  /** Contact-suggestions sweep — scan external attendees → upsert pending suggestions (CO). */
+  contactSuggestionsSweep: 'contact-suggestions.sweep',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
@@ -63,6 +67,7 @@ export const JOB_SCHEDULER_IDS = {
   botDispatch: 'bot-dispatch.every-60s',
   relationshipHealth: 'relationship-health.nightly',
   dailySync: 'daily-sync.every-15m',
+  contactSuggestions: 'contact-suggestions.nightly',
 } as const;
 
 /** Heartbeat repeat interval (ms) — ~every 30s. A liveness signal, not real work. */
@@ -105,3 +110,11 @@ export const RELATIONSHIP_HEALTH_INTERVAL_MS = 24 * 60 * 60_000;
  * run bypasses the hour gate (for testing / an Admin "Generate now").
  */
 export const DAILY_SYNC_INTERVAL_MS = 15 * 60_000;
+
+/**
+ * Contact-suggestions sweep interval (ms) — ~every 24h (CO). Scans meeting external
+ * attendees and upserts pending `contact_suggestions`. A backstop, not the only
+ * trigger: the same job may also be enqueued after a calendar scan. Idempotent — the
+ * partial unique index + a pre-filter on existing contacts/suggestions prevent dupes.
+ */
+export const CONTACT_SUGGESTIONS_INTERVAL_MS = 24 * 60 * 60_000;

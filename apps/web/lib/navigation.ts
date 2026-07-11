@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   Users,
+  Contact,
   GitBranch,
   FolderOpen,
   ListTodo,
@@ -37,6 +38,8 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Overview', href: '/dashboard', Icon: LayoutDashboard },
   { label: 'Clients', href: '/clients', Icon: Users },
+  // Contacts & Org Charts (phase CO) — people, per-org office hierarchy, suggestions.
+  { label: 'Contacts', href: '/contacts', Icon: Contact, requires: 'contacts.view' },
   { label: 'Pipeline', href: '/pipeline', Icon: GitBranch },
   { label: 'Documents', href: '/documents', Icon: FolderOpen },
   { label: 'Task Board', href: '/tasks', Icon: ListTodo },
