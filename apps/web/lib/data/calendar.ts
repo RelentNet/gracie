@@ -13,7 +13,7 @@
  */
 import 'server-only';
 
-import { getServerClient } from '@gracie/db';
+import { getCredential, getServerClient } from '@gracie/db';
 import type { ServerClient } from '@gracie/db';
 import type {
   AmbiguousMeeting,
@@ -27,8 +27,10 @@ import type {
   ClientCadence,
   ExternalAttendee,
   MeetingOrg,
+  PipelineStatus,
 } from '@gracie/shared';
 import { deriveOrgNameFromDomain, isFreeEmailDomain, parseInternalDomains } from '@gracie/shared';
+import { dispatchRecallBot } from '@gracie/shared/recall';
 
 import { mapExternalAttendees } from '../mappers/meeting.js';
 import { createClient, normalizeDomain } from './clients.js';
@@ -43,6 +45,16 @@ const INTERNAL_DOMAINS_SETTING_KEY = 'internal_email_domains';
  * `BOT_DISPATCH_ENABLED_SETTING_KEY` in bot-dispatch.processor.ts.
  */
 const BOT_DISPATCH_SETTING_KEY = 'calendar_bot_dispatch_enabled';
+
+/**
+ * Global master switch for on-demand meeting join (P4.2). INDEPENDENT of the
+ * auto-dispatch kill-switch above: that gates the AUTOMATIC calendar cron; this
+ * gates the EXPLICIT "paste a link → Gracie joins now" action. Fail-safe OFF —
+ * enabled ONLY when the stored value is exactly the string 'true'; a missing row
+ * or any other value = disabled. Admin flips it on when ready to start using
+ * Recall (matches the cautious bot posture).
+ */
+const MANUAL_JOIN_SETTING_KEY = 'manual_join_enabled';
 
 /** Days per cadence for the overdue calc; `ad_hoc` has no fixed interval. */
 const CADENCE_DAYS: Readonly<Record<ClientCadence, number | null>> = {
@@ -614,6 +626,154 @@ export async function setBotDispatchEnabled(enabled: boolean): Promise<boolean> 
     .upsert({ key: BOT_DISPATCH_SETTING_KEY, value: enabled ? 'true' : 'false' }, { onConflict: 'key' });
   if (error !== null) throw new Error(`setBotDispatchEnabled: ${error.message}`);
   return enabled;
+}
+
+/**
+ * Read the global on-demand-join master switch (P4.2). Enabled ONLY when the
+ * stored value is exactly 'true'; otherwise disabled (fail-safe OFF). Readable by
+ * any authenticated user so the UI can show/hide the "Join a meeting" control;
+ * only Admins may flip it (see `setManualJoinEnabled`).
+ */
+export async function getManualJoinEnabled(): Promise<boolean> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('settings')
+    .select('value')
+    .eq('key', MANUAL_JOIN_SETTING_KEY)
+    .maybeSingle();
+  if (error !== null) throw new Error(`getManualJoinEnabled: ${error.message}`);
+  return data?.value === 'true';
+}
+
+/**
+ * Flip the on-demand-join master switch (Admin-only). Persists the exact strings
+ * 'true'/'false' so the `=== 'true'` read stays fail-safe. Returns the new value.
+ */
+export async function setManualJoinEnabled(enabled: boolean): Promise<boolean> {
+  const db = getServerClient();
+  const { error } = await db
+    .from('settings')
+    .upsert({ key: MANUAL_JOIN_SETTING_KEY, value: enabled ? 'true' : 'false' }, { onConflict: 'key' });
+  if (error !== null) throw new Error(`setManualJoinEnabled: ${error.message}`);
+  return enabled;
+}
+
+/** Input for an on-demand meeting join (P4.2). `clientId` may be any org — a real
+ * `client`/prospect/… OR the GA `internal` org (which sets `is_internal`). */
+export interface JoinMeetingInput {
+  /** Validated join URL (checked by the route before this is called). */
+  readonly url: string;
+  /** Display title; defaults to "Ad-hoc meeting" when blank. */
+  readonly title?: string | null;
+  /** Optional org to link + set as primary; null/absent = unassigned (external). */
+  readonly clientId?: string | null;
+  /** The `users.id` of the staffer who triggered the join (the meeting lead). */
+  readonly leadUserId?: string | null;
+}
+
+/** Summary of a meeting Gracie was dispatched to join (P4.2). */
+export interface JoinedMeeting {
+  readonly meetingId: string;
+  readonly title: string;
+  readonly dateTime: string;
+  readonly botDispatched: boolean;
+  readonly pipelineStatus: PipelineStatus;
+}
+
+/**
+ * On-demand meeting join (P4.2): create a `source: 'manual'` meeting NOW and
+ * dispatch a Recall bot to it SYNCHRONOUSLY, so the caller gets instant success/
+ * failure. Deliberately BYPASSES the auto kill-switch AND the bot-eligibility
+ * filter (internal/client-linked) — this is an explicit human action, gated by
+ * the `manual_join_enabled` master switch + the UI confirmation at the route/UI
+ * layer, not by the automatic-dispatch rules.
+ *
+ * Fail-safe: if the Recall key is missing or dispatch throws, the just-created
+ * meeting row is deleted (rolled back, cascading its `meeting_clients` link) and
+ * the error is re-thrown for the UI. The completed recording then flows through
+ * the EXISTING P5b webhook → generation pipeline (matched by `bot_job_id`), so it
+ * yields the same notes/docs/tasks as a calendar meeting — no downstream changes.
+ */
+export async function joinMeetingNow(input: JoinMeetingInput): Promise<JoinedMeeting> {
+  const db = getServerClient();
+  const url = input.url.trim();
+  const title = (input.title ?? '').trim() !== '' ? (input.title as string).trim() : 'Ad-hoc meeting';
+  const clientId = input.clientId ?? null;
+
+  // Resolve the chosen org (if any). The GA `internal` org marks the meeting
+  // internal; every other party type is an external meeting.
+  let isInternal = false;
+  if (clientId !== null) {
+    const orgRes = await db.from('clients').select('id, type').eq('id', clientId).maybeSingle();
+    if (orgRes.error !== null) throw new Error(`joinMeetingNow: ${orgRes.error.message}`);
+    if (orgRes.data === null) throw new Error('Unknown client');
+    isInternal = orgRes.data.type === 'internal';
+  }
+
+  const dateTime = new Date().toISOString();
+  const inserted = await db
+    .from('meetings')
+    .insert({
+      title,
+      date_time: dateTime,
+      video_link: url,
+      source: 'manual',
+      pipeline_status: 'scheduled',
+      bot_dispatched: false,
+      is_internal: isInternal,
+      client_id: clientId,
+      meeting_lead_user_id: input.leadUserId ?? null,
+    })
+    .select('id')
+    .maybeSingle();
+  if (inserted.error !== null) throw new Error(`joinMeetingNow: insert meeting: ${inserted.error.message}`);
+  const meetingId = inserted.data?.id;
+  if (meetingId === undefined) throw new Error('joinMeetingNow: meeting insert returned no id');
+
+  // Delete the row (cascades the org link) so a failed dispatch leaves nothing.
+  // Best-effort: on the rare delete failure, log and keep the ORIGINAL dispatch
+  // error — a stranded row is a lesser evil than masking why the join failed.
+  const rollback = async (): Promise<void> => {
+    const del = await db.from('meetings').delete().eq('id', meetingId);
+    if (del.error !== null) {
+      console.error(`joinMeetingNow: rollback failed for ${meetingId}: ${del.error.message}`);
+    }
+  };
+
+  try {
+    if (clientId !== null) await linkMeetingOrgRow(db, meetingId, clientId);
+
+    const apiKey = await getCredential('recall');
+    if (apiKey === null || apiKey === '') {
+      throw new Error('No Recall API key is configured. Add it in Admin → API Settings.');
+    }
+
+    const botJobId = await dispatchRecallBot({
+      meetingUrl: url,
+      apiKey,
+      region: process.env.RECALL_REGION,
+    });
+
+    const stored = await db
+      .from('meetings')
+      .update({ bot_job_id: botJobId, bot_dispatched: true })
+      .eq('id', meetingId);
+    if (stored.error !== null) {
+      // The bot IS live; do NOT delete the row (that would orphan the bot). Surface
+      // the write failure so the operator can reconcile the missing bot_job_id.
+      throw new Error(`joinMeetingNow: bot dispatched but storing job id failed: ${stored.error.message}`);
+    }
+
+    return { meetingId, title, dateTime, botDispatched: true, pipelineStatus: 'scheduled' };
+  } catch (error) {
+    // Roll back unless the bot already reached Recall (job-id store failure), where
+    // deleting would orphan a live bot — that case is re-thrown above, untouched.
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.startsWith('joinMeetingNow: bot dispatched but storing job id failed')) {
+      await rollback();
+    }
+    throw error instanceof Error ? error : new Error(message);
+  }
 }
 
 /** Read the caller's auto-join preference (defaults to true when no profile row). */
