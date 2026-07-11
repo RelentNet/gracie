@@ -31,15 +31,51 @@ export interface RecallFetchOptions {
   readonly region?: string;
 }
 
+/**
+ * Auto-leave timeouts in SECONDS (Settings → Meeting Bot). Each maps to a flat
+ * Recall `automatic_leave.*` field; `null`/omitted leaves it unset so Recall's own
+ * default applies. Kept structurally identical to `@gracie/db`'s `BotAutoLeave` so
+ * a resolved config passes straight through (shared must not depend on db).
+ */
+export interface RecallAutoLeave {
+  readonly everyoneLeftSec?: number | null;
+  readonly waitingRoomSec?: number | null;
+  readonly noRecordingSec?: number | null;
+  readonly nooneJoinedSec?: number | null;
+}
+
 /** Options for dispatching a Recall bot into a meeting (P4, docs/07 §1). */
 export interface RecallDispatchOptions extends RecallFetchOptions {
   /** The join URL the bot dials into (`meetings.video_link`). */
   readonly meetingUrl: string;
   /** Display name the bot joins as (shown to human attendees). */
   readonly botName?: string;
+  /**
+   * Base64 JPEG (no data: prefix) shown as the bot's video tile via Recall's
+   * `automatic_video_output` (docs: output-video-in-meetings). Omit for no tile.
+   * Must be JPEG, 16:9, ≤1.3 MB.
+   */
+  readonly botAvatarJpegB64?: string | null;
+  /** Auto-leave timeouts; omitted fields fall back to Recall defaults. */
+  readonly autoLeave?: RecallAutoLeave;
 }
 
-const DEFAULT_BOT_NAME = 'Grace & Associates Notetaker';
+const DEFAULT_BOT_NAME = 'Gracie';
+
+/**
+ * Map our auto-leave option (seconds) to Recall's flat `automatic_leave` fields,
+ * sending ONLY the ones that are set. Returns undefined when nothing is set, so
+ * the field is omitted entirely and Recall applies all its defaults.
+ */
+function buildAutomaticLeave(al: RecallAutoLeave | undefined): Record<string, number> | undefined {
+  if (al === undefined) return undefined;
+  const out: Record<string, number> = {};
+  if (typeof al.everyoneLeftSec === 'number') out.everyone_left_timeout = al.everyoneLeftSec;
+  if (typeof al.waitingRoomSec === 'number') out.waiting_room_timeout = al.waitingRoomSec;
+  if (typeof al.noRecordingSec === 'number') out.in_call_not_recording_timeout = al.noRecordingSec;
+  if (typeof al.nooneJoinedSec === 'number') out.noone_joined_timeout = al.nooneJoinedSec;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
 
 /** A transcript segment as returned by Recall's transcript endpoint. */
 interface RecallTranscriptSegment {
@@ -81,6 +117,21 @@ function segmentToLine(segment: RecallTranscriptSegment): string {
  * just-created meeting row so a failed dispatch is never silently dropped.
  */
 export async function dispatchRecallBot(options: RecallDispatchOptions): Promise<string> {
+  const body: Record<string, unknown> = {
+    meeting_url: options.meetingUrl,
+    bot_name: options.botName ?? DEFAULT_BOT_NAME,
+  };
+
+  // Static image tile: show it both while recording and before, so the bot always
+  // presents Gracie's face rather than a blank participant tile.
+  if (typeof options.botAvatarJpegB64 === 'string' && options.botAvatarJpegB64 !== '') {
+    const image = { kind: 'jpeg', b64_data: options.botAvatarJpegB64 };
+    body.automatic_video_output = { in_call_recording: image, in_call_not_recording: image };
+  }
+
+  const automaticLeave = buildAutomaticLeave(options.autoLeave);
+  if (automaticLeave !== undefined) body.automatic_leave = automaticLeave;
+
   const res = await fetch(`${baseUrl(options.region)}/bot/`, {
     method: 'POST',
     headers: {
@@ -88,10 +139,7 @@ export async function dispatchRecallBot(options: RecallDispatchOptions): Promise
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
-    body: JSON.stringify({
-      meeting_url: options.meetingUrl,
-      bot_name: options.botName ?? DEFAULT_BOT_NAME,
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');

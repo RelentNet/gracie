@@ -13,7 +13,7 @@
  */
 import 'server-only';
 
-import { getCredential, getServerClient } from '@gracie/db';
+import { getBotConfig, getCredential, getServerClient } from '@gracie/db';
 import type { ServerClient } from '@gracie/db';
 import type {
   AmbiguousMeeting,
@@ -748,10 +748,14 @@ export async function joinMeetingNow(input: JoinMeetingInput): Promise<JoinedMee
       throw new Error('No Recall API key is configured. Add it in Admin → API Settings.');
     }
 
+    const botConfig = await getBotConfig();
     const botJobId = await dispatchRecallBot({
       meetingUrl: url,
       apiKey,
       region: process.env.RECALL_REGION,
+      botName: botConfig.name,
+      botAvatarJpegB64: botConfig.avatarEnabled ? botConfig.avatarJpegB64 : null,
+      autoLeave: botConfig.autoLeave,
     });
 
     const stored = await db

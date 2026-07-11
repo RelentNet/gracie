@@ -22,6 +22,13 @@ export {
   MANAGEABLE_SERVICES,
 } from './credentials.js';
 export type { IntegrationKey, IntegrationStatus, SetIntegrationParams } from './credentials.js';
+export {
+  getBotConfig,
+  setBotConfig,
+  setBotAvatar,
+  DEFAULT_BOT_NAME,
+} from './bot-config.js';
+export type { BotConfig, BotAutoLeave, BotConfigPatch } from './bot-config.js';
 export { encryptSecret, decryptSecret } from './crypto.js';
 export { getActiveProvider, getEmbedder } from './ai.js';
 export { findOrCreateFolder } from './folders.js';
