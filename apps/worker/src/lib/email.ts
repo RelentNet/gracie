@@ -8,7 +8,7 @@ import { getServerClient } from '@gracie/db';
 import type { ServerClient } from '@gracie/db';
 
 import { renderAlertEmail } from './email-templates/alert.js';
-import { getAppBaseUrl, getResendFrom } from './notify-config.js';
+import { getAppBaseUrl, getResendFrom, isAdminAlertEnabled } from './notify-config.js';
 import { sendEmail, type EmailLogger, type SendEmailResult } from './resend.js';
 
 /** The content of one team email (recipients are allowlist-gated downstream). */
@@ -68,6 +68,13 @@ export interface AdminAlert {
 export async function emailAdminsForAlert(alert: AdminAlert, deps: EmailDeps): Promise<void> {
   const db = deps.db ?? getServerClient();
   try {
+    // Per-type email switch (Settings → Notifications). Skips the EMAIL only; the
+    // in-app notification is written separately by the caller and still fires.
+    if (!(await isAdminAlertEnabled(db, alert.type))) {
+      deps.logger.info({ type: alert.type }, 'emailAdminsForAlert: alert email disabled in settings — skipping');
+      return;
+    }
+
     const { data, error } = await db
       .from('users')
       .select('email')

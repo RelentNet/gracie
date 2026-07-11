@@ -81,6 +81,17 @@ export async function getAtRiskHealthThreshold(db: ServerClient): Promise<number
   return t >= 0 && t <= 100 ? t : DEFAULT_AT_RISK_HEALTH_THRESHOLD;
 }
 
+/**
+ * Whether a given admin-alert EMAIL is enabled (Settings → Notifications). Gates
+ * only the outbound email — the in-app notification is written separately by the
+ * caller and always fires. Setting key: `alert_<type>_enabled`; default ON so a
+ * fresh deploy keeps today's behaviour until an admin opts out.
+ */
+export async function isAdminAlertEnabled(db: ServerClient, alertType: string): Promise<boolean> {
+  const raw = await readStringSetting(db, `alert_${alertType}_enabled`);
+  return parseBool(raw, true);
+}
+
 /** The verified From address for outbound email (env → resend config → default). */
 export async function getResendFrom(db: ServerClient): Promise<string> {
   const env = process.env.RESEND_FROM?.trim();
