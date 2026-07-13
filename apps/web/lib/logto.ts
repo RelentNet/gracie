@@ -9,6 +9,7 @@
  */
 import 'server-only';
 
+import { getLogtoContext } from '@logto/next/server-actions';
 import type { LogtoContext, LogtoNextConfig } from '@logto/next';
 
 import { isRole, type Role } from '@gracie/shared';
@@ -44,6 +45,38 @@ export const logtoConfig: LogtoNextConfig = {
   cookieSecure: process.env.NODE_ENV === 'production',
   scopes: ['profile', 'email', 'roles', 'custom_data'],
 };
+
+/** The `getLogtoContext` options type, derived from the SDK signature. */
+type GetContextParameters = Parameters<typeof getLogtoContext>[1];
+
+/** An unauthenticated context — what we degrade to when the session can't be resolved. */
+const UNAUTHENTICATED_CONTEXT: LogtoContext = { isAuthenticated: false };
+
+/**
+ * `getLogtoContext` that NEVER throws. A stale/expired/rotated refresh token makes
+ * Logto reject the silent token refresh with `invalid_grant`, and the SDK throws a
+ * `LogtoRequestError`. Left uncaught in a Server Component (the root layout resolves
+ * the user on every page), that 500s the WHOLE app instead of re-authenticating.
+ *
+ * Here any session-resolution failure degrades to "not authenticated" — which is
+ * functionally what an unresolvable session is — so the app-shell guard redirects
+ * the user to a clean re-login (which mints fresh tokens) instead of white-screening.
+ * A healthy session is returned unchanged, so there is no effect on normal requests.
+ */
+export async function safeGetLogtoContext(
+  config: LogtoNextConfig,
+  parameters?: GetContextParameters,
+): Promise<LogtoContext> {
+  try {
+    return await getLogtoContext(config, parameters);
+  } catch (error) {
+    console.warn(
+      'safeGetLogtoContext: could not resolve the Logto session, treating as unauthenticated:',
+      error instanceof Error ? error.message : error,
+    );
+    return UNAUTHENTICATED_CONTEXT;
+  }
+}
 
 /** Least-privilege default when no role claim is present. */
 const DEFAULT_ROLE: Role = 'viewer';

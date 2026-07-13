@@ -4,12 +4,10 @@
  */
 import 'server-only';
 
-import { getLogtoContext } from '@logto/next/server-actions';
-
 import type { AuthUser } from './auth-shared';
 import { GUEST_USER, MOCK_USER, deriveInitials } from './auth-shared';
 import { getRoleByLogtoId } from './data/users';
-import { isLogtoConfigured, logtoConfig, resolveRole } from './logto';
+import { isLogtoConfigured, logtoConfig, resolveRole, safeGetLogtoContext } from './logto';
 
 /**
  * Resolve the current user:
@@ -21,7 +19,10 @@ import { isLogtoConfigured, logtoConfig, resolveRole } from './logto';
 export async function getCurrentUser(): Promise<AuthUser> {
   if (!isLogtoConfigured()) return MOCK_USER;
 
-  const context = await getLogtoContext(logtoConfig, { fetchUserInfo: true });
+  // safeGetLogtoContext never throws — an unresolvable/expired session degrades to
+  // the guest placeholder (the app-shell layout then redirects to /login) rather
+  // than 500-ing every page via this root-layout call.
+  const context = await safeGetLogtoContext(logtoConfig, { fetchUserInfo: true });
   if (!context.isAuthenticated || !context.claims) return GUEST_USER;
 
   const { claims, userInfo } = context;

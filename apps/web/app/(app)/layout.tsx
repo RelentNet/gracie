@@ -1,11 +1,9 @@
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
-import { getLogtoContext } from '@logto/next/server-actions';
-
 import { NotificationBell } from '@/components/NotificationBell';
 import { Sidebar } from '@/components/Sidebar';
-import { isLogtoConfigured, logtoConfig } from '@/lib/logto';
+import { isLogtoConfigured, logtoConfig, safeGetLogtoContext } from '@/lib/logto';
 
 /**
  * Authenticated app shell (docs/03 §3). Sidebar + main content region. Role
@@ -19,7 +17,9 @@ export default async function AppLayout({
   readonly children: ReactNode;
 }): Promise<React.JSX.Element> {
   if (isLogtoConfigured()) {
-    const { isAuthenticated } = await getLogtoContext(logtoConfig);
+    // Never throws: an expired/invalid session resolves to not-authenticated → a
+    // clean redirect to /login (re-auth), never a full-page server exception.
+    const { isAuthenticated } = await safeGetLogtoContext(logtoConfig);
     if (!isAuthenticated) redirect('/login');
   }
 
