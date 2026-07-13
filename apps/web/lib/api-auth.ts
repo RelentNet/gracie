@@ -11,13 +11,11 @@
  */
 import 'server-only';
 
-import { getLogtoContext } from '@logto/next/server-actions';
-
 import type { Role } from '@gracie/shared';
 
 import { MOCK_USER } from './auth-shared';
 import { getRoleByLogtoId } from './data/users';
-import { isLogtoConfigured, logtoConfig, resolveRole } from './logto';
+import { isLogtoConfigured, logtoConfig, resolveRole, safeGetLogtoContext } from './logto';
 
 export interface RequestUser {
   readonly userId: string;
@@ -47,7 +45,9 @@ const MOCK_REQUEST_USER: RequestUser = {
 export async function getRequestUser(): Promise<RequestUser> {
   if (!isLogtoConfigured()) return MOCK_REQUEST_USER;
 
-  const context = await getLogtoContext(logtoConfig, { fetchUserInfo: true });
+  // safeGetLogtoContext never throws — a stale/expired refresh token surfaces here
+  // as a clean 'unauthorized' (→ 401) instead of a LogtoRequestError bubbling to 500.
+  const context = await safeGetLogtoContext(logtoConfig, { fetchUserInfo: true });
   if (!context.isAuthenticated || !context.claims) {
     throw new Error('unauthorized');
   }

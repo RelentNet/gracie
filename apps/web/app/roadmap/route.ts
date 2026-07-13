@@ -19,9 +19,7 @@
  */
 import { NextResponse } from 'next/server';
 
-import { getLogtoContext } from '@logto/next/server-actions';
-
-import { baseUrl, isLogtoConfigured, logtoConfig } from '@/lib/logto';
+import { baseUrl, isLogtoConfigured, logtoConfig, safeGetLogtoContext } from '@/lib/logto';
 
 import { ROADMAP_HTML } from './roadmap-html.generated';
 
@@ -32,7 +30,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(): Promise<Response> {
   if (isLogtoConfigured()) {
-    const { isAuthenticated } = await getLogtoContext(logtoConfig);
+    const { isAuthenticated } = await safeGetLogtoContext(logtoConfig);
     if (!isAuthenticated) {
       // Page visit → bounce into the sign-in flow (mirrors the app shell's
       // server-side guard), not a bare 401. Build the URL from the known public
