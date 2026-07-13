@@ -5,9 +5,11 @@ import { ErrorState } from '@/components/ui/StateViews';
 import { TYPE } from '@/lib/typography';
 import { useAuth } from '@/lib/auth';
 
+import { AiSettingsPanel } from './AiSettingsPanel';
 import { ApiSettingsPanel } from './ApiSettingsPanel';
 import { AutomationsSettingsPanel } from './AutomationsSettingsPanel';
 import { BotSettingsPanel } from './BotSettingsPanel';
+import { CompanySettingsPanel } from './CompanySettingsPanel';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel';
 import { ScoringSettingsPanel } from './ScoringSettingsPanel';
 import { UsersPanel } from './UsersPanel';
@@ -57,6 +59,14 @@ export default function SettingsPage(): React.JSX.Element {
         </CollapsibleSection>
 
         <CollapsibleSection
+          title="Company"
+          description="Your firm description (used by the Assistant) and your internal email domains."
+          storageKey="settings-company"
+        >
+          <CompanySettingsPanel />
+        </CollapsibleSection>
+
+        <CollapsibleSection
           title="Meeting Bot"
           description="How Gracie appears and behaves when she joins a call — name, image tile, and auto-leave."
           storageKey="settings-bot"
@@ -86,6 +96,14 @@ export default function SettingsPage(): React.JSX.Element {
           storageKey="settings-scoring"
         >
           <ScoringSettingsPanel />
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          title="AI Model"
+          description="Choose the generation & chat model. The embedding model is pinned."
+          storageKey="settings-ai"
+        >
+          <AiSettingsPanel />
         </CollapsibleSection>
 
         <CollapsibleSection

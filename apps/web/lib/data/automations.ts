@@ -370,6 +370,33 @@ export async function getAutomationsMinIntervalMinutes(): Promise<number> {
   return Math.max(minutes, ABSOLUTE_MIN_INTERVAL_MINUTES);
 }
 
+/** Upper bound for the recurring-interval floor — weekly (7 × 24 × 60). */
+export const MAX_MIN_INTERVAL_MINUTES = 10_080;
+
+/**
+ * Set the configurable recurring-interval floor (P9). Clamped to
+ * [{@link ABSOLUTE_MIN_INTERVAL_MINUTES}, {@link MAX_MIN_INTERVAL_MINUTES}] so a
+ * mis-set value can never permit sub-structural-floor (per-minute) runs nor an
+ * absurd cadence. Stored as a JSON string to match the reader. Admin-gated at the
+ * route. Returns the effective (clamped) value.
+ */
+export async function setAutomationsMinIntervalMinutes(minutes: number, updatedByUserId: string): Promise<number> {
+  if (!Number.isFinite(minutes)) throw new Error('minIntervalMinutes must be a number.');
+  const clamped = Math.min(Math.max(Math.round(minutes), ABSOLUTE_MIN_INTERVAL_MINUTES), MAX_MIN_INTERVAL_MINUTES);
+  const db = getServerClient();
+  const { error } = await db.from('settings').upsert(
+    {
+      key: MIN_INTERVAL_SETTING_KEY,
+      value: String(clamped),
+      updated_by_user_id: updatedByUserId,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'key' },
+  );
+  if (error !== null) throw new Error(`setAutomationsMinIntervalMinutes: ${error.message}`);
+  return clamped;
+}
+
 // --- external-send master switch ----------------------------------------------
 
 /** Read the external-send master switch (default OFF). */

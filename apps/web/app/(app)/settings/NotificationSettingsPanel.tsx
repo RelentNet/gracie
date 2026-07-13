@@ -14,6 +14,11 @@ import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
 
+interface NotificationTiming {
+  readonly dailySyncHourEt: number;
+  readonly kbExpiryWarningDays: number;
+  readonly atRiskHealthThreshold: number;
+}
 interface NotificationSettings {
   readonly dailySyncEnabled: boolean;
   readonly briefsEnabled: boolean;
@@ -23,6 +28,7 @@ interface NotificationSettings {
     readonly calendarDisconnect: boolean;
     readonly kbExpiring: boolean;
   };
+  readonly timing: NotificationTiming;
   readonly allowedDomains: readonly string[];
 }
 interface SettingsResponse {
@@ -32,10 +38,32 @@ interface PatchBody {
   dailySyncEnabled?: boolean;
   briefsEnabled?: boolean;
   alerts?: Partial<NotificationSettings['alerts']>;
+  timing?: Partial<NotificationTiming>;
 }
+
+type TimingField = keyof NotificationTiming;
+const TIMING_FIELDS: ReadonlyArray<{
+  readonly key: TimingField;
+  readonly label: string;
+  readonly min: number;
+  readonly max: number;
+  readonly help: string;
+}> = [
+  { key: 'dailySyncHourEt', label: 'Daily-sync send hour (ET)', min: 0, max: 23, help: 'The hour (0–23, Eastern) the morning digest email goes out.' },
+  { key: 'kbExpiryWarningDays', label: 'KB expiry warning (days)', min: 1, max: 365, help: 'Warn this many days before a knowledge-base document expires.' },
+  { key: 'atRiskHealthThreshold', label: 'At-risk health threshold', min: 0, max: 100, help: 'Clients at or below this score (0–100) are flagged “at risk” in the daily sync.' },
+];
+
+const inputClass = 'w-32 rounded-lg border bg-white px-3 py-2';
+const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body } as const;
 
 export function NotificationSettingsPanel(): React.JSX.Element {
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
+  const [timingStr, setTimingStr] = useState<Record<TimingField, string>>({
+    dailySyncHourEt: '',
+    kbExpiryWarningDays: '',
+    atRiskHealthThreshold: '',
+  });
   const [loadError, setLoadError] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
@@ -54,6 +82,17 @@ export function NotificationSettingsPanel(): React.JSX.Element {
       active = false;
     };
   }, []);
+
+  // Keep the timing input strings in sync with the loaded/saved settings. This fires
+  // on load and after a save (settings identity changes), not during typing.
+  useEffect(() => {
+    if (settings === null) return;
+    setTimingStr({
+      dailySyncHourEt: String(settings.timing.dailySyncHourEt),
+      kbExpiryWarningDays: String(settings.timing.kbExpiryWarningDays),
+      atRiskHealthThreshold: String(settings.timing.atRiskHealthThreshold),
+    });
+  }, [settings]);
 
   /** Optimistically apply, PATCH the single field, reconcile / revert on error. */
   const save = useCallback(
@@ -90,6 +129,23 @@ export function NotificationSettingsPanel(): React.JSX.Element {
       { ...settings, alerts: { ...settings.alerts, [field]: value } },
       { alerts: { [field]: value } },
     );
+
+  const current = settings; // non-null in this scope; capture for the commit closure
+  const commitTiming = (field: TimingField, min: number, max: number): void => {
+    const raw = (timingStr[field] ?? '').trim();
+    const n = Number(raw);
+    if (raw === '' || !Number.isInteger(n) || n < min || n > max) {
+      setNote({ text: `Enter a whole number between ${min} and ${max}.`, ok: false });
+      setTimingStr((prev) => ({ ...prev, [field]: String(current.timing[field]) })); // revert
+      return;
+    }
+    if (n === current.timing[field]) return; // no change
+    save(
+      `timing.${field}`,
+      { ...current, timing: { ...current.timing, [field]: n } },
+      { timing: { [field]: n } },
+    );
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -151,6 +207,33 @@ export function NotificationSettingsPanel(): React.JSX.Element {
           disabled={busy}
           onChange={(v): void => setAlert('kbExpiring', 'KB doc expiring', v)}
         />
+      </fieldset>
+
+      {/* Timing & thresholds */}
+      <fieldset className="flex flex-col gap-3">
+        <legend style={TYPE.bodyStrong}>Timing &amp; thresholds</legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {TIMING_FIELDS.map((f) => (
+            <label key={f.key} className="flex flex-col gap-1">
+              <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>{f.label}</span>
+              <input
+                type="number"
+                min={f.min}
+                max={f.max}
+                step={1}
+                inputMode="numeric"
+                className={inputClass}
+                style={inputStyle}
+                value={timingStr[f.key]}
+                disabled={busy}
+                onChange={(e): void => setTimingStr((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                onBlur={(): void => commitTiming(f.key, f.min, f.max)}
+                aria-label={f.label}
+              />
+              <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>{f.help}</span>
+            </label>
+          ))}
+        </div>
       </fieldset>
 
       {/* Read-only allowlist */}

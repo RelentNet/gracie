@@ -114,3 +114,22 @@ export const PINNED_EMBEDDING_MODEL = 'text-embedding-3-small' as const;
 
 /** Dimensionality of the pinned embedding model (matches pgvector schema). */
 export const EMBEDDING_DIMENSIONS = 1536 as const;
+
+/**
+ * Chat/generation models an admin may select in Settings → API (P9). The set is
+ * curated on purpose — free-texting a model id would let a typo (or a model this
+ * account can't use) fail silently at call time. OpenAI-only today (D11); extend
+ * as more providers/models are validated. `ai_provider` stays reserved.
+ */
+export const ALLOWED_GENERATION_MODELS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini'] as const;
+
+/** A model id the admin is allowed to select for generation/chat. */
+export type GenerationModel = (typeof ALLOWED_GENERATION_MODELS)[number];
+
+/** Default generation model when `settings.ai_model` is unset (single source of truth). */
+export const DEFAULT_GENERATION_MODEL: GenerationModel = 'gpt-4o';
+
+/** True when `model` is an admin-selectable generation model. */
+export function isAllowedGenerationModel(model: string): model is GenerationModel {
+  return (ALLOWED_GENERATION_MODELS as readonly string[]).includes(model);
+}

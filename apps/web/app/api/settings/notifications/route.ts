@@ -12,7 +12,11 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { getRequestUser, isAdmin } from '@/lib/api-auth';
-import { getNotificationSettings, setNotificationSettings } from '@/lib/data/notification-settings';
+import {
+  getNotificationSettings,
+  setNotificationSettings,
+  TIMING_SPEC,
+} from '@/lib/data/notification-settings';
 
 // @gracie/db (service-role client) is Node-only — force the Node.js runtime.
 export const runtime = 'nodejs';
@@ -39,6 +43,7 @@ interface PatchBody {
   readonly dailySyncEnabled?: unknown;
   readonly briefsEnabled?: unknown;
   readonly alerts?: unknown;
+  readonly timing?: unknown;
 }
 
 /** Coerce a value to boolean, or return undefined (leave unchanged) / error. */
@@ -60,6 +65,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         needsAttention?: boolean;
         calendarDisconnect?: boolean;
         kbExpiring?: boolean;
+      };
+      timing?: {
+        dailySyncHourEt?: number;
+        kbExpiryWarningDays?: number;
+        atRiskHealthThreshold?: number;
       };
     } = {};
 
@@ -92,6 +102,25 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         }
       }
       patch.alerts = alerts;
+    }
+
+    if (body.timing !== undefined) {
+      if (body.timing === null || typeof body.timing !== 'object' || Array.isArray(body.timing)) {
+        return badRequest('timing must be an object.');
+      }
+      const t = body.timing as Record<string, unknown>;
+      const timing: { dailySyncHourEt?: number; kbExpiryWarningDays?: number; atRiskHealthThreshold?: number } = {};
+      for (const key of ['dailySyncHourEt', 'kbExpiryWarningDays', 'atRiskHealthThreshold'] as const) {
+        if (t[key] === undefined) continue;
+        const v = t[key];
+        if (typeof v !== 'number' || !Number.isFinite(v)) return badRequest(`timing.${key} must be a number.`);
+        const spec = TIMING_SPEC[key];
+        if (v < spec.min || v > spec.max) {
+          return badRequest(`timing.${key} must be between ${spec.min} and ${spec.max}.`);
+        }
+        timing[key] = v;
+      }
+      patch.timing = timing;
     }
 
     return NextResponse.json({ settings: await setNotificationSettings(patch) });

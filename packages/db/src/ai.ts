@@ -5,12 +5,10 @@
  * so generation provider/model are swappable from Admin → API Settings with no
  * call-site changes. Embeddings stay pinned (D9).
  */
-import { createProvider, PINNED_EMBEDDING_MODEL, type AIProvider } from '@gracie/shared';
+import { createProvider, DEFAULT_GENERATION_MODEL, PINNED_EMBEDDING_MODEL, type AIProvider } from '@gracie/shared';
 
 import { getServerClient } from './client.js';
 import { getCredential } from './credentials.js';
-
-const DEFAULT_GENERATION_MODEL = 'gpt-4o';
 
 async function getSettingString(key: string): Promise<string | null> {
   const db = getServerClient();
