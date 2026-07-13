@@ -66,7 +66,7 @@ export class AiSettingsValidationError extends Error {
  * Stored as a JSON string to match the `getActiveProvider` reader. Admin-gated at
  * the API layer. Returns the fresh settings.
  */
-export async function setAiModel(model: string, updatedByUserId: string): Promise<AiSettings> {
+export async function setAiModel(model: string, updatedByUserId: string | null): Promise<AiSettings> {
   if (!isAllowedGenerationModel(model)) {
     throw new AiSettingsValidationError(`“${model}” is not a selectable model.`);
   }

@@ -15,6 +15,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { ABSOLUTE_MIN_INTERVAL_MINUTES } from '@gracie/shared';
 
 import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { getUserIdByLogtoId } from '@/lib/data/users';
 import {
   getAutomationsExternalSendEnabled,
   getAutomationsMinIntervalMinutes,
@@ -79,11 +80,15 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
       return jsonError('bad_request', 'Provide externalSendEnabled and/or minIntervalMinutes', 400);
     }
 
+    // `user.userId` is the Logto id; settings.updated_by_user_id is the internal
+    // users.id (uuid) — resolve it (null when unsynced) before stamping.
+    const byUserId = await getUserIdByLogtoId(user.userId);
+
     if (hasExternal) {
       if (typeof body.externalSendEnabled !== 'boolean') {
         return jsonError('bad_request', 'externalSendEnabled must be a boolean', 400);
       }
-      await setAutomationsExternalSendEnabled(body.externalSendEnabled, user.userId);
+      await setAutomationsExternalSendEnabled(body.externalSendEnabled, byUserId);
     }
 
     if (hasInterval) {
@@ -100,7 +105,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
           400,
         );
       }
-      await setAutomationsMinIntervalMinutes(body.minIntervalMinutes, user.userId);
+      await setAutomationsMinIntervalMinutes(body.minIntervalMinutes, byUserId);
     }
 
     return NextResponse.json(await readSettings());

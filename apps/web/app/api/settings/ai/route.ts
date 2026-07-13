@@ -12,6 +12,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { getRequestUser, isAdmin } from '@/lib/api-auth';
 import { AiSettingsValidationError, getAiSettings, setAiModel } from '@/lib/data/ai-settings';
+import { getUserIdByLogtoId } from '@/lib/data/users';
 
 // @gracie/db (service-role client) is Node-only.
 export const runtime = 'nodejs';
@@ -47,7 +48,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     if (typeof body.model !== 'string') return jsonError('bad_request', 'model (string) is required', 400);
     try {
-      return NextResponse.json({ settings: await setAiModel(body.model, user.userId) });
+      const byUserId = await getUserIdByLogtoId(user.userId); // Logto id → internal uuid (null if unsynced)
+      return NextResponse.json({ settings: await setAiModel(body.model, byUserId) });
     } catch (err) {
       if (err instanceof AiSettingsValidationError) return jsonError('bad_request', err.message, 400);
       throw err;

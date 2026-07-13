@@ -380,7 +380,7 @@ export const MAX_MIN_INTERVAL_MINUTES = 10_080;
  * absurd cadence. Stored as a JSON string to match the reader. Admin-gated at the
  * route. Returns the effective (clamped) value.
  */
-export async function setAutomationsMinIntervalMinutes(minutes: number, updatedByUserId: string): Promise<number> {
+export async function setAutomationsMinIntervalMinutes(minutes: number, updatedByUserId: string | null): Promise<number> {
   if (!Number.isFinite(minutes)) throw new Error('minIntervalMinutes must be a number.');
   const clamped = Math.min(Math.max(Math.round(minutes), ABSOLUTE_MIN_INTERVAL_MINUTES), MAX_MIN_INTERVAL_MINUTES);
   const db = getServerClient();
@@ -412,7 +412,7 @@ export async function getAutomationsExternalSendEnabled(): Promise<boolean> {
 }
 
 /** Set the external-send master switch (admin only — route-gated). */
-export async function setAutomationsExternalSendEnabled(enabled: boolean, updatedByUserId: string): Promise<boolean> {
+export async function setAutomationsExternalSendEnabled(enabled: boolean, updatedByUserId: string | null): Promise<boolean> {
   const db = getServerClient();
   const { error } = await db.from('settings').upsert(
     {

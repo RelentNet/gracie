@@ -11,6 +11,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { getUserIdByLogtoId } from '@/lib/data/users';
 import {
   CompanySettingsValidationError,
   getCompanySettings,
@@ -72,7 +73,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     }
 
     try {
-      const settings = await setCompanySettings(patch as CompanySettingsPatch, user.userId);
+      const byUserId = await getUserIdByLogtoId(user.userId); // Logto id → internal uuid (null if unsynced)
+      const settings = await setCompanySettings(patch as CompanySettingsPatch, byUserId);
       return NextResponse.json({ settings });
     } catch (err) {
       if (err instanceof CompanySettingsValidationError) return jsonError('bad_request', err.message, 400);
