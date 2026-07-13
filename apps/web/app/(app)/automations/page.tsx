@@ -64,9 +64,10 @@ export default function AutomationsPage(): React.JSX.Element {
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Automations</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          Recurring reports and tasks Gracie runs for you. Ask Gracie in the Assistant to create one
-          (“email me a portfolio digest every Monday”) — she’ll propose it and you confirm it here or
-          in chat. {showAll ? 'You’re viewing everyone’s automations.' : 'You’re viewing your automations.'}
+          Recurring reports and tasks Gracie runs for you — from hourly digests to a brief before each
+          client meeting. Ask Gracie in the Assistant to create one (“email me a portfolio digest every
+          Monday”, “brief me 15 minutes before every client meeting”) — she’ll propose it and you confirm
+          it here or in chat. {showAll ? 'You’re viewing everyone’s automations.' : 'You’re viewing your automations.'}
         </p>
       </header>
 
@@ -88,7 +89,7 @@ export default function AutomationsPage(): React.JSX.Element {
       ) : automations.length === 0 ? (
         <EmptyState
           title="No automations yet"
-          description="Open the Assistant and ask Gracie to set one up — for example, “send me a client report for Acme every Friday morning.”"
+          description="Open the Assistant and ask Gracie to set one up — for example, “send me a client report for Acme every Friday morning” or “brief me 15 minutes before every client meeting.”"
           action={
             <span className="inline-flex items-center gap-1" style={{ ...TYPE.secondary, color: 'var(--color-blue-700)' }}>
               <Sparkles size={14} aria-hidden="true" /> Ask Gracie in the Assistant

@@ -25,6 +25,7 @@ import {
   type ReminderParams,
 } from '@gracie/shared';
 
+import { buildBriefContent, type BriefMeeting } from './brief.js';
 import { sendGatedExternalEmail, sendTeamEmail } from './email.js';
 import { renderAutomationEmail } from './email-templates/automation.js';
 import {
@@ -259,12 +260,29 @@ async function resolveUsers(db: ServerClient, userIds: readonly string[]): Promi
   return (data ?? []).map((u) => ({ id: u.id, email: u.email }));
 }
 
+/** One user's directory entry — name for rendering, email + active flag for delivery. */
+interface DirectoryUser {
+  readonly id: string;
+  readonly name: string;
+  readonly email: string;
+  readonly deactivated: boolean;
+}
+
+/** Load id→{name,email,active} for a set of users in ONE query (incl. deactivated). */
+async function loadUserDirectory(db: ServerClient, userIds: readonly string[]): Promise<DirectoryUser[]> {
+  if (userIds.length === 0) return [];
+  const { data, error } = await db.from('users').select('id, name, email, deactivated_at').in('id', [...userIds]);
+  if (error !== null) throw new Error(`automation: load user directory: ${error.message}`);
+  return (data ?? []).map((u) => ({ id: u.id, name: u.name, email: u.email, deactivated: u.deactivated_at !== null }));
+}
+
 /** Write one in-app notification per user (type 'automation'), best-effort. */
 async function notifyUsers(
   db: ServerClient,
   userIds: readonly string[],
   title: string,
   body: string,
+  link = '/automations',
 ): Promise<number> {
   if (userIds.length === 0) return 0;
   const trimmed = body.length > 900 ? `${body.slice(0, 899)}…` : body;
@@ -273,11 +291,45 @@ async function notifyUsers(
     type: 'automation',
     title,
     body: trimmed,
-    link: '/automations',
+    link,
   }));
   const { error } = await db.from('notifications').insert(rows);
   if (error !== null) throw new Error(`automation: notify: ${error.message}`);
   return userIds.length;
+}
+
+/**
+ * Deliver content INTERNALLY to an explicit set of resolved users + any extra
+ * (allowlist-gated) addresses: one in-app notification each + one team email. The
+ * single internal-delivery primitive shared by scheduled reports and meeting briefs.
+ */
+async function deliverToUsers(
+  db: ServerClient,
+  log: FastifyBaseLogger,
+  users: readonly ResolvedUser[],
+  extraEmails: readonly string[],
+  content: { title: string; body: string },
+  link = '/automations',
+): Promise<string> {
+  const notified = await notifyUsers(db, users.map((u) => u.id), content.title, content.body, link);
+
+  const emails = [...new Set([...users.map((u) => u.email), ...extraEmails])].filter((e) => e.trim() !== '');
+  let emailed = 0;
+  if (emails.length > 0) {
+    const rendered = renderAutomationEmail({
+      title: content.title,
+      body: content.body,
+      link,
+      appUrl: getAppBaseUrl(),
+      internal: true,
+    });
+    const res = await sendTeamEmail(
+      { to: emails, subject: rendered.subject, html: rendered.html, text: rendered.text },
+      { logger: log, db },
+    );
+    emailed = res.delivered.length;
+  }
+  return `${notified} in-app, ${emailed} email`;
 }
 
 /**
@@ -295,28 +347,7 @@ async function deliverInternal(
   const userIds = recipients.userIds ?? [];
   const targetUserIds = userIds.length > 0 ? userIds : [automation.owner_user_id];
   const users = await resolveUsers(db, targetUserIds);
-
-  const notified = await notifyUsers(db, users.map((u) => u.id), content.title, content.body);
-
-  const emails = [...new Set([...users.map((u) => u.email), ...(recipients.emails ?? [])])].filter(
-    (e) => e.trim() !== '',
-  );
-  let emailed = 0;
-  if (emails.length > 0) {
-    const rendered = renderAutomationEmail({
-      title: content.title,
-      body: content.body,
-      link: '/automations',
-      appUrl: getAppBaseUrl(),
-      internal: true,
-    });
-    const res = await sendTeamEmail(
-      { to: emails, subject: rendered.subject, html: rendered.html, text: rendered.text },
-      { logger: log, db },
-    );
-    emailed = res.delivered.length;
-  }
-  return `${notified} in-app, ${emailed} email`;
+  return deliverToUsers(db, log, users, recipients.emails ?? [], content);
 }
 
 // --- executor dispatch --------------------------------------------------------
@@ -378,6 +409,15 @@ export async function runAutomation(ctx: ExecutorContext): Promise<ExecutionOutc
       });
       return { status: 'success', detail: `reminder → ${detail}`, externalRecipients: [] };
     }
+
+    case 'meeting_brief':
+      // Event-triggered — fired by the processor's event pass with a specific meeting,
+      // never through the schedule sweep. Reaching here means it has no target meeting.
+      return {
+        status: 'skipped',
+        detail: 'meeting_brief runs on its meeting trigger, not on a schedule',
+        externalRecipients: [],
+      };
 
     case 'client_send':
       return runClientSend(ctx, params as unknown as ClientSendParams, recipients);
@@ -465,4 +505,69 @@ async function runClientSend(
     detail: `client_send → ${res.externalDelivered.length} external, ${res.delivered.length - res.externalDelivered.length} internal`,
     externalRecipients: res.externalDelivered,
   };
+}
+
+// --- meeting_brief (P8.1 event-triggered) -------------------------------------
+
+/** Read a loosely-typed jsonb boolean (accepts a real boolean or the string form). */
+function readLooseBool(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return fallback;
+}
+
+/**
+ * Run a `meeting_brief` (P8.1): build the P7 deterministic pre-meeting brief for ONE
+ * specific upcoming meeting (reusing {@link buildBriefContent}) and deliver it
+ * INTERNALLY — to the owner and, unless `notifyAttendees` is false, the meeting's
+ * internal attendees + lead (plus any configured recipients). No external surface: it
+ * rides the SAME allowlist-gated team send as every other internal automation, so it
+ * adds no new customer-contact path. Called by the processor's event pass / event
+ * Run-now with the resolved target meeting (a {@link BriefMeeting}, `client_id` non-null).
+ */
+export async function runMeetingBrief(
+  ctx: { readonly db: ServerClient; readonly log: FastifyBaseLogger; readonly automation: AutomationRow },
+  meeting: BriefMeeting,
+): Promise<ExecutionOutcome> {
+  const { db, log, automation } = ctx;
+  const notifyAttendees = readLooseBool(asRecord(automation.params).notifyAttendees, true);
+  const recipients = parseRecipients(automation.recipients);
+
+  // Client name + health for the brief header.
+  const clientRes = await db
+    .from('clients')
+    .select('name, relationship_health')
+    .eq('id', meeting.client_id)
+    .maybeSingle();
+  if (clientRes.error !== null) throw new Error(`meeting_brief: client load: ${clientRes.error.message}`);
+  if (clientRes.data === null) {
+    return { status: 'skipped', detail: 'meeting_brief: client no longer exists', externalRecipients: [] };
+  }
+
+  // One directory lookup covers BOTH brief rendering (names, incl. deactivated) and
+  // delivery (active only): owner + configured recipients + the meeting's attendees + lead.
+  const directoryIds = new Set<string>([automation.owner_user_id, ...(recipients.userIds ?? []), ...meeting.attendee_user_ids]);
+  if (meeting.meeting_lead_user_id !== null) directoryIds.add(meeting.meeting_lead_user_id);
+  const directory = await loadUserDirectory(db, [...directoryIds]);
+  const usersById = new Map(directory.map((u) => [u.id, u.name]));
+
+  const body = await buildBriefContent(db, meeting, {
+    clientName: clientRes.data.name,
+    health: clientRes.data.relationship_health,
+    usersById,
+  });
+  const title = `Pre-meeting brief: ${clientRes.data.name}${meeting.title !== null ? ` — ${meeting.title}` : ''}`;
+
+  // Delivery targets: owner + configured recipients + (unless opted out) the meeting's
+  // internal attendees + lead — filtered to ACTIVE users from the same directory.
+  const deliverIds = new Set<string>([automation.owner_user_id, ...(recipients.userIds ?? [])]);
+  if (notifyAttendees) {
+    for (const id of meeting.attendee_user_ids) deliverIds.add(id);
+    if (meeting.meeting_lead_user_id !== null) deliverIds.add(meeting.meeting_lead_user_id);
+  }
+  const users = directory.filter((u) => !u.deactivated && deliverIds.has(u.id)).map((u) => ({ id: u.id, email: u.email }));
+
+  const detail = await deliverToUsers(db, log, users, recipients.emails ?? [], { title, body }, '/calendar');
+  return { status: 'success', detail: `meeting_brief → ${detail}`, externalRecipients: [] };
 }
