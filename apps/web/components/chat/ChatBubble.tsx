@@ -1,12 +1,15 @@
 import { Markdown } from '@/components/ui/Markdown';
 import { TYPE } from '@/lib/typography';
 
+import { ConfirmActionCard } from './ConfirmActionCard';
 import type { ChatMessage } from './types';
 
 /**
  * One chat bubble — AI left (slate-100, Markdown), user right (blue-600). A blank
  * assistant bubble while `streaming` shows an animated typing indicator. Shared by
- * the Intelligence tab and the Assistant so both render answers identically.
+ * the Intelligence tab and the Assistant so both render answers identically. When an
+ * assistant message carries a pending `action` (P8), a Confirm/Cancel card renders
+ * below its text.
  */
 export function ChatBubble({
   message,
@@ -40,7 +43,10 @@ export function ChatBubble({
             <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:0.3s]" />
           </span>
         ) : (
-          <Markdown content={message.content} />
+          <>
+            <Markdown content={message.content} />
+            {message.action !== undefined ? <ConfirmActionCard action={message.action} /> : null}
+          </>
         )}
       </div>
     </div>

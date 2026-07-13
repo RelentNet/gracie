@@ -65,7 +65,7 @@ function skip(reason: string, syncDate: string): DailySyncResult {
 // --- Eastern-time helpers (DST-safe via Intl; no date library) ----------------
 
 /** The ET calendar date (YYYY-MM-DD) for an instant. */
-function easternDateString(d: Date): string {
+export function easternDateString(d: Date): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: ET,
     year: 'numeric',
@@ -82,7 +82,7 @@ function easternOffsetMs(at: Date): number {
 }
 
 /** The UTC instant at 00:00 ET on the given ET date (YYYY-MM-DD). */
-function easternDayStartUtc(etDate: string): Date {
+export function easternDayStartUtc(etDate: string): Date {
   const offset = easternOffsetMs(new Date(`${etDate}T12:00:00Z`));
   return new Date(Date.parse(`${etDate}T00:00:00Z`) + offset);
 }
@@ -141,7 +141,7 @@ async function countExact(
 }
 
 /** Yesterday's activity rollup over the [start, end) UTC window. */
-async function gatherYesterday(db: ServerClient, startIso: string, endIso: string): Promise<DailySyncYesterday> {
+export async function gatherYesterday(db: ServerClient, startIso: string, endIso: string): Promise<DailySyncYesterday> {
   const meetingsProcessed = await countExact(
     () =>
       db
@@ -184,7 +184,7 @@ async function gatherYesterday(db: ServerClient, startIso: string, endIso: strin
 }
 
 /** Raw today's-meeting row used before enrichment. */
-interface TodayMeetingRow {
+export interface TodayMeetingRow {
   readonly id: string;
   readonly title: string | null;
   readonly date_time: string;
@@ -196,7 +196,7 @@ interface TodayMeetingRow {
 }
 
 /** Today's scheduled meetings within the [start, end) UTC window, ordered by time. */
-async function gatherTodayMeetings(db: ServerClient, startIso: string, endIso: string): Promise<TodayMeetingRow[]> {
+export async function gatherTodayMeetings(db: ServerClient, startIso: string, endIso: string): Promise<TodayMeetingRow[]> {
   const { data, error } = await db
     .from('meetings')
     .select('id, title, date_time, client_id, is_internal, meeting_lead_user_id, attendee_user_ids, external_attendees')
@@ -208,7 +208,7 @@ async function gatherTodayMeetings(db: ServerClient, startIso: string, endIso: s
 }
 
 /** At-risk clients: non-internal, low OR declining relationship health. */
-async function gatherAtRisk(db: ServerClient, threshold: number): Promise<DailySyncAtRiskClient[]> {
+export async function gatherAtRisk(db: ServerClient, threshold: number): Promise<DailySyncAtRiskClient[]> {
   const { data, error } = await db
     .from('clients')
     .select('id, name, relationship_health, relationship_trend, type')
@@ -226,7 +226,7 @@ async function gatherAtRisk(db: ServerClient, threshold: number): Promise<DailyS
 }
 
 /** Fetch client names for a set of ids (for meeting + brief rendering). */
-async function loadClientNames(db: ServerClient, ids: readonly string[]): Promise<Map<string, string>> {
+export async function loadClientNames(db: ServerClient, ids: readonly string[]): Promise<Map<string, string>> {
   const unique = [...new Set(ids)];
   if (unique.length === 0) return new Map();
   const { data, error } = await db.from('clients').select('id, name').in('id', unique);

@@ -16,6 +16,7 @@ import { JOB_NAMES, QUEUE_NAMES } from '@gracie/shared';
 
 import { loadEnv } from './lib/env.js';
 import { createRedisConnection } from './lib/redis.js';
+import { createAutomationsProcessor } from './processors/automations.processor.js';
 import { createBotDispatchProcessor } from './processors/bot-dispatch.processor.js';
 import { createCalendarScanProcessor } from './processors/calendar-scan.processor.js';
 import { createContactSuggestionsProcessor } from './processors/contact-suggestions.processor.js';
@@ -26,6 +27,7 @@ import { createIngestProcessor } from './processors/ingest.processor.js';
 import { createKbIngestProcessor } from './processors/kb-ingest.processor.js';
 import { createRelationshipHealthProcessor } from './processors/relationship-health.processor.js';
 import { createWatchdogProcessor } from './processors/watchdog.processor.js';
+import { createAutomationsQueue, scheduleAutomations } from './queues/automations.queue.js';
 import { createBotDispatchQueue, scheduleBotDispatch } from './queues/bot-dispatch.queue.js';
 import { createCalendarScanQueue, scheduleCalendarScan } from './queues/calendar-scan.queue.js';
 import {
@@ -101,6 +103,7 @@ async function start(): Promise<void> {
   const relationshipHealthQueue = createRelationshipHealthQueue(connection);
   const dailySyncQueue = createDailySyncQueue(connection);
   const contactSuggestionsQueue = createContactSuggestionsQueue(connection);
+  const automationsQueue = createAutomationsQueue(connection);
 
   /**
    * Best-effort single-client health recompute, deduped by a `health:<clientId>` job
@@ -128,6 +131,7 @@ async function start(): Promise<void> {
       relationshipHealthQueue,
       dailySyncQueue,
       contactSuggestionsQueue,
+      automationsQueue,
     ],
   });
 
@@ -233,6 +237,16 @@ async function start(): Promise<void> {
     app.log.error({ jobId: job?.id, err: error }, 'contact-suggestions job failed');
   });
 
+  // Automations: ~5-min due-sweep of enabled+active automations + on-demand run-now (P8).
+  const automationsWorker = createWorker(
+    QUEUE_NAMES.automations,
+    createAutomationsProcessor(app.log),
+    connection,
+  );
+  automationsWorker.on('failed', (job, error) => {
+    app.log.error({ jobId: job?.id, err: error }, 'automations job failed');
+  });
+
   await scheduleHeartbeat(heartbeatQueue);
   await scheduleTranscriptWatchdog(watchdogQueue);
   await scheduleCalendarScan(calendarScanQueue);
@@ -240,6 +254,7 @@ async function start(): Promise<void> {
   await scheduleRelationshipHealth(relationshipHealthQueue);
   await scheduleDailySync(dailySyncQueue);
   await scheduleContactSuggestions(contactSuggestionsQueue);
+  await scheduleAutomations(automationsQueue);
 
   installShutdown({
     app,
@@ -255,6 +270,7 @@ async function start(): Promise<void> {
       relationshipHealthQueue,
       dailySyncQueue,
       contactSuggestionsQueue,
+      automationsQueue,
     ],
     workers: [
       heartbeatWorker,
@@ -267,6 +283,7 @@ async function start(): Promise<void> {
       relationshipHealthWorker,
       dailySyncWorker,
       contactSuggestionsWorker,
+      automationsWorker,
     ],
   });
 

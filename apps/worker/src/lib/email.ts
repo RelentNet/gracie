@@ -39,6 +39,43 @@ export async function sendTeamEmail(input: TeamEmailInput, deps: EmailDeps): Pro
   );
 }
 
+/** A team email that ALSO carries pre-approved external recipients (the P8 exception). */
+export interface GatedExternalEmailInput extends TeamEmailInput {
+  /**
+   * External addresses the caller has ALREADY gated (admin switch ON + admin
+   * confirmer + explicit extra confirmation, recorded on the automation). Only
+   * these are rescued from the allowlist drop; every other recipient still obeys
+   * the GA floor. The caller MUST audit `result.externalDelivered`.
+   */
+  readonly approvedExternalRecipients: readonly string[];
+}
+
+/**
+ * Send an email under the customer-contact EXCEPTION (P8 §2b). The ONLY path that
+ * may reach a non-GA address, and only for the caller's pre-approved externals — it
+ * routes through the SAME `sendEmail` choke-point (never a second email path), so
+ * the pure allowlist filter and the GA floor are untouched for everything else.
+ * Returns the send result; `externalDelivered` is what actually left the building.
+ */
+export async function sendGatedExternalEmail(
+  input: GatedExternalEmailInput,
+  deps: EmailDeps,
+): Promise<SendEmailResult> {
+  const db = deps.db ?? getServerClient();
+  const from = await getResendFrom(db);
+  return sendEmail(
+    {
+      from,
+      to: input.to,
+      subject: input.subject,
+      html: input.html,
+      text: input.text,
+      approvedExternalRecipients: input.approvedExternalRecipients,
+    },
+    { logger: deps.logger },
+  );
+}
+
 /** Alert classes that email admins (P7 §5). Maps to a human label for the email. */
 export type AdminAlertType = 'pipeline_failed' | 'needs_attention' | 'calendar_disconnect' | 'kb_expiring';
 

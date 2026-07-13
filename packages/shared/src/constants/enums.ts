@@ -103,8 +103,47 @@ export const NOTIFICATION_TYPES = [
   'kb_expiring',
   'calendar_disconnect',
   'pipeline_failed',
+  // P8: reminder-action deliveries + advanced-request admin alerts (Bell).
+  'automation',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+// --- automations (P8) ------------------------------------------------------
+/**
+ * The v1 action catalog (docs/plan p8 §8). `create_automation`'s JSON-Schema only
+ * accepts these values, so the agent literally cannot request an unbuilt action;
+ * out-of-catalog asks go to the advanced-requests inbox instead. Extending the
+ * engine = a new value here + a new executor in the worker.
+ *   - client_report    — a per-client summary (health, recent activity, open items).
+ *   - portfolio_digest — a cross-client rollup (cadence + at-risk clients).
+ *   - activity_digest  — a yesterday/today activity rollup (reuses daily-sync gather).
+ *   - reminder         — a scheduled nudge/notification to internal users.
+ *   - client_send      — deliver a report/message to an EXTERNAL client (the gated,
+ *                        admin-enabled, explicitly-confirmed customer-contact exception).
+ */
+export const AUTOMATION_TYPES = [
+  'client_report',
+  'portfolio_digest',
+  'activity_digest',
+  'reminder',
+  'client_send',
+] as const;
+export type AutomationType = (typeof AUTOMATION_TYPES)[number];
+
+/** Lifecycle of an automation. Starts `pending_confirmation` (proposed, not running). */
+export const AUTOMATION_STATUSES = ['pending_confirmation', 'active', 'paused', 'cancelled'] as const;
+export type AutomationStatus = (typeof AUTOMATION_STATUSES)[number];
+
+/** Outcome recorded on each `automation_runs` audit row. */
+export const AUTOMATION_RUN_STATUSES = ['success', 'failed', 'skipped'] as const;
+export type AutomationRunStatus = (typeof AUTOMATION_RUN_STATUSES)[number];
+
+/** Lifecycle of an advanced (out-of-catalog) request in the admin inbox. */
+export const AUTOMATION_REQUEST_STATUSES = ['pending', 'accepted', 'dismissed'] as const;
+export type AutomationRequestStatus = (typeof AUTOMATION_REQUEST_STATUSES)[number];
+
+/** Which client_send-style automations may email externally (the customer exception). */
+export const AUTOMATION_TYPES_WITH_EXTERNAL: readonly AutomationType[] = ['client_send'];
 
 // --- integrations ----------------------------------------------------------
 export const INTEGRATION_KEYS = [

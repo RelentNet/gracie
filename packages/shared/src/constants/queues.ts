@@ -30,6 +30,8 @@ export const QUEUE_NAMES = {
   dailySync: 'daily-sync',
   /** Contact suggestions: scan meeting external attendees → upsert `contact_suggestions` (CO). */
   contactSuggestions: 'contact-suggestions',
+  /** Automations: due-sweep runs enabled+active automations + on-demand run-now (P8). */
+  automations: 'automations',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -51,6 +53,10 @@ export const JOB_NAMES = {
   dailySync: 'daily-sync.run',
   /** Contact-suggestions sweep — scan external attendees → upsert pending suggestions (CO). */
   contactSuggestionsSweep: 'contact-suggestions.sweep',
+  /** Automations due-sweep — run every enabled+active automation whose next_run_at is due (P8). */
+  automationsSweep: 'automations.sweep',
+  /** Single automation run — "Run now" / an immediate `once` confirm (P8). */
+  automationsRun: 'automations.run',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
@@ -68,6 +74,7 @@ export const JOB_SCHEDULER_IDS = {
   relationshipHealth: 'relationship-health.nightly',
   dailySync: 'daily-sync.every-15m',
   contactSuggestions: 'contact-suggestions.nightly',
+  automations: 'automations.every-5m',
 } as const;
 
 /** Heartbeat repeat interval (ms) — ~every 30s. A liveness signal, not real work. */
@@ -118,3 +125,11 @@ export const DAILY_SYNC_INTERVAL_MS = 15 * 60_000;
  * partial unique index + a pre-filter on existing contacts/suggestions prevent dupes.
  */
 export const CONTACT_SUGGESTIONS_INTERVAL_MS = 24 * 60 * 60_000;
+
+/**
+ * Automations due-sweep interval (ms) — ~every 5 min (P8). Tight enough that a
+ * `daily`/`weekly`/`interval` automation fires close to its scheduled instant, while
+ * the per-automation `next_run_at` (advanced after each run) keeps the actual cadence
+ * exact. The sweep only touches enabled+active rows whose `next_run_at <= now`.
+ */
+export const AUTOMATIONS_SWEEP_INTERVAL_MS = 5 * 60_000;

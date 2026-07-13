@@ -9,6 +9,7 @@ import {
   CheckSquare,
   Clock,
   FileText,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -50,6 +51,7 @@ const TYPE_ICON: Record<string, LucideIcon> = {
   kb_expiring: Clock,
   documents_ready: FileText,
   task_assigned: CheckSquare,
+  automation: Zap,
 };
 
 export function NotificationBell(): React.JSX.Element {

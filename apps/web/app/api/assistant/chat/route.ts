@@ -19,6 +19,13 @@ import type { AIMessage } from '@gracie/shared';
 import { getAssistantUser } from '@/lib/assistant/user';
 import { toCompanyCaller } from '@/lib/assistant/company/access';
 import { COMPANY_TOOLS, executeCompanyTool } from '@/lib/assistant/company/tools';
+import {
+  ACTION_TOOLS,
+  ACTION_TOOL_NAMES,
+  executeAssistantAction,
+  type ActionContext,
+} from '@/lib/assistant/actions/tools';
+import type { AutomationProposal } from '@/lib/assistant/actions/proposal';
 import { WEB_TOOLS, WEB_TOOL_NAMES, executeWebTool } from '@/lib/ai/web-tools';
 import { resolveTools, type ToolExecutor } from '@/lib/ai/tool-loop';
 import {
@@ -113,39 +120,50 @@ export async function POST(req: NextRequest): Promise<Response> {
     // Persist the user's message up front so it survives a stream failure.
     await insertMessage({ chatId: chatIdResolved, role: 'user', content: message, attachmentIds });
 
-    const encoder = new TextEncoder();
     const TEMPERATURE = 0.3;
+
+    // Phase 1 (buffered) — HOISTED out of the stream so any automation PROPOSAL is
+    // known before the response headers go out (surfaced via `X-Assistant-Action`).
+    // The write tools (create_automation / request_advanced_automation) only PROPOSE
+    // — create_automation persists a `pending_confirmation` row and returns it; it
+    // NEVER activates or sends. Activation is the separate gated /confirm route.
+    // Degrade to a plain answer if resolution fails so a tool hiccup never breaks chat.
+    const proposals: AutomationProposal[] = [];
+    let resolvedMessages: AIMessage[] = messages;
+    try {
+      const actionCtx: ActionContext = { ownerUserId: ownerId };
+      // Company (read) tools + the agentic action tools always; web tools only when
+      // the Web toggle is on.
+      const tools = [...COMPANY_TOOLS, ...ACTION_TOOLS, ...(webAccess ? WEB_TOOLS : [])];
+      const execute: ToolExecutor = (name, args) => {
+        if (ACTION_TOOL_NAMES.has(name)) return executeAssistantAction(name, args, actionCtx, proposals);
+        if (WEB_TOOL_NAMES.has(name)) return executeWebTool(name, args);
+        return executeCompanyTool(name, args, caller);
+      };
+      const resolved = await resolveTools({
+        provider,
+        model,
+        system,
+        baseMessages: messages,
+        tools,
+        execute,
+        temperature: TEMPERATURE,
+      });
+      resolvedMessages = resolved.messages;
+    } catch (toolError) {
+      console.error('assistant tool resolution failed, answering without tools:', toolError);
+    }
+
+    // Surface the FIRST proposal created this turn as a confirm card (URL-encoded
+    // JSON header — read by the client before it consumes the stream body).
+    const actionHeader =
+      proposals.length > 0 ? encodeURIComponent(JSON.stringify(proposals[0])) : null;
+
+    const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
       async start(controller): Promise<void> {
         let answer = '';
-        // Starts as the plain turn; Phase 1 augments it with tool-call + tool
-        // result messages. Declared here so `finally` can size the token estimate.
-        let resolvedMessages: AIMessage[] = messages;
         try {
-          // Phase 1 (buffered): let the model call read-only, role-gated company
-          // tools. Degrade to a plain answer if resolution fails so a tool hiccup
-          // never breaks the chat.
-          try {
-            // Company tools always; web tools only when the Web toggle is on.
-            const tools = webAccess ? [...COMPANY_TOOLS, ...WEB_TOOLS] : COMPANY_TOOLS;
-            const execute: ToolExecutor = (name, args) =>
-              WEB_TOOL_NAMES.has(name)
-                ? executeWebTool(name, args)
-                : executeCompanyTool(name, args, caller);
-            const resolved = await resolveTools({
-              provider,
-              model,
-              system,
-              baseMessages: messages,
-              tools,
-              execute,
-              temperature: TEMPERATURE,
-            });
-            resolvedMessages = resolved.messages;
-          } catch (toolError) {
-            console.error('assistant tool resolution failed, answering without tools:', toolError);
-          }
-
           // Phase 2 (streamed): final answer, tools disabled → normal text stream.
           for await (const token of provider.stream({
             model,
@@ -206,6 +224,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         'Cache-Control': 'no-store, no-transform',
         'X-Accel-Buffering': 'no',
         'X-Chat-Id': chatIdResolved,
+        ...(actionHeader !== null ? { 'X-Assistant-Action': actionHeader } : {}),
       },
     });
   } catch (error) {

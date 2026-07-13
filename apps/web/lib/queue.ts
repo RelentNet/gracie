@@ -15,6 +15,7 @@ import { Redis } from 'ioredis';
 import {
   JOB_NAMES,
   QUEUE_NAMES,
+  type AutomationJobPayload,
   type CalendarScanJobPayload,
   type DailySyncJobPayload,
   type GenerationJobPayload,
@@ -38,6 +39,7 @@ let generateQueue: Queue<GenerationJobPayload> | undefined;
 let calendarScanQueue: Queue<CalendarScanJobPayload> | undefined;
 let relationshipHealthQueue: Queue<RelationshipHealthJobPayload> | undefined;
 let dailySyncQueue: Queue<DailySyncJobPayload> | undefined;
+let automationsQueue: Queue<AutomationJobPayload> | undefined;
 
 function getConnection(): Redis {
   if (connection !== undefined) return connection;
@@ -154,5 +156,28 @@ function getDailySyncQueue(): Queue<DailySyncJobPayload> {
  */
 export async function enqueueDailySync(payload: DailySyncJobPayload): Promise<string> {
   const job = await getDailySyncQueue().add(JOB_NAMES.dailySync, payload);
+  return job.id ?? '';
+}
+
+function getAutomationsQueue(): Queue<AutomationJobPayload> {
+  if (automationsQueue !== undefined) return automationsQueue;
+  automationsQueue = new Queue<AutomationJobPayload>(QUEUE_NAMES.automations, {
+    connection: getConnection(),
+    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+  });
+  return automationsQueue;
+}
+
+/**
+ * Enqueue an immediate single-automation run (P8) — the GUI "Run now" and an
+ * immediate `once` confirm. `source: 'manual'` + the `automationId` route the
+ * worker to run exactly this one automation regardless of its schedule. Returns the
+ * BullMQ job id.
+ */
+export async function enqueueAutomationRun(automationId: string): Promise<string> {
+  const job = await getAutomationsQueue().add(JOB_NAMES.automationsRun, {
+    source: 'manual',
+    automationId,
+  });
   return job.id ?? '';
 }

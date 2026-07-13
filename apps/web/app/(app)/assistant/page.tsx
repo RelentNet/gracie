@@ -10,6 +10,7 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { ChatThread } from '@/components/chat/ChatThread';
 import { ChatComposer } from '@/components/chat/ChatComposer';
 import type { ChatMessage } from '@/components/chat/types';
+import type { AutomationProposal } from '@/lib/assistant/actions/proposal';
 import { LoadingState } from '@/components/ui/StateViews';
 import { ConversationList, type Conversation } from './ConversationList';
 
@@ -164,6 +165,17 @@ export default function AssistantPage(): React.JSX.Element {
       const newChatId = res.headers.get('X-Chat-Id');
       if (activeChatId === null && newChatId !== null) setActiveChatId(newChatId);
 
+      // A create_automation proposal this turn → a Confirm/Cancel card on the reply.
+      let action: AutomationProposal | undefined;
+      const actionHeader = res.headers.get('X-Assistant-Action');
+      if (actionHeader !== null) {
+        try {
+          action = JSON.parse(decodeURIComponent(actionHeader)) as AutomationProposal;
+        } catch {
+          action = undefined;
+        }
+      }
+
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       for (;;) {
@@ -174,6 +186,9 @@ export default function AssistantPage(): React.JSX.Element {
         setMessages((prev) =>
           prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + chunk } : m)),
         );
+      }
+      if (action !== undefined) {
+        setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, action } : m)));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to get a response');

@@ -9,6 +9,7 @@ import {
   Sunrise,
   BookOpen,
   MessageSquare,
+  Zap,
   Map,
   Settings,
 } from 'lucide-react';
@@ -48,6 +49,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Knowledge Base', href: '/knowledge-base', Icon: BookOpen },
   // Assistant (Module 14) — general AI chat, all roles (docs/08 §M14).
   { label: 'Assistant', href: '/assistant', Icon: MessageSquare },
+  // Automations (P8) — manage Gracie's recurring reports/tasks; all roles view,
+  // editors manage. Created via the Assistant's propose→confirm flow.
+  { label: 'Automations', href: '/automations', Icon: Zap, requires: 'automations.view' },
   // Roadmap — the self-contained build-roadmap document (raw-HTML route handler),
   // visible to all authenticated roles; opens in a new tab (external).
   { label: 'Roadmap', href: '/roadmap', Icon: Map, external: true },
