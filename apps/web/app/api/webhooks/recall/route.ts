@@ -2,10 +2,16 @@
  * POST /api/webhooks/recall — Recall.ai "transcript ready" webhook (docs/05
  * Webhooks, docs/06 §4). Signature-verified (Svix); NOT user-authenticated.
  *
- * Flow: verify the signature → parse `bot_job_id` → confirm a `meetings` row
+ * Flow: verify the signature → parse the event + `bot_job_id` → ignore anything
+ * that is not the `transcript.done` event (200, no-op) → confirm a `meetings` row
  * exists whose `bot_job_id` matches (else 4xx reject) → enqueue a `generate` job →
  * set `meetings.pipeline_status = 'processing'` → return 202 immediately. The
  * long-running 6-document pipeline runs in apps/worker (docs/06 §9).
+ *
+ * The bot is dispatched with a `recording_config.transcript` provider (see
+ * `@gracie/shared/recall`), so Recall produces a transcript and fires
+ * `transcript.done` when it is ready — the event this route generates on. Register
+ * this endpoint in the Recall dashboard subscribed to `transcript.done`.
  *
  * DEPLOY FOLLOW-UP: `RECALL_WEBHOOK_SECRET` is not provisioned until the endpoint
  * is registered with Recall at deploy. While it is unset, signature verification
@@ -17,7 +23,11 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getServerClient } from '@gracie/db';
 
 import { enqueueGenerate } from '@/lib/queue';
-import { parseRecallWebhook, verifyRecallSignature } from '@/lib/recall-webhook';
+import {
+  isTranscriptReadyEvent,
+  parseRecallWebhook,
+  verifyRecallSignature,
+} from '@/lib/recall-webhook';
 
 // bullmq/ioredis + node:crypto are Node-only — force the Node.js runtime.
 export const runtime = 'nodejs';
@@ -58,9 +68,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch {
     return reject(400, 'bad_request', 'Body is not valid JSON');
   }
-  const { botJobId } = parseRecallWebhook(payload);
+  const { event, botJobId } = parseRecallWebhook(payload);
   if (botJobId === null) {
     return reject(400, 'bad_request', 'Payload is missing a bot id');
+  }
+
+  // 2b. Only the transcript-ready event triggers generation. Recall also emits
+  // earlier bot-status events (bot.done, etc.) that carry the same bot id but
+  // fire BEFORE the transcript exists — enqueuing on those would race the
+  // pipeline against a not-yet-ready transcript. Acknowledge (200) so Svix does
+  // not retry, but do not enqueue. See RECALL_TRANSCRIPT_DONE_EVENT.
+  if (!isTranscriptReadyEvent(event)) {
+    return NextResponse.json({ accepted: true, ignored: true, event }, { status: 200 });
   }
 
   // 3. Confirm a meeting exists AND its bot_job_id matches (else 4xx reject).

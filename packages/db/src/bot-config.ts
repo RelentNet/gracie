@@ -21,6 +21,27 @@ const AVATAR_KEY = 'bot_avatar_jpeg_b64';
 export const DEFAULT_BOT_NAME = 'Gracie';
 
 /**
+ * Transcription provider (Settings → Meeting Bot). Structurally identical to
+ * `@gracie/shared`'s `RecallTranscriptProvider` so a resolved config passes
+ * straight through at dispatch (db must not depend on shared):
+ *   - `meeting_captions` — the platform's own captions; no extra ASR cost, but
+ *     Teams Business only + depends on captions being enabled (not 100% reliable).
+ *   - `recallai` — Recall's own streaming ASR; reliable regardless of caption
+ *     settings, billed per hour.
+ */
+export type BotTranscriptProvider = 'meeting_captions' | 'recallai';
+
+/**
+ * Default transcription provider when unset. `recallai` (paid ASR) — chosen over
+ * `meeting_captions` for reliability, since GA runs on Microsoft Teams where
+ * caption availability depends on tenant/meeting settings. Kept in sync with
+ * `@gracie/shared`'s `DEFAULT_TRANSCRIPT_PROVIDER`.
+ */
+export const DEFAULT_TRANSCRIPT_PROVIDER: BotTranscriptProvider = 'recallai';
+
+const TRANSCRIPT_PROVIDERS: readonly BotTranscriptProvider[] = ['meeting_captions', 'recallai'];
+
+/**
  * Auto-leave timeouts in SECONDS. `null` = leave the field unset so Recall applies
  * its own default (docs: automatic-leaving-behavior). Maps to Recall's flat
  * integer `automatic_leave` fields at dispatch.
@@ -43,12 +64,21 @@ export interface BotConfig {
   /** Base64 JPEG (no data: prefix), or null when none stored. */
   readonly avatarJpegB64: string | null;
   readonly autoLeave: BotAutoLeave;
+  /** Transcription provider sent to Recall at dispatch. */
+  readonly transcriptProvider: BotTranscriptProvider;
 }
 
 /** Coerce an unknown to a non-negative integer number of seconds, or null. */
 function toSeconds(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null;
   return Math.floor(value);
+}
+
+/** Coerce an unknown to a known provider, falling back to the default. */
+function toTranscriptProvider(value: unknown): BotTranscriptProvider {
+  return TRANSCRIPT_PROVIDERS.includes(value as BotTranscriptProvider)
+    ? (value as BotTranscriptProvider)
+    : DEFAULT_TRANSCRIPT_PROVIDER;
 }
 
 /** Parse a stored `bot_config` jsonb blob into a typed config (defensive). */
@@ -63,6 +93,7 @@ function parseConfig(raw: Json | undefined): Omit<BotConfig, 'avatarJpegB64'> {
   return {
     name,
     avatarEnabled,
+    transcriptProvider: toTranscriptProvider(obj.transcriptProvider),
     autoLeave: {
       everyoneLeftSec: toSeconds(al.everyoneLeftSec),
       waitingRoomSec: toSeconds(al.waitingRoomSec),
@@ -85,10 +116,11 @@ export async function getBotConfig(): Promise<BotConfig> {
   return { ...base, avatarJpegB64 };
 }
 
-/** Patch for the scalar bot config (name / avatarEnabled / autoLeave). */
+/** Patch for the scalar bot config (name / avatarEnabled / transcriptProvider / autoLeave). */
 export interface BotConfigPatch {
   readonly name?: string;
   readonly avatarEnabled?: boolean;
+  readonly transcriptProvider?: BotTranscriptProvider;
   readonly autoLeave?: Partial<BotAutoLeave>;
 }
 
@@ -104,6 +136,10 @@ export async function setBotConfig(patch: BotConfigPatch): Promise<BotConfig> {
   const next = {
     name: patch.name !== undefined && patch.name.trim() !== '' ? patch.name.trim() : current.name,
     avatarEnabled: patch.avatarEnabled ?? current.avatarEnabled,
+    transcriptProvider:
+      patch.transcriptProvider !== undefined
+        ? toTranscriptProvider(patch.transcriptProvider)
+        : current.transcriptProvider,
     autoLeave: {
       everyoneLeftSec:
         patch.autoLeave?.everyoneLeftSec !== undefined

@@ -8,4 +8,8 @@
  * unchanged — the P5b webhook → generation contract is untouched.
  */
 export { dispatchRecallBot, fetchRecallTranscript } from '@gracie/shared/recall';
-export type { RecallDispatchOptions, RecallFetchOptions } from '@gracie/shared/recall';
+export type {
+  RecallDispatchOptions,
+  RecallFetchOptions,
+  RecallTranscriptProvider,
+} from '@gracie/shared/recall';

@@ -60,6 +60,20 @@ export function verifyRecallSignature(
     .some((candidate) => signaturesMatch(candidate, expected));
 }
 
+/**
+ * The webhook event Recall emits once a bot's transcript has finished and is
+ * fetchable (docs: real-time event payloads). Its payload carries `data.bot.id`,
+ * so the route can match the meeting by `bot_job_id` exactly as before. This is
+ * the ONLY event that should trigger generation — earlier bot-status events
+ * (`bot.done`, etc.) fire before the transcript exists.
+ */
+export const RECALL_TRANSCRIPT_DONE_EVENT = 'transcript.done';
+
+/** True for the webhook event that signals the transcript is ready to fetch. */
+export function isTranscriptReadyEvent(event: string | null): boolean {
+  return event === RECALL_TRANSCRIPT_DONE_EVENT;
+}
+
 /** Result of parsing a Recall webhook body. */
 export interface RecallWebhookEvent {
   readonly event: string | null;
