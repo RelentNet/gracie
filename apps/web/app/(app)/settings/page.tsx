@@ -9,6 +9,7 @@ import { ApiSettingsPanel } from './ApiSettingsPanel';
 import { AutomationsSettingsPanel } from './AutomationsSettingsPanel';
 import { BotSettingsPanel } from './BotSettingsPanel';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel';
+import { ScoringSettingsPanel } from './ScoringSettingsPanel';
 import { UsersPanel } from './UsersPanel';
 
 /**
@@ -77,6 +78,14 @@ export default function SettingsPage(): React.JSX.Element {
           storageKey="settings-automations"
         >
           <AutomationsSettingsPanel />
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          title="Scoring"
+          description="Tune the relationship-health algorithm — signal weights and thresholds. Saving recomputes every client."
+          storageKey="settings-scoring"
+        >
+          <ScoringSettingsPanel />
         </CollapsibleSection>
 
         <CollapsibleSection

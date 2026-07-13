@@ -140,6 +140,20 @@ export async function enqueueRelationshipHealth(clientId: string, source: string
   return job.id ?? '';
 }
 
+/**
+ * Enqueue a FULL relationship-health sweep (every active client) — used by the
+ * Scoring settings editor so retuned weights/thresholds take effect immediately
+ * instead of waiting for the nightly run (P9). The `clientId`-less payload routes
+ * the worker to its sweep path. No static jobId: each save recomputes with the
+ * just-saved config (a fixed id retained in `completed` would silently drop the
+ * next save's sweep). Best-effort — the caller wraps it so a Redis blip never
+ * fails the save; the nightly sweep is the backstop.
+ */
+export async function enqueueRelationshipHealthSweep(source: string): Promise<string> {
+  const job = await getRelationshipHealthQueue().add(JOB_NAMES.relationshipHealthSweep, { source });
+  return job.id ?? '';
+}
+
 function getDailySyncQueue(): Queue<DailySyncJobPayload> {
   if (dailySyncQueue !== undefined) return dailySyncQueue;
   dailySyncQueue = new Queue<DailySyncJobPayload>(QUEUE_NAMES.dailySync, {
