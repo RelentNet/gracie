@@ -17,6 +17,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { can, HEALTH_SIGNAL_KEYS, CLIENT_CADENCES, type HealthSignalKey, type ClientCadence } from '@gracie/shared';
 
 import { getRequestUser } from '@/lib/api-auth';
+import { getUserIdByLogtoId } from '@/lib/data/users';
 import { enqueueRelationshipHealthSweep } from '@/lib/queue';
 import {
   getScoringConfig,
@@ -134,9 +135,13 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     if ('error' in parsed) return badRequest(parsed.error);
     if (Object.keys(parsed).length === 0) return badRequest('No scoring fields to update.');
 
+    // `user.userId` is the Logto id; settings.updated_by_user_id is the internal
+    // users.id (uuid) — resolve it (null when unsynced) before stamping.
+    const byUserId = await getUserIdByLogtoId(user.userId);
+
     let config;
     try {
-      config = await setScoringConfig(parsed, user.userId);
+      config = await setScoringConfig(parsed, byUserId);
     } catch (err) {
       if (err instanceof ScoringValidationError) return badRequest(err.message);
       throw err;

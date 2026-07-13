@@ -103,9 +103,9 @@ function normalizeDomains(input: readonly string[]): string[] {
  */
 export async function setCompanySettings(
   patch: CompanySettingsPatch,
-  updatedByUserId: string,
+  updatedByUserId: string | null,
 ): Promise<CompanySettings> {
-  const rows: Array<{ key: string; value: string; updated_by_user_id: string; updated_at: string }> = [];
+  const rows: Array<{ key: string; value: string; updated_by_user_id: string | null; updated_at: string }> = [];
   const stamp = { updated_by_user_id: updatedByUserId, updated_at: new Date().toISOString() };
 
   if (patch.companyDescription !== undefined) {

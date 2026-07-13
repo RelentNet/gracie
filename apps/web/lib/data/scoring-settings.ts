@@ -152,7 +152,7 @@ export function validateMergedConfig(current: HealthConfig, patch: ScoringConfig
  */
 export async function setScoringConfig(
   patch: ScoringConfigPatch,
-  updatedByUserId: string,
+  updatedByUserId: string | null,
 ): Promise<HealthConfig> {
   const current = await getScoringConfig();
   const next = validateMergedConfig(current, patch);
