@@ -13,7 +13,10 @@ import 'server-only';
 import { getServerClient } from '@gracie/db';
 import type { Database, Json } from '@gracie/db';
 import {
+  ABSOLUTE_MIN_INTERVAL_MINUTES,
+  DEFAULT_MIN_INTERVAL_MINUTES,
   describeSchedule,
+  isEventSchedule,
   parseSchedule,
   type AutomationRequestStatus,
   type AutomationStatus,
@@ -26,6 +29,9 @@ type AutomationRequestRow = Database['public']['Tables']['automation_requests'][
 
 /** The settings key holding the external-send master switch (JSON string). */
 const EXTERNAL_SEND_SETTING_KEY = 'automations_external_send_enabled';
+
+/** The settings key holding the configurable recurring-interval floor (JSON string, minutes). */
+const MIN_INTERVAL_SETTING_KEY = 'automations_min_interval_minutes';
 
 // --- views --------------------------------------------------------------------
 
@@ -40,8 +46,10 @@ export interface AutomationView {
   readonly type: AutomationType;
   readonly params: Json;
   readonly schedule: Json;
-  /** Human-readable schedule (e.g. "Every day at 7:00 AM ET"). */
+  /** Human-readable schedule (e.g. "Every day at 7:00 AM ET" / "15 min before each client meeting"). */
   readonly scheduleLabel: string;
+  /** True for an event trigger (before_meeting) — fires per matching meeting, no next run. */
+  readonly isEventTrigger: boolean;
   readonly recipients: Json;
   readonly hasExternalRecipient: boolean;
   readonly status: AutomationStatus;
@@ -83,6 +91,11 @@ function scheduleLabelOf(schedule: Json): string {
   return 'schedule' in parsed ? describeSchedule(parsed.schedule) : 'Custom schedule';
 }
 
+function isEventTriggerOf(schedule: Json): boolean {
+  const parsed = parseSchedule(schedule);
+  return 'schedule' in parsed && isEventSchedule(parsed.schedule);
+}
+
 function toView(row: AutomationRow, ownerName: string | null = null): AutomationView {
   return {
     id: row.id,
@@ -94,6 +107,7 @@ function toView(row: AutomationRow, ownerName: string | null = null): Automation
     params: row.params,
     schedule: row.schedule,
     scheduleLabel: scheduleLabelOf(row.schedule),
+    isEventTrigger: isEventTriggerOf(row.schedule),
     recipients: row.recipients,
     hasExternalRecipient: row.has_external_recipient,
     status: row.status as AutomationStatus,
@@ -339,6 +353,27 @@ export async function countPendingAutomationRequests(): Promise<number> {
     .eq('status', 'pending');
   if (error !== null) throw new Error(`countPendingAutomationRequests: ${error.message}`);
   return count ?? 0;
+}
+
+// --- interval floor -----------------------------------------------------------
+
+/**
+ * The configurable minimum interval (minutes) for a recurring automation (P8.1).
+ * Read from `automations_min_interval_minutes` (default hourly); the Assistant passes
+ * it to `parseSchedule` so the model can offer hourly but never sub-hourly. Clamped to
+ * the absolute structural floor so a mis-set value never permits per-minute runs.
+ */
+export async function getAutomationsMinIntervalMinutes(): Promise<number> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('settings')
+    .select('value')
+    .eq('key', MIN_INTERVAL_SETTING_KEY)
+    .maybeSingle();
+  if (error !== null) throw new Error(`getAutomationsMinIntervalMinutes: ${error.message}`);
+  const raw = typeof data?.value === 'string' ? Number.parseInt(data.value.trim(), 10) : NaN;
+  const minutes = Number.isFinite(raw) ? raw : DEFAULT_MIN_INTERVAL_MINUTES;
+  return Math.max(minutes, ABSOLUTE_MIN_INTERVAL_MINUTES);
 }
 
 // --- external-send master switch ----------------------------------------------

@@ -213,6 +213,7 @@ export type Database = {
           external_recipients: string[]
           finished_at: string | null
           id: string
+          meeting_id: string | null
           started_at: string
           status: string
         }
@@ -223,6 +224,7 @@ export type Database = {
           external_recipients?: string[]
           finished_at?: string | null
           id?: string
+          meeting_id?: string | null
           started_at?: string
           status: string
         }
@@ -233,6 +235,7 @@ export type Database = {
           external_recipients?: string[]
           finished_at?: string | null
           id?: string
+          meeting_id?: string | null
           started_at?: string
           status?: string
         }
@@ -241,6 +244,12 @@ export type Database = {
             foreignKeyName: "automation_runs_automation_id_fkey"
             columns: ["automation_id"]
             referencedRelation: "automations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "automation_runs_meeting_id_fkey"
+            columns: ["meeting_id"]
+            referencedRelation: "meetings"
             referencedColumns: ["id"]
           },
         ]

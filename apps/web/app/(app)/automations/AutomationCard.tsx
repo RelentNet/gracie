@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertTriangle, Clock, Play, Trash2, Pause, PlayCircle, Check, X } from 'lucide-react';
+import { AlertTriangle, CalendarClock, Clock, Play, Trash2, Pause, PlayCircle, Check, X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -107,7 +107,7 @@ export function AutomationCard({
       onError(body?.error?.message ?? 'Failed to run');
       return;
     }
-    setNote('Queued — it will run shortly.');
+    setNote(a.isEventTrigger ? 'Queued — briefing your next matching meeting.' : 'Queued — it will run shortly.');
     setTimeout(onChanged, 2500);
   }
 
@@ -165,12 +165,21 @@ export function AutomationCard({
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1" style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
         <span className="inline-flex items-center gap-1">
-          <Clock size={12} aria-hidden="true" />
-          {a.nextRunAt !== null && (a.status === 'active')
-            ? `Next: ${formatEasternDateTime(a.nextRunAt)}`
-            : a.status === 'paused'
-              ? 'Next: paused'
-              : 'Next: —'}
+          {a.isEventTrigger ? (
+            <>
+              <CalendarClock size={12} aria-hidden="true" />
+              {a.status === 'active' ? 'Runs before each matching meeting' : a.status === 'paused' ? 'Paused' : 'Not active'}
+            </>
+          ) : (
+            <>
+              <Clock size={12} aria-hidden="true" />
+              {a.nextRunAt !== null && a.status === 'active'
+                ? `Next: ${formatEasternDateTime(a.nextRunAt)}`
+                : a.status === 'paused'
+                  ? 'Next: paused'
+                  : 'Next: —'}
+            </>
+          )}
         </span>
         <span>
           Last run:{' '}

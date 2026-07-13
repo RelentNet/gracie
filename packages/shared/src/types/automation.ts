@@ -47,10 +47,61 @@ export interface WeeklySchedule {
   readonly minuteEt?: number;
 }
 
-export type AutomationSchedule = OnceSchedule | IntervalSchedule | DailySchedule | WeeklySchedule;
+/**
+ * Which meetings an event trigger fires for (P8.1). All optional and AND-combined;
+ * an empty object matches every client meeting. `clientMeetingsOnly` is implicit for
+ * `meeting_brief` (a brief needs a client), but kept explicit for clarity + reuse.
+ */
+export interface EventFilters {
+  /** Only meetings linked to a client (implicit for meeting_brief). */
+  readonly clientMeetingsOnly?: boolean;
+  /** Only meetings the automation owner leads. */
+  readonly meetingsILead?: boolean;
+  /** Only meetings for this specific client (`clients.id`). */
+  readonly clientId?: string;
+}
 
-/** Minimum interval between runs (minutes) — no sub-hourly automations in v1. */
-export const MIN_INTERVAL_MINUTES = 60;
+/**
+ * An EVENT-driven trigger (P8.1) — "run X a set time before each of my meetings".
+ * Not interval/wall-clock: `next_run_at` does NOT apply (the worker's event pass
+ * scans upcoming meetings each sweep and fires per (automation, meeting) at most
+ * once). v1 supports the single `before_meeting` event.
+ */
+export interface EventSchedule {
+  readonly kind: 'event';
+  readonly event: 'before_meeting';
+  /** How many minutes before each matching meeting to run (bounded by validation). */
+  readonly leadMinutes: number;
+  readonly filters: EventFilters;
+  /** Cached client label for display when `filters.clientId` is set (not used for logic). */
+  readonly clientName?: string;
+}
+
+export type AutomationSchedule =
+  | OnceSchedule
+  | IntervalSchedule
+  | DailySchedule
+  | WeeklySchedule
+  | EventSchedule;
+
+/**
+ * Absolute STRUCTURAL floor for a recurring interval (minutes) — the ~5-min
+ * automations sweep cadence. Baked into {@link parseSchedule} so a per-minute
+ * automation is impossible even from hand-crafted JSON, independent of the tunable
+ * policy floor below.
+ */
+export const ABSOLUTE_MIN_INTERVAL_MINUTES = 5;
+
+/**
+ * Default configurable interval floor (minutes) when `settings.automations_min_interval_minutes`
+ * is unset — hourly. The Assistant reads the setting and passes it to
+ * {@link parseSchedule} at create time; an admin can tune it down (e.g. to 30) via SQL.
+ */
+export const DEFAULT_MIN_INTERVAL_MINUTES = 60;
+
+/** Bounds for an event trigger's lead time (minutes): from the sweep cadence to a day. */
+export const MIN_EVENT_LEAD_MINUTES = ABSOLUTE_MIN_INTERVAL_MINUTES;
+export const MAX_EVENT_LEAD_MINUTES = 1440;
 
 // --- recipients + params ------------------------------------------------------
 
@@ -84,6 +135,16 @@ export interface ActivityDigestParams {
 /** A scheduled nudge to internal users. */
 export interface ReminderParams {
   readonly message: string;
+}
+
+/**
+ * A pre-meeting brief for a specific upcoming meeting (P8.1). The meeting is chosen
+ * by the event trigger at run time, not stored here — so the params are just delivery
+ * knobs. `notifyAttendees` (default true) also delivers to the meeting's internal
+ * attendees + lead; false delivers to the owner (and any configured recipients) only.
+ */
+export interface MeetingBriefParams {
+  readonly notifyAttendees?: boolean;
 }
 
 /** The gated external client message. */
@@ -164,6 +225,8 @@ function nextWeekly(weekday: number, hourEt: number, minuteEt: number, from: Dat
  *  - interval → one interval after activation (Confirm never fires an immediate send;
  *               use "Run now" for that).
  *  - daily/weekly → the next ET occurrence strictly after `from`.
+ *  - event    → null (event triggers are not scheduled by `next_run_at`; the worker's
+ *               event pass scans upcoming meetings each sweep).
  */
 export function firstRunAt(schedule: AutomationSchedule, from: Date): string | null {
   switch (schedule.kind) {
@@ -175,6 +238,8 @@ export function firstRunAt(schedule: AutomationSchedule, from: Date): string | n
       return nextDaily(schedule.hourEt, schedule.minuteEt ?? 0, from).toISOString();
     case 'weekly':
       return nextWeekly(schedule.weekday, schedule.hourEt, schedule.minuteEt ?? 0, from).toISOString();
+    case 'event':
+      return null;
   }
 }
 
@@ -192,6 +257,8 @@ export function nextRunAfter(schedule: AutomationSchedule, from: Date): string |
       return nextDaily(schedule.hourEt, schedule.minuteEt ?? 0, from).toISOString();
     case 'weekly':
       return nextWeekly(schedule.weekday, schedule.hourEt, schedule.minuteEt ?? 0, from).toISOString();
+    case 'event':
+      return null;
   }
 }
 
@@ -203,9 +270,29 @@ function asInt(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : undefined;
 }
 
+function asBool(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Type guard for a v1 catalog automation type. */
 export function isAutomationType(value: unknown): value is AutomationType {
   return typeof value === 'string' && (AUTOMATION_TYPES as readonly string[]).includes(value);
+}
+
+/** Parse the untrusted `filters` object of an event schedule (all fields optional). */
+function parseEventFilters(value: unknown): EventFilters {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return {};
+  const rec = value as Record<string, unknown>;
+  const filters: { clientMeetingsOnly?: boolean; meetingsILead?: boolean; clientId?: string } = {};
+  const clientMeetingsOnly = asBool(rec.clientMeetingsOnly);
+  const meetingsILead = asBool(rec.meetingsILead);
+  const clientId = typeof rec.clientId === 'string' && UUID_RE.test(rec.clientId) ? rec.clientId : undefined;
+  if (clientMeetingsOnly !== undefined) filters.clientMeetingsOnly = clientMeetingsOnly;
+  if (meetingsILead !== undefined) filters.meetingsILead = meetingsILead;
+  if (clientId !== undefined) filters.clientId = clientId;
+  return filters;
 }
 
 /**
@@ -213,13 +300,25 @@ export function isAutomationType(value: unknown): value is AutomationType {
  * reason string. Used by BOTH the agent's create_automation tool and the confirm
  * route's server-side re-validation, so a schedule can never be activated in a
  * shape the worker can't run.
+ *
+ * `minIntervalMinutes` is the policy floor for a recurring `interval` (P8.1). It
+ * defaults to the absolute structural floor ({@link ABSOLUTE_MIN_INTERVAL_MINUTES})
+ * so display/re-validation callers never reject an already-stored schedule; the
+ * create_automation tool passes the tunable `automations_min_interval_minutes`
+ * setting to enforce the higher policy floor (default hourly) at creation.
  */
-export function parseSchedule(value: unknown): { schedule: AutomationSchedule } | { error: string } {
+export function parseSchedule(
+  value: unknown,
+  minIntervalMinutes: number = ABSOLUTE_MIN_INTERVAL_MINUTES,
+): { schedule: AutomationSchedule } | { error: string } {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return { error: 'schedule must be an object' };
   }
   const rec = value as Record<string, unknown>;
   const kind = rec.kind;
+
+  // The effective floor is never below the structural minimum (guards a mis-set setting).
+  const floor = Math.max(minIntervalMinutes, ABSOLUTE_MIN_INTERVAL_MINUTES);
 
   if (kind === 'once') {
     const runAt = typeof rec.runAt === 'string' ? rec.runAt : '';
@@ -229,10 +328,24 @@ export function parseSchedule(value: unknown): { schedule: AutomationSchedule } 
   }
   if (kind === 'interval') {
     const everyMinutes = asInt(rec.everyMinutes);
-    if (everyMinutes === undefined || everyMinutes < MIN_INTERVAL_MINUTES) {
-      return { error: `interval schedule needs everyMinutes ≥ ${MIN_INTERVAL_MINUTES}` };
+    if (everyMinutes === undefined || everyMinutes < floor) {
+      return { error: `interval schedule needs everyMinutes ≥ ${floor}` };
     }
     return { schedule: { kind: 'interval', everyMinutes } };
+  }
+  if (kind === 'event') {
+    if (rec.event !== 'before_meeting') {
+      return { error: `unknown event: ${String(rec.event)}` };
+    }
+    const leadMinutes = asInt(rec.leadMinutes);
+    if (leadMinutes === undefined || leadMinutes < MIN_EVENT_LEAD_MINUTES || leadMinutes > MAX_EVENT_LEAD_MINUTES) {
+      return { error: `before_meeting needs leadMinutes ${MIN_EVENT_LEAD_MINUTES}–${MAX_EVENT_LEAD_MINUTES}` };
+    }
+    const filters = parseEventFilters(rec.filters);
+    const clientName = typeof rec.clientName === 'string' && rec.clientName.trim() !== '' ? rec.clientName.trim() : undefined;
+    return {
+      schedule: { kind: 'event', event: 'before_meeting', leadMinutes, filters, ...(clientName !== undefined ? { clientName } : {}) },
+    };
   }
   if (kind === 'daily') {
     const hourEt = asInt(rec.hourEt);
@@ -260,6 +373,23 @@ function timeLabel(hourEt: number, minuteEt: number): string {
   return `${h12}:${pad2(minuteEt)} ${period} ET`;
 }
 
+/** Compose the "…before each …meeting…" phrase for a `before_meeting` trigger. */
+function describeEventTrigger(schedule: EventSchedule): string {
+  const lead =
+    schedule.leadMinutes % 60 === 0 && schedule.leadMinutes >= 60
+      ? `${schedule.leadMinutes / 60} hr`
+      : `${schedule.leadMinutes} min`;
+  const f = schedule.filters;
+  const scope =
+    f.clientId !== undefined
+      ? `${schedule.clientName ?? 'client'} meeting`
+      : f.clientMeetingsOnly === false
+        ? 'meeting'
+        : 'client meeting';
+  const lead2 = f.meetingsILead ? `${scope} you lead` : scope;
+  return `${lead} before each ${lead2}`;
+}
+
 /** A human-readable one-line description of a schedule (proposal + list rows). */
 export function describeSchedule(schedule: AutomationSchedule): string {
   switch (schedule.kind) {
@@ -281,5 +411,12 @@ export function describeSchedule(schedule: AutomationSchedule): string {
       return `Every day at ${timeLabel(schedule.hourEt, schedule.minuteEt ?? 0)}`;
     case 'weekly':
       return `Every ${WEEKDAY_LABELS[schedule.weekday]} at ${timeLabel(schedule.hourEt, schedule.minuteEt ?? 0)}`;
+    case 'event':
+      return describeEventTrigger(schedule);
   }
+}
+
+/** True for an event-driven trigger (no `next_run_at`; fires per matching meeting). */
+export function isEventSchedule(schedule: AutomationSchedule): schedule is EventSchedule {
+  return schedule.kind === 'event';
 }

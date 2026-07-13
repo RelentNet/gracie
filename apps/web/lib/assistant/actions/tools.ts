@@ -24,12 +24,17 @@ import {
   isAutomationType,
   parseSchedule,
   type AITool,
+  type AutomationSchedule,
   type AutomationType,
 } from '@gracie/shared';
 
 import type { AutomationProposal } from './proposal.js';
 import { AUTOMATION_TYPE_LABELS, recipientsSummary } from '../../automations-shared.js';
-import { createPendingAutomation, createAutomationRequest } from '../../data/automations.js';
+import {
+  createPendingAutomation,
+  createAutomationRequest,
+  getAutomationsMinIntervalMinutes,
+} from '../../data/automations.js';
 import { getClient, listClients } from '../../data/clients.js';
 
 /** The fixed turn identity — never derived from tool arguments. */
@@ -81,7 +86,7 @@ async function resolveClient(nameOrId: string): Promise<{ id: string; name: stri
 const CREATE_AUTOMATION_SPEC: AITool = {
   name: 'create_automation',
   description:
-    'PROPOSE a new automation — a recurring report/task Gracie runs on a schedule. This does NOT run or activate anything; it creates a proposal the user must explicitly Confirm. Use ONLY for the supported types below. If the user wants something outside this catalog, call request_advanced_automation instead. Never claim an automation is active or scheduled — only that you have drafted it for confirmation.',
+    'PROPOSE a new automation — a recurring report/task Gracie runs on a schedule, OR an event trigger that runs before each of your meetings. This does NOT run or activate anything; it creates a proposal the user must explicitly Confirm. Use ONLY for the supported types below. If the user wants something outside this catalog, call request_advanced_automation instead. Never claim an automation is active or scheduled — only that you have drafted it for confirmation.',
   parameters: {
     type: 'object',
     properties: {
@@ -89,24 +94,50 @@ const CREATE_AUTOMATION_SPEC: AITool = {
         type: 'string',
         enum: [...AUTOMATION_TYPES],
         description:
-          'client_report (per-client summary), portfolio_digest (all clients + at-risk), activity_digest (yesterday/today rollup), reminder (a nudge to internal users), client_send (email a message to an EXTERNAL client — requires admin approval).',
+          'client_report (per-client summary), portfolio_digest (all clients + at-risk), activity_digest (yesterday/today rollup), reminder (a nudge to internal users), meeting_brief (a pre-meeting brief delivered before each matching meeting — use with schedule.kind=event), client_send (email a message to an EXTERNAL client — requires admin approval).',
       },
-      title: { type: 'string', description: 'A short title, e.g. "Weekly Acme report".' },
+      title: { type: 'string', description: 'A short title, e.g. "Weekly Acme report" or "Client meeting briefs".' },
       schedule: {
         type: 'object',
-        description: 'When it runs.',
+        description:
+          'When it runs. Use kind=daily/weekly for a recurring time, kind=interval for "every N hours" (hourly is the shortest — never sub-hourly), kind=once for a one-off, or kind=event for meeting_brief (run before each meeting).',
         properties: {
-          kind: { type: 'string', enum: ['once', 'interval', 'daily', 'weekly'] },
+          kind: { type: 'string', enum: ['once', 'interval', 'daily', 'weekly', 'event'] },
           runAt: { type: 'string', description: 'ISO instant (kind=once).' },
-          everyMinutes: { type: 'number', description: 'Minutes between runs, ≥60 (kind=interval).' },
+          everyMinutes: {
+            type: 'number',
+            description: 'Minutes between runs (kind=interval). Hourly (60) is the shortest allowed — no sub-hourly.',
+          },
           hourEt: { type: 'number', description: 'Hour 0–23 Eastern (kind=daily/weekly).' },
           minuteEt: { type: 'number', description: 'Minute 0–59 (optional).' },
           weekday: { type: 'number', description: '0=Sunday … 6=Saturday (kind=weekly).' },
+          event: {
+            type: 'string',
+            enum: ['before_meeting'],
+            description: 'The trigger event (kind=event). Only before_meeting is supported.',
+          },
+          leadMinutes: {
+            type: 'number',
+            description: 'How many minutes before each meeting to run, e.g. 15 (kind=event). Max 1440.',
+          },
+          filters: {
+            type: 'object',
+            description: 'Which meetings trigger it (kind=event). Briefs already target client meetings only.',
+            properties: {
+              meetingsILead: { type: 'boolean', description: 'Only meetings the user leads.' },
+              clientMeetingsOnly: { type: 'boolean', description: 'Only client meetings (the default for briefs).' },
+            },
+            additionalProperties: false,
+          },
         },
         required: ['kind'],
         additionalProperties: false,
       },
-      clientName: { type: 'string', description: 'Client name (required for client_report and client_send).' },
+      clientName: {
+        type: 'string',
+        description:
+          'Client name — required for client_report and client_send; optional for meeting_brief to limit briefs to one client’s meetings.',
+      },
       window: { type: 'string', enum: ['yesterday', 'today', 'both'], description: 'activity_digest window (default both).' },
       message: { type: 'string', description: 'The reminder text (required for reminder).' },
       subject: { type: 'string', description: 'Email subject (required for client_send).' },
@@ -187,6 +218,10 @@ async function buildAutomation(
       if (message === undefined) return { error: 'reminder needs a message' };
       return { params: { message } as Json, recipients: baseRecipients as Json, hasExternal: false };
     }
+    case 'meeting_brief':
+      // The target meeting + client filter live on the event schedule (enriched in the
+      // create branch); params carry only delivery knobs. Internal-only — never external.
+      return { params: {} as Json, recipients: baseRecipients as Json, hasExternal: false };
     case 'client_send': {
       const subject = asString(args.subject);
       const body = asString(args.body);
@@ -246,12 +281,40 @@ export async function executeAssistantAction(
       const title = asString(args.title);
       if (title === undefined) return toolError('title is required');
 
-      const parsedSchedule = parseSchedule(args.schedule);
+      // The tunable interval floor (default hourly) — enforced only at creation.
+      const minInterval = await getAutomationsMinIntervalMinutes();
+      const parsedSchedule = parseSchedule(args.schedule, minInterval);
       if (!('schedule' in parsedSchedule)) return toolError(parsedSchedule.error);
       const schedule = parsedSchedule.schedule;
 
+      // Event triggers are only for meeting_brief, and meeting_brief is only for events.
+      const isEvent = schedule.kind === 'event';
+      if (isEvent !== (typeArg === 'meeting_brief')) {
+        return toolError(
+          typeArg === 'meeting_brief'
+            ? 'meeting_brief needs schedule.kind="event" (event before_meeting with leadMinutes)'
+            : 'schedule.kind="event" is only valid for the meeting_brief type',
+        );
+      }
+
       const built = await buildAutomation(typeArg, args);
       if ('error' in built) return toolError(built.error);
+
+      // For a client-scoped meeting_brief, resolve the client and stamp it onto the
+      // event schedule filters (never trust a client id/name straight from the model).
+      let finalSchedule: AutomationSchedule = schedule;
+      if (typeArg === 'meeting_brief' && schedule.kind === 'event') {
+        const clientName = asString(args.clientName);
+        if (clientName !== undefined) {
+          const client = await resolveClient(clientName);
+          if (client === null) return toolError(`couldn't find a client matching "${clientName}"`);
+          finalSchedule = {
+            ...schedule,
+            filters: { ...schedule.filters, clientId: client.id },
+            clientName: client.name,
+          };
+        }
+      }
 
       const created = await createPendingAutomation({
         ownerUserId: ctx.ownerUserId,
@@ -259,7 +322,7 @@ export async function executeAssistantAction(
         intent: title,
         type: typeArg,
         params: built.params,
-        schedule: schedule as unknown as Json,
+        schedule: finalSchedule as unknown as Json,
         recipients: built.recipients,
         hasExternalRecipient: built.hasExternal,
       });
@@ -270,7 +333,7 @@ export async function executeAssistantAction(
         title,
         type: typeArg,
         typeLabel: AUTOMATION_TYPE_LABELS[typeArg],
-        scheduleLabel: describeSchedule(schedule),
+        scheduleLabel: describeSchedule(finalSchedule),
         recipientsSummary: recipientsSummary(built.recipients),
         external: built.hasExternal,
       };

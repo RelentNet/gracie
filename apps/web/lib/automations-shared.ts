@@ -11,6 +11,7 @@ export const AUTOMATION_TYPE_LABELS: Record<AutomationType, string> = {
   portfolio_digest: 'Portfolio digest',
   activity_digest: 'Activity digest',
   reminder: 'Reminder',
+  meeting_brief: 'Meeting brief',
   client_send: 'Client message',
 };
 

@@ -15,6 +15,7 @@ export interface AutomationClientView {
   readonly params: unknown;
   readonly schedule: unknown;
   readonly scheduleLabel: string;
+  readonly isEventTrigger: boolean;
   readonly recipients: unknown;
   readonly hasExternalRecipient: boolean;
   readonly status: AutomationStatus;

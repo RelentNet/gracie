@@ -118,6 +118,10 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
  *   - portfolio_digest — a cross-client rollup (cadence + at-risk clients).
  *   - activity_digest  — a yesterday/today activity rollup (reuses daily-sync gather).
  *   - reminder         — a scheduled nudge/notification to internal users.
+ *   - meeting_brief    — an EVENT-triggered pre-meeting brief for a specific upcoming
+ *                        meeting (P8.1). Not schedule-based: a `before_meeting` event
+ *                        schedule fires it a set lead time before each matching meeting.
+ *                        Delivered INTERNALLY (owner + the meeting's internal attendees).
  *   - client_send      — deliver a report/message to an EXTERNAL client (the gated,
  *                        admin-enabled, explicitly-confirmed customer-contact exception).
  */
@@ -126,6 +130,7 @@ export const AUTOMATION_TYPES = [
   'portfolio_digest',
   'activity_digest',
   'reminder',
+  'meeting_brief',
   'client_send',
 ] as const;
 export type AutomationType = (typeof AUTOMATION_TYPES)[number];
