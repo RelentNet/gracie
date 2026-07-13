@@ -19,8 +19,9 @@ import { UsersPanel } from './UsersPanel';
  * for non-admins; this guard is defense-in-depth so a direct URL visit yields no
  * admin content (mirrors server omission, D14).
  *
- * API Settings (integration credentials) is live here; company settings, calendar
- * automation, and user management arrive in later phases.
+ * Sections: Users, Company, Meeting Bot, Notifications, Automations, Scoring, AI
+ * Model, and API Settings. Calendar automation controls intentionally live on the
+ * Calendar page (next to the connection + sync), not here.
  */
 export default function SettingsPage(): React.JSX.Element {
   const { can } = useAuth();
