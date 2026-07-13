@@ -27,7 +27,30 @@ const KEYS = {
   kbExpiring: 'alert_kb_expiring_enabled',
 } as const;
 
+/** Numeric timing/threshold keys (must match the worker's notify-config readers). */
+const TIMING_KEYS = {
+  dailySyncHourEt: 'daily_sync_hour_et',
+  kbExpiryWarningDays: 'kb_expiry_warning_days',
+  atRiskHealthThreshold: 'at_risk_health_threshold',
+} as const;
+
+/** Defaults + inclusive bounds for the numeric timing settings (mirror notify-config.ts). */
+export const TIMING_SPEC = {
+  dailySyncHourEt: { default: 6, min: 0, max: 23 },
+  kbExpiryWarningDays: { default: 14, min: 1, max: 365 },
+  atRiskHealthThreshold: { default: 50, min: 0, max: 100 },
+} as const;
+
 const ALLOWLIST_KEY = 'email_allowed_domains';
+
+export interface NotificationTiming {
+  /** Hour (ET, 0–23) the daily-sync email fires. */
+  readonly dailySyncHourEt: number;
+  /** Days-before-expiry a KB doc triggers a `kb_expiring` alert. */
+  readonly kbExpiryWarningDays: number;
+  /** Health score at/under which a client is "at risk" in the daily sync (0–100). */
+  readonly atRiskHealthThreshold: number;
+}
 
 export interface NotificationSettings {
   readonly dailySyncEnabled: boolean;
@@ -38,6 +61,7 @@ export interface NotificationSettings {
     readonly calendarDisconnect: boolean;
     readonly kbExpiring: boolean;
   };
+  readonly timing: NotificationTiming;
   /** Read-only: the domains Gracie is allowed to email. Never widenable here. */
   readonly allowedDomains: readonly string[];
 }
@@ -52,6 +76,11 @@ export interface NotificationSettingsPatch {
     readonly calendarDisconnect?: boolean;
     readonly kbExpiring?: boolean;
   };
+  readonly timing?: {
+    readonly dailySyncHourEt?: number;
+    readonly kbExpiryWarningDays?: number;
+    readonly atRiskHealthThreshold?: number;
+  };
 }
 
 /** Parse a stored boolean-ish setting; defaults ON when unset/unparseable. */
@@ -61,6 +90,14 @@ function parseBool(value: unknown, fallback = true): boolean {
   if (v === 'true' || v === '1' || v === 'yes') return true;
   if (v === 'false' || v === '0' || v === 'no') return false;
   return fallback;
+}
+
+/** Parse a stored integer setting, clamping into [min,max]; defaults when unset/unparseable. */
+function parseIntSetting(value: unknown, spec: { default: number; min: number; max: number }): number {
+  if (typeof value !== 'string') return spec.default;
+  const n = Number.parseInt(value.trim(), 10);
+  if (!Number.isFinite(n)) return spec.default;
+  return Math.min(Math.max(n, spec.min), spec.max);
 }
 
 /** Parse the comma-separated allowlist string; falls back to the GA floor. */
@@ -76,7 +113,7 @@ function parseAllowedDomains(value: unknown): string[] {
 /** Read all notification toggles + the read-only allowlist (defaults ON). */
 export async function getNotificationSettings(): Promise<NotificationSettings> {
   const db = getServerClient();
-  const keys = [...Object.values(KEYS), ALLOWLIST_KEY];
+  const keys = [...Object.values(KEYS), ...Object.values(TIMING_KEYS), ALLOWLIST_KEY];
   const { data, error } = await db.from('settings').select('key, value').in('key', keys);
   if (error !== null) throw new Error(`getNotificationSettings: ${error.message}`);
 
@@ -89,6 +126,14 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
       needsAttention: parseBool(byKey.get(KEYS.needsAttention)),
       calendarDisconnect: parseBool(byKey.get(KEYS.calendarDisconnect)),
       kbExpiring: parseBool(byKey.get(KEYS.kbExpiring)),
+    },
+    timing: {
+      dailySyncHourEt: parseIntSetting(byKey.get(TIMING_KEYS.dailySyncHourEt), TIMING_SPEC.dailySyncHourEt),
+      kbExpiryWarningDays: parseIntSetting(byKey.get(TIMING_KEYS.kbExpiryWarningDays), TIMING_SPEC.kbExpiryWarningDays),
+      atRiskHealthThreshold: parseIntSetting(
+        byKey.get(TIMING_KEYS.atRiskHealthThreshold),
+        TIMING_SPEC.atRiskHealthThreshold,
+      ),
     },
     allowedDomains: parseAllowedDomains(byKey.get(ALLOWLIST_KEY)),
   };
@@ -114,6 +159,21 @@ export async function setNotificationSettings(
   push(KEYS.needsAttention, patch.alerts?.needsAttention);
   push(KEYS.calendarDisconnect, patch.alerts?.calendarDisconnect);
   push(KEYS.kbExpiring, patch.alerts?.kbExpiring);
+
+  // Numeric timing/thresholds — stored as JSON strings, clamped to their bounds so a
+  // bad value never reaches the worker (mirrors the worker's own defensive parse).
+  const pushInt = (
+    key: string,
+    val: number | undefined,
+    spec: { default: number; min: number; max: number },
+  ): void => {
+    if (val === undefined) return;
+    const n = Number.isFinite(val) ? Math.min(Math.max(Math.round(val), spec.min), spec.max) : spec.default;
+    rows.push({ key, value: String(n) });
+  };
+  pushInt(TIMING_KEYS.dailySyncHourEt, patch.timing?.dailySyncHourEt, TIMING_SPEC.dailySyncHourEt);
+  pushInt(TIMING_KEYS.kbExpiryWarningDays, patch.timing?.kbExpiryWarningDays, TIMING_SPEC.kbExpiryWarningDays);
+  pushInt(TIMING_KEYS.atRiskHealthThreshold, patch.timing?.atRiskHealthThreshold, TIMING_SPEC.atRiskHealthThreshold);
 
   if (rows.length > 0) {
     await upsertSettings(db, rows);

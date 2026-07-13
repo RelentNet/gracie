@@ -202,8 +202,11 @@ interface JoinOrgOption {
 }
 
 export default function CalendarPage(): React.JSX.Element {
-  const { hasRole, canEdit } = useAuth();
-  const isAdmin = hasRole('admin');
+  const { can, canEdit } = useAuth();
+  // The calendar admin controls (bot-dispatch + manual-join switches, connection
+  // admin view, ambiguous-assignment) gate on the dedicated `calendar.configure`
+  // permission (admin-tier — behaviour is identical to the prior hasRole('admin')).
+  const isAdmin = can('calendar.configure');
   const editable = canEdit();
 
   const nowKey = easternDayKey(new Date().toISOString());

@@ -48,6 +48,7 @@ export const PERMISSIONS = [
   'pipeline.viewErrors',
   'calendar.configure',
   'automations.externalSend',
+  'scoring.configure',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -101,6 +102,8 @@ export const PERMISSION_MATRIX: Readonly<
   'calendar.configure': { admin: true, standard: false, viewer: false },
   // Automations (P8): the customer-contact exception — approve an EXTERNAL send.
   'automations.externalSend': { admin: true, standard: false, viewer: false },
+  // Scoring (P9): tune the global relationship-health algorithm config.
+  'scoring.configure': { admin: true, standard: false, viewer: false },
 } as const;
 
 /** Returns true if `role` holds `permission`. */
