@@ -13,7 +13,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { getBotConfig, setBotAvatar, setBotConfig } from '@gracie/db';
-import type { BotConfig } from '@gracie/db';
+import type { BotConfig, BotTranscriptProvider } from '@gracie/db';
 
 import { getRequestUser, isAdmin } from '@/lib/api-auth';
 
@@ -24,6 +24,9 @@ export const runtime = 'nodejs';
 const MAX_NAME_LEN = 100;
 const MAX_AVATAR_BYTES = 1_300_000;
 
+/** Selectable transcription providers (must match `BotTranscriptProvider`). */
+const TRANSCRIPT_PROVIDERS: readonly BotTranscriptProvider[] = ['meeting_captions', 'recallai'];
+
 function forbidden(): NextResponse {
   return NextResponse.json({ error: { code: 'forbidden', message: 'Admin only' } }, { status: 403 });
 }
@@ -33,6 +36,7 @@ function toClient(config: BotConfig): Record<string, unknown> {
   return {
     name: config.name,
     avatarEnabled: config.avatarEnabled,
+    transcriptProvider: config.transcriptProvider,
     autoLeave: config.autoLeave,
     hasAvatar: config.avatarJpegB64 !== null,
     avatarDataUrl: config.avatarJpegB64 !== null ? `data:image/jpeg;base64,${config.avatarJpegB64}` : null,
@@ -52,6 +56,7 @@ export async function GET(): Promise<NextResponse> {
 interface BotPatchBody {
   readonly name?: unknown;
   readonly avatarEnabled?: unknown;
+  readonly transcriptProvider?: unknown;
   readonly autoLeave?: unknown;
   readonly avatar?: unknown;
 }
@@ -92,6 +97,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     const patch: {
       name?: string;
       avatarEnabled?: boolean;
+      transcriptProvider?: BotTranscriptProvider;
       autoLeave?: {
         everyoneLeftSec: number | null;
         waitingRoomSec: number | null;
@@ -111,6 +117,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     if (body.avatarEnabled !== undefined) {
       if (typeof body.avatarEnabled !== 'boolean') return badRequest('avatarEnabled must be a boolean.');
       patch.avatarEnabled = body.avatarEnabled;
+    }
+    if (body.transcriptProvider !== undefined) {
+      if (!TRANSCRIPT_PROVIDERS.includes(body.transcriptProvider as BotTranscriptProvider)) {
+        return badRequest(`transcriptProvider must be one of: ${TRANSCRIPT_PROVIDERS.join(', ')}.`);
+      }
+      patch.transcriptProvider = body.transcriptProvider as BotTranscriptProvider;
     }
     if (body.autoLeave !== undefined) {
       if (body.autoLeave === null || typeof body.autoLeave !== 'object' || Array.isArray(body.autoLeave)) {

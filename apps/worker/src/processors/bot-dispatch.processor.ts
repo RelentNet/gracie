@@ -134,6 +134,7 @@ export function createBotDispatchProcessor(
           botName: botConfig.name,
           botAvatarJpegB64,
           autoLeave: botConfig.autoLeave,
+          transcriptProvider: botConfig.transcriptProvider,
         });
         const stored = await db.from('meetings').update({ bot_job_id: botJobId }).eq('id', meeting.id);
         if (stored.error !== null) throw new Error(stored.error.message);

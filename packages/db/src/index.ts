@@ -27,8 +27,14 @@ export {
   setBotConfig,
   setBotAvatar,
   DEFAULT_BOT_NAME,
+  DEFAULT_TRANSCRIPT_PROVIDER,
 } from './bot-config.js';
-export type { BotConfig, BotAutoLeave, BotConfigPatch } from './bot-config.js';
+export type {
+  BotConfig,
+  BotAutoLeave,
+  BotConfigPatch,
+  BotTranscriptProvider,
+} from './bot-config.js';
 export { encryptSecret, decryptSecret } from './crypto.js';
 export { getActiveProvider, getEmbedder } from './ai.js';
 export { findOrCreateFolder } from './folders.js';

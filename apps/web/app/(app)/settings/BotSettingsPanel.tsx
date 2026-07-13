@@ -25,9 +25,11 @@ interface AutoLeave {
   readonly noRecordingSec: number | null;
   readonly nooneJoinedSec: number | null;
 }
+type TranscriptProvider = 'meeting_captions' | 'recallai';
 interface BotConfigView {
   readonly name: string;
   readonly avatarEnabled: boolean;
+  readonly transcriptProvider: TranscriptProvider;
   readonly autoLeave: AutoLeave;
   readonly hasAvatar: boolean;
   readonly avatarDataUrl: string | null;
@@ -37,6 +39,24 @@ interface BotConfigResponse {
 }
 
 type AutoLeaveField = keyof AutoLeave;
+
+/** Transcription provider options, most-recommended first. */
+const TRANSCRIPT_PROVIDER_OPTIONS: ReadonlyArray<{
+  readonly value: TranscriptProvider;
+  readonly label: string;
+  readonly hint: string;
+}> = [
+  {
+    value: 'recallai',
+    label: 'Recall ASR (recommended)',
+    hint: "Recall transcribes the audio itself. Reliable on any Teams/Zoom/Meet call regardless of caption settings. Billed per hour.",
+  },
+  {
+    value: 'meeting_captions',
+    label: 'Meeting captions (no extra cost)',
+    hint: "Uses the meeting platform's own live captions. No transcription charge, but Teams Business only and needs captions enabled for the tenant/meeting — otherwise no transcript is produced.",
+  },
+];
 
 /** Auto-leave inputs, in seconds, with Recall's own default shown as the hint. */
 const AUTO_LEAVE_FIELDS: ReadonlyArray<{
@@ -61,6 +81,7 @@ export function BotSettingsPanel(): React.JSX.Element {
   // Editable state.
   const [name, setName] = useState('');
   const [avatarEnabled, setAvatarEnabled] = useState(false);
+  const [transcriptProvider, setTranscriptProvider] = useState<TranscriptProvider>('recallai');
   const [autoLeaveStr, setAutoLeaveStr] = useState<Record<AutoLeaveField, string>>({
     everyoneLeftSec: '',
     waitingRoomSec: '',
@@ -78,6 +99,7 @@ export function BotSettingsPanel(): React.JSX.Element {
     setConfig(c);
     setName(c.name);
     setAvatarEnabled(c.avatarEnabled);
+    setTranscriptProvider(c.transcriptProvider);
     setAutoLeaveStr({
       everyoneLeftSec: c.autoLeave.everyoneLeftSec?.toString() ?? '',
       waitingRoomSec: c.autoLeave.waitingRoomSec?.toString() ?? '',
@@ -139,6 +161,7 @@ export function BotSettingsPanel(): React.JSX.Element {
     const body: Record<string, unknown> = {
       name,
       avatarEnabled,
+      transcriptProvider,
       autoLeave: {
         everyoneLeftSec: parseSeconds(autoLeaveStr.everyoneLeftSec),
         waitingRoomSec: parseSeconds(autoLeaveStr.waitingRoomSec),
@@ -160,7 +183,7 @@ export function BotSettingsPanel(): React.JSX.Element {
       })
       .catch((e: unknown) => setMessage({ text: e instanceof Error ? e.message : 'Save failed.', ok: false }))
       .finally(() => setSaving(false));
-  }, [name, avatarEnabled, autoLeaveStr, pendingDataUrl, removeAvatar, hydrate]);
+  }, [name, avatarEnabled, transcriptProvider, autoLeaveStr, pendingDataUrl, removeAvatar, hydrate]);
 
   if (loadError !== null) return <ErrorState title="Couldn’t load bot settings" description={loadError} />;
   if (config === null) return <LoadingState label="Loading bot settings…" />;
@@ -180,6 +203,28 @@ export function BotSettingsPanel(): React.JSX.Element {
           onChange={(e): void => setName(e.target.value)}
           aria-label="Bot display name"
         />
+      </label>
+
+      {/* Transcription provider */}
+      <label className="flex max-w-md flex-col gap-1">
+        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Transcription</span>
+        <select
+          className={inputClass}
+          style={inputStyle}
+          value={transcriptProvider}
+          disabled={saving}
+          onChange={(e): void => setTranscriptProvider(e.target.value as TranscriptProvider)}
+          aria-label="Transcription provider"
+        >
+          {TRANSCRIPT_PROVIDER_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+          {TRANSCRIPT_PROVIDER_OPTIONS.find((o) => o.value === transcriptProvider)?.hint}
+        </span>
       </label>
 
       {/* Avatar */}

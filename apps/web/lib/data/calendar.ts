@@ -756,6 +756,7 @@ export async function joinMeetingNow(input: JoinMeetingInput): Promise<JoinedMee
       botName: botConfig.name,
       botAvatarJpegB64: botConfig.avatarEnabled ? botConfig.avatarJpegB64 : null,
       autoLeave: botConfig.autoLeave,
+      transcriptProvider: botConfig.transcriptProvider,
     });
 
     const stored = await db
