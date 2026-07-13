@@ -86,17 +86,11 @@ export interface AutomationRequestView {
   readonly createdAt: string;
 }
 
-function scheduleLabelOf(schedule: Json): string {
-  const parsed = parseSchedule(schedule);
-  return 'schedule' in parsed ? describeSchedule(parsed.schedule) : 'Custom schedule';
-}
-
-function isEventTriggerOf(schedule: Json): boolean {
-  const parsed = parseSchedule(schedule);
-  return 'schedule' in parsed && isEventSchedule(parsed.schedule);
-}
-
 function toView(row: AutomationRow, ownerName: string | null = null): AutomationView {
+  // Parse the untrusted schedule JSON ONCE; derive both the label and the trigger kind.
+  const parsed = parseSchedule(row.schedule);
+  const scheduleLabel = 'schedule' in parsed ? describeSchedule(parsed.schedule) : 'Custom schedule';
+  const isEventTrigger = 'schedule' in parsed && isEventSchedule(parsed.schedule);
   return {
     id: row.id,
     ownerUserId: row.owner_user_id,
@@ -106,8 +100,8 @@ function toView(row: AutomationRow, ownerName: string | null = null): Automation
     type: row.type as AutomationType,
     params: row.params,
     schedule: row.schedule,
-    scheduleLabel: scheduleLabelOf(row.schedule),
-    isEventTrigger: isEventTriggerOf(row.schedule),
+    scheduleLabel,
+    isEventTrigger,
     recipients: row.recipients,
     hasExternalRecipient: row.has_external_recipient,
     status: row.status as AutomationStatus,

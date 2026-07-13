@@ -67,7 +67,9 @@ test('before_meeting event: parses filters + clientId, and does not schedule a n
 test('before_meeting event: rejects a bad event name and out-of-range leadMinutes', () => {
   assert.ok('error' in parseSchedule({ kind: 'event', event: 'nope', leadMinutes: 15, filters: {} }));
   assert.ok('error' in parseSchedule({ kind: 'event', event: 'before_meeting', leadMinutes: 0, filters: {} }));
-  assert.ok('error' in parseSchedule({ kind: 'event', event: 'before_meeting', leadMinutes: 100000, filters: {} }));
+  // Above the 240-minute (4h) upper bound → rejected; exactly 240 → accepted.
+  assert.ok('error' in parseSchedule({ kind: 'event', event: 'before_meeting', leadMinutes: 300, filters: {} }));
+  assert.ok('schedule' in parseSchedule({ kind: 'event', event: 'before_meeting', leadMinutes: 240, filters: {} }));
 });
 
 test('before_meeting event: a non-UUID clientId is dropped, not trusted', () => {

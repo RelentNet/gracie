@@ -22,7 +22,6 @@ import {
   type AutomationType,
   type ClientReportParams,
   type ClientSendParams,
-  type MeetingBriefParams,
   type ReminderParams,
 } from '@gracie/shared';
 
@@ -261,12 +260,20 @@ async function resolveUsers(db: ServerClient, userIds: readonly string[]): Promi
   return (data ?? []).map((u) => ({ id: u.id, email: u.email }));
 }
 
-/** id→display-name for a set of users (incl. deactivated — names for brief rendering). */
-async function loadUserNames(db: ServerClient, userIds: readonly string[]): Promise<Map<string, string>> {
-  if (userIds.length === 0) return new Map();
-  const { data, error } = await db.from('users').select('id, name').in('id', [...userIds]);
-  if (error !== null) throw new Error(`automation: load user names: ${error.message}`);
-  return new Map((data ?? []).map((u) => [u.id, u.name]));
+/** One user's directory entry — name for rendering, email + active flag for delivery. */
+interface DirectoryUser {
+  readonly id: string;
+  readonly name: string;
+  readonly email: string;
+  readonly deactivated: boolean;
+}
+
+/** Load id→{name,email,active} for a set of users in ONE query (incl. deactivated). */
+async function loadUserDirectory(db: ServerClient, userIds: readonly string[]): Promise<DirectoryUser[]> {
+  if (userIds.length === 0) return [];
+  const { data, error } = await db.from('users').select('id, name, email, deactivated_at').in('id', [...userIds]);
+  if (error !== null) throw new Error(`automation: load user directory: ${error.message}`);
+  return (data ?? []).map((u) => ({ id: u.id, name: u.name, email: u.email, deactivated: u.deactivated_at !== null }));
 }
 
 /** Write one in-app notification per user (type 'automation'), best-effort. */
@@ -502,15 +509,12 @@ async function runClientSend(
 
 // --- meeting_brief (P8.1 event-triggered) -------------------------------------
 
-/** The meeting fields a meeting_brief needs. `client_id` is guaranteed non-null. */
-export interface BriefTargetMeeting {
-  readonly id: string;
-  readonly title: string | null;
-  readonly date_time: string;
-  readonly client_id: string;
-  readonly meeting_lead_user_id: string | null;
-  readonly attendee_user_ids: string[];
-  readonly external_attendees: Json;
+/** Read a loosely-typed jsonb boolean (accepts a real boolean or the string form). */
+function readLooseBool(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return fallback;
 }
 
 /**
@@ -520,14 +524,14 @@ export interface BriefTargetMeeting {
  * internal attendees + lead (plus any configured recipients). No external surface: it
  * rides the SAME allowlist-gated team send as every other internal automation, so it
  * adds no new customer-contact path. Called by the processor's event pass / event
- * Run-now with the resolved target meeting.
+ * Run-now with the resolved target meeting (a {@link BriefMeeting}, `client_id` non-null).
  */
 export async function runMeetingBrief(
   ctx: { readonly db: ServerClient; readonly log: FastifyBaseLogger; readonly automation: AutomationRow },
-  meeting: BriefTargetMeeting,
+  meeting: BriefMeeting,
 ): Promise<ExecutionOutcome> {
   const { db, log, automation } = ctx;
-  const params = asRecord(automation.params) as unknown as MeetingBriefParams;
+  const notifyAttendees = readLooseBool(asRecord(automation.params).notifyAttendees, true);
   const recipients = parseRecipients(automation.recipients);
 
   // Client name + health for the brief header.
@@ -541,35 +545,28 @@ export async function runMeetingBrief(
     return { status: 'skipped', detail: 'meeting_brief: client no longer exists', externalRecipients: [] };
   }
 
-  // Names for rendering the brief body (lead + attendees), independent of delivery.
-  const nameIds = new Set<string>([automation.owner_user_id, ...meeting.attendee_user_ids]);
-  if (meeting.meeting_lead_user_id !== null) nameIds.add(meeting.meeting_lead_user_id);
-  const usersById = await loadUserNames(db, [...nameIds]);
+  // One directory lookup covers BOTH brief rendering (names, incl. deactivated) and
+  // delivery (active only): owner + configured recipients + the meeting's attendees + lead.
+  const directoryIds = new Set<string>([automation.owner_user_id, ...(recipients.userIds ?? []), ...meeting.attendee_user_ids]);
+  if (meeting.meeting_lead_user_id !== null) directoryIds.add(meeting.meeting_lead_user_id);
+  const directory = await loadUserDirectory(db, [...directoryIds]);
+  const usersById = new Map(directory.map((u) => [u.id, u.name]));
 
-  const body = await buildBriefContent(
-    db,
-    {
-      id: meeting.id,
-      title: meeting.title,
-      date_time: meeting.date_time,
-      client_id: meeting.client_id,
-      meeting_lead_user_id: meeting.meeting_lead_user_id,
-      attendee_user_ids: meeting.attendee_user_ids,
-      external_attendees: meeting.external_attendees,
-    } satisfies BriefMeeting,
-    { clientName: clientRes.data.name, health: clientRes.data.relationship_health, usersById },
-  );
+  const body = await buildBriefContent(db, meeting, {
+    clientName: clientRes.data.name,
+    health: clientRes.data.relationship_health,
+    usersById,
+  });
   const title = `Pre-meeting brief: ${clientRes.data.name}${meeting.title !== null ? ` — ${meeting.title}` : ''}`;
 
-  // Delivery targets (active users only): owner + configured recipients + (unless
-  // opted out) the meeting's internal attendees + lead.
-  const notifyAttendees = params.notifyAttendees !== false;
+  // Delivery targets: owner + configured recipients + (unless opted out) the meeting's
+  // internal attendees + lead — filtered to ACTIVE users from the same directory.
   const deliverIds = new Set<string>([automation.owner_user_id, ...(recipients.userIds ?? [])]);
   if (notifyAttendees) {
     for (const id of meeting.attendee_user_ids) deliverIds.add(id);
     if (meeting.meeting_lead_user_id !== null) deliverIds.add(meeting.meeting_lead_user_id);
   }
-  const users = await resolveUsers(db, [...deliverIds]);
+  const users = directory.filter((u) => !u.deactivated && deliverIds.has(u.id)).map((u) => ({ id: u.id, email: u.email }));
 
   const detail = await deliverToUsers(db, log, users, recipients.emails ?? [], { title, body }, '/calendar');
   return { status: 'success', detail: `meeting_brief → ${detail}`, externalRecipients: [] };

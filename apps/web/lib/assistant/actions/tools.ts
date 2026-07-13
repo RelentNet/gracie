@@ -106,7 +106,8 @@ const CREATE_AUTOMATION_SPEC: AITool = {
           runAt: { type: 'string', description: 'ISO instant (kind=once).' },
           everyMinutes: {
             type: 'number',
-            description: 'Minutes between runs (kind=interval). Hourly (60) is the shortest allowed — no sub-hourly.',
+            description:
+              'Minutes between runs (kind=interval). Must be at least the configured minimum (60 = hourly by default; an admin may allow shorter). If you request one below the minimum it will be rejected with the allowed floor — never assume sub-hourly is impossible, but never promise per-minute.',
           },
           hourEt: { type: 'number', description: 'Hour 0–23 Eastern (kind=daily/weekly).' },
           minuteEt: { type: 'number', description: 'Minute 0–59 (optional).' },
@@ -122,10 +123,13 @@ const CREATE_AUTOMATION_SPEC: AITool = {
           },
           filters: {
             type: 'object',
-            description: 'Which meetings trigger it (kind=event). Briefs already target client meetings only.',
+            description:
+              'Which of the user’s meetings trigger it (kind=event). Briefs always cover the user’s own client meetings; these narrow further.',
             properties: {
-              meetingsILead: { type: 'boolean', description: 'Only meetings the user leads.' },
-              clientMeetingsOnly: { type: 'boolean', description: 'Only client meetings (the default for briefs).' },
+              meetingsILead: {
+                type: 'boolean',
+                description: 'Only meetings the user LEADS (default: any client meeting the user leads or attends).',
+              },
             },
             additionalProperties: false,
           },

@@ -19,10 +19,18 @@ import type { Job, Processor } from 'bullmq';
 import type { FastifyBaseLogger } from 'fastify';
 
 import { getServerClient } from '@gracie/db';
-import type { Database, Json, ServerClient } from '@gracie/db';
-import { isEventSchedule, nextRunAfter, parseSchedule, type AutomationJobPayload } from '@gracie/shared';
+import type { Database, ServerClient } from '@gracie/db';
+import {
+  isEventSchedule,
+  nextRunAfter,
+  parseSchedule,
+  type AutomationJobPayload,
+  type EventSchedule,
+} from '@gracie/shared';
 
 import { runAutomation, runMeetingBrief, type ExecutionOutcome } from '../lib/automation-executors.js';
+import type { BriefMeeting } from '../lib/brief.js';
+import type { TodayMeetingRow } from './daily-sync.processor.js';
 
 type AutomationRow = Database['public']['Tables']['automations']['Row'];
 type AutomationUpdate = Database['public']['Tables']['automations']['Update'];
@@ -41,21 +49,9 @@ const EVENT_MEETINGS_LIMIT = 50;
  */
 const EVENT_GRACE_MINUTES = 5;
 
-/** Columns a meeting_brief needs from a candidate meeting. */
+/** Columns a meeting_brief needs from a candidate meeting (matches TodayMeetingRow). */
 const EVENT_MEETING_COLS =
   'id, title, date_time, client_id, meeting_lead_user_id, attendee_user_ids, external_attendees, is_internal';
-
-/** A candidate meeting row for the event pass (client_id may be null pre-filter). */
-interface EventMeetingRow {
-  readonly id: string;
-  readonly title: string | null;
-  readonly date_time: string;
-  readonly client_id: string | null;
-  readonly meeting_lead_user_id: string | null;
-  readonly attendee_user_ids: string[];
-  readonly external_attendees: Json;
-  readonly is_internal: boolean;
-}
 
 /** Outcome of one processor invocation (visible in Bull Board). */
 export interface AutomationsResult {
@@ -255,7 +251,7 @@ async function mirrorLastRun(db: ServerClient, automationId: string, status: str
 }
 
 /** Map a candidate row to the executor's target shape (client_id guaranteed non-null by query). */
-function toBriefTarget(m: EventMeetingRow): Parameters<typeof runMeetingBrief>[1] {
+function toBriefTarget(m: TodayMeetingRow): BriefMeeting {
   return {
     id: m.id,
     title: m.title,
@@ -267,20 +263,60 @@ function toBriefTarget(m: EventMeetingRow): Parameters<typeof runMeetingBrief>[1
   };
 }
 
+/** True when the automation OWNER is on the meeting: leads it (always), or attends it (unless lead-only). */
+function ownerIsOnMeeting(m: TodayMeetingRow, ownerId: string, leadOnly: boolean): boolean {
+  if (m.meeting_lead_user_id === ownerId) return true;
+  if (leadOnly) return false;
+  return m.attendee_user_ids.includes(ownerId);
+}
+
+/**
+ * Fetch the OWNER's client meetings for an event trigger, owner-scoped in code. The
+ * query narrows to non-internal, client-linked meetings from `fromIso` (optionally to
+ * `toIso`), ordered by start; the owner filter (leads, or leads-or-attends) is applied
+ * in JS to avoid a fragile array-membership OR in PostgREST. Shared by the sweep pass
+ * and Run-now so "which meetings count" can never drift between them.
+ */
+async function fetchOwnerMeetings(
+  db: ServerClient,
+  schedule: EventSchedule,
+  ownerId: string,
+  window: { readonly fromIso: string; readonly toIso?: string; readonly limit: number },
+): Promise<TodayMeetingRow[]> {
+  let query = db
+    .from('meetings')
+    .select(EVENT_MEETING_COLS)
+    .not('client_id', 'is', null)
+    .eq('is_internal', false)
+    .gte('date_time', window.fromIso)
+    .order('date_time', { ascending: true })
+    .limit(window.limit);
+  if (window.toIso !== undefined) query = query.lte('date_time', window.toIso);
+  if (schedule.filters.clientId !== undefined) query = query.eq('client_id', schedule.filters.clientId);
+
+  const { data, error } = await query;
+  if (error !== null) throw new Error(`automations: event meetings: ${error.message}`);
+  const leadOnly = schedule.filters.meetingsILead === true;
+  return ((data ?? []) as TodayMeetingRow[]).filter((m) => ownerIsOnMeeting(m, ownerId, leadOnly));
+}
+
 /**
  * Fire ONE meeting_brief for one meeting with an exactly-once claim. Mirrors
  * bot-dispatch's per-row idempotent claim: the INSERT into `automation_runs` with
  * `meeting_id` set is atomic against the unique partial index — a 23505 means another
- * sweep already fired this (automation, meeting) pair, so we skip. On success/failure
- * the same claim row is filled in with the outcome. Returns the run status, or null
- * when the claim was lost (already fired).
+ * sweep (or a Run-now) already fired this (automation, meeting) pair, so we skip
+ * (return null). On SUCCESS/terminal-skip the claim row is filled in with the outcome;
+ * on FAILURE the claim is ROLLED BACK (deleted) so a transient error retries on the
+ * next sweep rather than being lost — again mirroring bot-dispatch. Does NOT mirror the
+ * automation's last-run (the caller does that once per automation). Returns the run
+ * status, or null when the claim was lost.
  */
 async function fireMeetingBrief(
   db: ServerClient,
   log: FastifyBaseLogger,
   now: Date,
   automation: AutomationRow,
-  meeting: EventMeetingRow,
+  meeting: TodayMeetingRow,
 ): Promise<ExecutionOutcome['status'] | null> {
   const startedIso = now.toISOString();
   const claim = await db
@@ -288,14 +324,14 @@ async function fireMeetingBrief(
     .insert({
       automation_id: automation.id,
       meeting_id: meeting.id,
-      status: 'skipped', // provisional; overwritten with the real outcome below
+      status: 'skipped', // provisional; the real outcome overwrites it (or the row is deleted) below
       started_at: startedIso,
-      detail: 'meeting_brief: claimed',
+      detail: 'meeting_brief: claimed (delivery pending)',
     })
     .select('id')
     .single();
   if (claim.error !== null) {
-    if (claim.error.code === '23505') return null; // another sweep already fired this pair
+    if (claim.error.code === '23505') return null; // already fired this pair (sweep or run-now)
     throw new Error(`automations: event claim: ${claim.error.message}`);
   }
 
@@ -310,13 +346,22 @@ async function fireMeetingBrief(
     };
   }
 
+  if (outcome.status === 'failed') {
+    // Roll back the claim so a transient failure retries next sweep (not lost forever).
+    const del = await db.from('automation_runs').delete().eq('id', claim.data.id);
+    log.warn(
+      { automationId: automation.id, meetingId: meeting.id, detail: outcome.detail, rollbackError: del.error?.message },
+      'automations: meeting_brief failed — rolled back claim for retry',
+    );
+    return 'failed';
+  }
+
   const upd = await db
     .from('automation_runs')
     .update({ status: outcome.status, detail: outcome.detail, finished_at: new Date().toISOString() })
     .eq('id', claim.data.id);
   if (upd.error !== null) log.warn({ runId: claim.data.id, err: upd.error.message }, 'automations: event run update failed');
 
-  await mirrorLastRun(db, automation.id, outcome.status);
   log.info(
     { automationId: automation.id, meetingId: meeting.id, status: outcome.status },
     'automations: meeting_brief fired',
@@ -325,9 +370,10 @@ async function fireMeetingBrief(
 }
 
 /**
- * The event pass: for every enabled+active meeting_brief automation, find client
- * meetings whose start is within [now − grace, now + leadMinutes] (respecting the
- * automation's filters) that this automation has not already fired for, and run each.
+ * The event pass: for every enabled+active meeting_brief automation, find the OWNER's
+ * client meetings whose start is within [now − grace, now + leadMinutes] (respecting the
+ * filters) that this automation has not already fired for, and run each. Ordered by
+ * `created_at` so a >limit backlog is processed deterministically, not starved.
  */
 async function runEventPass(db: ServerClient, log: FastifyBaseLogger, now: Date): Promise<AutomationsResult> {
   const { data, error } = await db
@@ -336,6 +382,7 @@ async function runEventPass(db: ServerClient, log: FastifyBaseLogger, now: Date)
     .eq('enabled', true)
     .eq('status', 'active')
     .eq('type', 'meeting_brief')
+    .order('created_at', { ascending: true })
     .limit(EVENT_SWEEP_LIMIT);
   if (error !== null) throw new Error(`automations: event pass load: ${error.message}`);
 
@@ -355,25 +402,15 @@ async function runEventPass(db: ServerClient, log: FastifyBaseLogger, now: Date)
       const schedule = parsed.schedule;
       const upperIso = new Date(now.getTime() + schedule.leadMinutes * 60_000).toISOString();
 
-      // Candidate client meetings in the lead window (mirrors daily-sync briefable set).
-      let query = db
-        .from('meetings')
-        .select(EVENT_MEETING_COLS)
-        .not('client_id', 'is', null)
-        .eq('is_internal', false)
-        .gte('date_time', lowerIso)
-        .lte('date_time', upperIso)
-        .order('date_time', { ascending: true })
-        .limit(EVENT_MEETINGS_LIMIT);
-      if (schedule.filters.clientId !== undefined) query = query.eq('client_id', schedule.filters.clientId);
-      if (schedule.filters.meetingsILead === true) query = query.eq('meeting_lead_user_id', automation.owner_user_id);
-
-      const mres = await query;
-      if (mres.error !== null) throw new Error(`automations: event meetings: ${mres.error.message}`);
-      const candidates = (mres.data ?? []) as EventMeetingRow[];
+      const candidates = await fetchOwnerMeetings(db, schedule, automation.owner_user_id, {
+        fromIso: lowerIso,
+        toIso: upperIso,
+        limit: EVENT_MEETINGS_LIMIT,
+      });
       if (candidates.length === 0) continue;
 
       const alreadyFired = await loadFiredMeetingIds(db, automation.id, candidates.map((m) => m.id));
+      let lastStatus: ExecutionOutcome['status'] | null = null;
       for (const meeting of candidates) {
         if (alreadyFired.has(meeting.id)) continue;
         const status = await fireMeetingBrief(db, log, now, automation, meeting);
@@ -381,7 +418,10 @@ async function runEventPass(db: ServerClient, log: FastifyBaseLogger, now: Date)
         ran += 1;
         if (status === 'failed') failed += 1;
         if (status === 'skipped') skipped += 1;
+        lastStatus = status;
       }
+      // Mirror once per automation (not once per meeting) to avoid redundant row writes.
+      if (lastStatus !== null) await mirrorLastRun(db, automation.id, lastStatus);
     } catch (err) {
       // One automation's failure never aborts the pass.
       log.error({ automationId: automation.id, err }, 'automations: event automation failed (non-fatal)');
@@ -392,10 +432,11 @@ async function runEventPass(db: ServerClient, log: FastifyBaseLogger, now: Date)
 }
 
 /**
- * "Run now" for an event automation: fire the brief for the NEXT upcoming matching
- * meeting immediately (or record a skipped run when there is none). A manual run is an
- * explicit extra — it does NOT take the meeting-id claim, so it never conflicts with
- * (or suppresses) the automatic fire, exactly like the schedule-based "Run now".
+ * "Run now" for an event automation: fire the brief for the OWNER's NEXT upcoming
+ * matching meeting immediately (or record a skipped run when there is none). It TAKES
+ * the meeting-id claim, so Run-now doubles as THAT meeting's single fire — the
+ * automatic pass will not brief it again (no duplicate). If it was already briefed, we
+ * record a skip explaining so.
  */
 async function runEventAutomationNow(
   db: ServerClient,
@@ -414,23 +455,13 @@ async function runEventAutomationNow(
     await mirrorLastRun(db, automation.id, 'skipped');
     return { ran: 0, failed: 0, skipped: 1 };
   }
-  const schedule = parsed.schedule;
 
-  let query = db
-    .from('meetings')
-    .select(EVENT_MEETING_COLS)
-    .not('client_id', 'is', null)
-    .eq('is_internal', false)
-    .gte('date_time', now.toISOString())
-    .order('date_time', { ascending: true })
-    .limit(1);
-  if (schedule.filters.clientId !== undefined) query = query.eq('client_id', schedule.filters.clientId);
-  if (schedule.filters.meetingsILead === true) query = query.eq('meeting_lead_user_id', automation.owner_user_id);
-
-  const mres = await query;
-  if (mres.error !== null) throw new Error(`automations: run-now event meetings: ${mres.error.message}`);
-  const meeting = (mres.data ?? [])[0] as EventMeetingRow | undefined;
-
+  // The owner's soonest matching upcoming meeting (owner-scoped, no lead-window cap).
+  const upcoming = await fetchOwnerMeetings(db, parsed.schedule, automation.owner_user_id, {
+    fromIso: now.toISOString(),
+    limit: 25,
+  });
+  const meeting = upcoming[0];
   if (meeting === undefined) {
     await recordManualRun(db, automation.id, startedIso, {
       status: 'skipped',
@@ -442,23 +473,19 @@ async function runEventAutomationNow(
     return { ran: 0, failed: 0, skipped: 1 };
   }
 
-  let outcome: ExecutionOutcome;
-  try {
-    outcome = await runMeetingBrief({ db, log, automation }, toBriefTarget(meeting));
-  } catch (err) {
-    outcome = {
-      status: 'failed',
-      detail: `meeting_brief error: ${err instanceof Error ? err.message : String(err)}`,
+  const status = await fireMeetingBrief(db, log, now, automation, meeting);
+  if (status === null) {
+    // The next meeting was already briefed (auto pass or a prior Run-now) — surface it.
+    await recordManualRun(db, automation.id, startedIso, {
+      status: 'skipped',
+      detail: 'next matching meeting was already briefed',
       externalRecipients: [],
-    };
+    });
+    await mirrorLastRun(db, automation.id, 'skipped');
+    return { ran: 0, failed: 0, skipped: 1 };
   }
-  await recordManualRun(db, automation.id, startedIso, outcome);
-  await mirrorLastRun(db, automation.id, outcome.status);
-  return {
-    ran: 1,
-    failed: outcome.status === 'failed' ? 1 : 0,
-    skipped: outcome.status === 'skipped' ? 1 : 0,
-  };
+  await mirrorLastRun(db, automation.id, status);
+  return { ran: 1, failed: status === 'failed' ? 1 : 0, skipped: status === 'skipped' ? 1 : 0 };
 }
 
 /** Append an audit row for a manual event run (no meeting_id → never claim-constrained). */

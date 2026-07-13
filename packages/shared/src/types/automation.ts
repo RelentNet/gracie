@@ -48,14 +48,14 @@ export interface WeeklySchedule {
 }
 
 /**
- * Which meetings an event trigger fires for (P8.1). All optional and AND-combined;
- * an empty object matches every client meeting. `clientMeetingsOnly` is implicit for
- * `meeting_brief` (a brief needs a client), but kept explicit for clarity + reuse.
+ * Which of the OWNER's meetings an event trigger fires for (P8.1). All optional and
+ * AND-combined. The trigger is always scoped to the owner's own client meetings (a
+ * `meeting_brief` needs a client, and "brief ME" means the owner's meetings — the
+ * worker restricts candidates to meetings the owner leads or attends). These filters
+ * narrow that set further.
  */
 export interface EventFilters {
-  /** Only meetings linked to a client (implicit for meeting_brief). */
-  readonly clientMeetingsOnly?: boolean;
-  /** Only meetings the automation owner leads. */
+  /** Only meetings the owner LEADS (default: any meeting the owner leads or attends). */
   readonly meetingsILead?: boolean;
   /** Only meetings for this specific client (`clients.id`). */
   readonly clientId?: string;
@@ -99,9 +99,14 @@ export const ABSOLUTE_MIN_INTERVAL_MINUTES = 5;
  */
 export const DEFAULT_MIN_INTERVAL_MINUTES = 60;
 
-/** Bounds for an event trigger's lead time (minutes): from the sweep cadence to a day. */
+/**
+ * Bounds for an event trigger's lead time (minutes): from the sweep cadence up to 4
+ * hours. The upper bound keeps a "brief me before each meeting" trigger a genuine
+ * pre-meeting nudge (a whole-day lead is a scheduled digest, not an event) and bounds
+ * how many already-in-window meetings a freshly-activated automation fires at once.
+ */
 export const MIN_EVENT_LEAD_MINUTES = ABSOLUTE_MIN_INTERVAL_MINUTES;
-export const MAX_EVENT_LEAD_MINUTES = 1440;
+export const MAX_EVENT_LEAD_MINUTES = 240;
 
 // --- recipients + params ------------------------------------------------------
 
@@ -285,11 +290,9 @@ export function isAutomationType(value: unknown): value is AutomationType {
 function parseEventFilters(value: unknown): EventFilters {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return {};
   const rec = value as Record<string, unknown>;
-  const filters: { clientMeetingsOnly?: boolean; meetingsILead?: boolean; clientId?: string } = {};
-  const clientMeetingsOnly = asBool(rec.clientMeetingsOnly);
+  const filters: { meetingsILead?: boolean; clientId?: string } = {};
   const meetingsILead = asBool(rec.meetingsILead);
   const clientId = typeof rec.clientId === 'string' && UUID_RE.test(rec.clientId) ? rec.clientId : undefined;
-  if (clientMeetingsOnly !== undefined) filters.clientMeetingsOnly = clientMeetingsOnly;
   if (meetingsILead !== undefined) filters.meetingsILead = meetingsILead;
   if (clientId !== undefined) filters.clientId = clientId;
   return filters;
@@ -380,12 +383,7 @@ function describeEventTrigger(schedule: EventSchedule): string {
       ? `${schedule.leadMinutes / 60} hr`
       : `${schedule.leadMinutes} min`;
   const f = schedule.filters;
-  const scope =
-    f.clientId !== undefined
-      ? `${schedule.clientName ?? 'client'} meeting`
-      : f.clientMeetingsOnly === false
-        ? 'meeting'
-        : 'client meeting';
+  const scope = f.clientId !== undefined ? `${schedule.clientName ?? 'client'} meeting` : 'client meeting';
   const lead2 = f.meetingsILead ? `${scope} you lead` : scope;
   return `${lead} before each ${lead2}`;
 }

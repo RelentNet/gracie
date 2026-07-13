@@ -59,6 +59,13 @@ export async function POST(req: NextRequest, { params }: Params): Promise<NextRe
     }
     const schedule = parsed.schedule;
 
+    // Re-assert the type↔schedule invariant create_automation enforces: an event
+    // schedule is only valid for meeting_brief, and vice versa. Guards against a
+    // malformed persisted row activating into a shape neither run path handles.
+    if ((schedule.kind === 'event') !== (row.type === 'meeting_brief')) {
+      return jsonError('unprocessable', 'Automation type and trigger do not match', 422);
+    }
+
     // --- customer-contact exception gate (§2b) ---
     if (row.has_external_recipient) {
       const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
