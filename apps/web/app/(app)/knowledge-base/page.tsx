@@ -11,6 +11,7 @@ import { TYPE } from '@/lib/typography';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { Table, TBody, TCell, THead, TH, TRow } from '@/components/ui/Table';
 import { KbUploadModal } from './KbUploadModal';
@@ -139,7 +140,7 @@ export default function KnowledgeBasePage(): React.JSX.Element {
   const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body };
 
   return (
-    <section className="flex flex-col gap-6">
+    <PageContainer className="flex flex-col gap-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-2">
           <Sparkles aria-hidden="true" size={20} style={{ color: 'var(--color-blue-700)' }} />
@@ -226,7 +227,7 @@ export default function KnowledgeBasePage(): React.JSX.Element {
         />
       ) : (
         <Card className="p-0">
-          <Table>
+          <Table minWidth="52rem" scrollRegionLabel="Knowledge base documents">
             <THead>
               <TH>Title</TH>
               <TH>Topics</TH>
@@ -314,6 +315,6 @@ export default function KnowledgeBasePage(): React.JSX.Element {
           onCreated={onCreated}
         />
       ) : null}
-    </section>
+    </PageContainer>
   );
 }

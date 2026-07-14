@@ -1,5 +1,6 @@
 'use client';
 
+import { PageContainer } from '@/components/ui/PageContainer';
 import { PagePlaceholder } from '@/components/ui/PagePlaceholder';
 import { TYPE } from '@/lib/typography';
 import { useAuth } from '@/lib/auth';
@@ -17,17 +18,19 @@ export default function PipelinePage(): React.JSX.Element {
 
   if (!can('pipeline.viewErrors')) {
     return (
-      <PagePlaceholder
-        title="Pipeline"
-        description="Live status of meeting document generation."
-        emptyTitle="No pipeline activity"
-        emptyDescription="Meetings with live processing status badges appear on each client. The error log and manual re-trigger are available to administrators."
-      />
+      <PageContainer>
+        <PagePlaceholder
+          title="Pipeline"
+          description="Live status of meeting document generation."
+          emptyTitle="No pipeline activity"
+          emptyDescription="Meetings with live processing status badges appear on each client. The error log and manual re-trigger are available to administrators."
+        />
+      </PageContainer>
     );
   }
 
   return (
-    <section className="flex flex-col gap-6">
+    <PageContainer className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Pipeline</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
@@ -35,6 +38,6 @@ export default function PipelinePage(): React.JSX.Element {
         </p>
       </header>
       <PipelineErrorsPanel />
-    </section>
+    </PageContainer>
   );
 }

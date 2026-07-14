@@ -1,6 +1,7 @@
 'use client';
 
 import { TYPE } from '@/lib/typography';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { DriveBrowser } from '@/components/FileBrowser/DriveBrowser';
 
 /**
@@ -18,7 +19,7 @@ import { DriveBrowser } from '@/components/FileBrowser/DriveBrowser';
  */
 export default function DocumentsPage(): React.JSX.Element {
   return (
-    <section className="flex flex-col gap-6">
+    <PageContainer className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Documents</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
@@ -26,6 +27,6 @@ export default function DocumentsPage(): React.JSX.Element {
         </p>
       </header>
       <DriveBrowser scope={{ kind: 'global' }} />
-    </section>
+    </PageContainer>
   );
 }

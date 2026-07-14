@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Globe, MessageSquare, Paperclip, X } from 'lucide-react';
+import { Globe, MessageSquare, PanelLeft, Paperclip, X } from 'lucide-react';
 
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
@@ -48,6 +48,9 @@ export default function AssistantPage(): React.JSX.Element {
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [webAccess, setWebAccess] = useState(true);
+  // Below md the conversation list is an off-canvas drawer (the two-pane layout
+  // doesn't fit a phone); md+ keeps the static sidebar. Presentational only.
+  const [navOpen, setNavOpen] = useState(false);
 
   const [attachments, setAttachments] = useState<readonly PendingAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -231,33 +234,74 @@ export default function AssistantPage(): React.JSX.Element {
 
   const attachDisabled = streaming || uploading;
 
+  // Shared conversation-list wiring, reused by the desktop sidebar and the mobile
+  // drawer (the drawer instance also closes itself on select / new chat).
+  const conversationListProps = {
+    chats,
+    activeChatId,
+    loading: chatsLoading,
+    error: chatsError,
+    search,
+    onSearchChange: setSearch,
+    onSelect: (id: string): void => void selectChat(id),
+    onNewChat: startNewChat,
+    onRename: (id: string, title: string): void => void handleRename(id, title),
+    onArchive: (id: string): void => void handleArchive(id),
+    onDelete: (id: string): void => void handleDelete(id),
+  };
+
   return (
     <div className="flex h-[calc(100dvh-4rem)] gap-4">
-      <Card className="flex w-72 shrink-0 flex-col p-3">
-        <ConversationList
-          chats={chats}
-          activeChatId={activeChatId}
-          loading={chatsLoading}
-          error={chatsError}
-          search={search}
-          onSearchChange={setSearch}
-          onSelect={(id): void => void selectChat(id)}
-          onNewChat={startNewChat}
-          onRename={(id, title): void => void handleRename(id, title)}
-          onArchive={(id): void => void handleArchive(id)}
-          onDelete={(id): void => void handleDelete(id)}
-        />
+      {/* Desktop sidebar (static on md+). */}
+      <Card className="hidden w-72 shrink-0 flex-col p-3 md:flex">
+        <ConversationList {...conversationListProps} />
       </Card>
 
-      <Card className="flex flex-1 flex-col gap-3 p-4">
-        <div className="flex items-center justify-end border-b pb-2" style={{ borderColor: 'var(--border-subtle)' }}>
-          <ToggleSwitch
-            checked={webAccess}
-            onChange={setWebAccess}
-            label="Web"
-            ariaLabel="Allow internet access in answers"
-            icon={<Globe aria-hidden="true" size={14} style={{ color: 'var(--text-secondary)' }} />}
+      {/* Mobile drawer (below md): full-screen overlay + off-canvas panel. */}
+      {navOpen ? (
+        <div className="fixed inset-0 z-40 flex md:hidden" role="dialog" aria-modal="true" aria-label="Conversations">
+          <div
+            className="absolute inset-0"
+            style={{ backgroundColor: 'rgba(15, 23, 42, 0.5)' }}
+            onClick={(): void => setNavOpen(false)}
+            aria-hidden="true"
           />
+          <Card className="relative flex w-80 max-w-[85vw] shrink-0 flex-col rounded-none p-3">
+            <ConversationList
+              {...conversationListProps}
+              onSelect={(id): void => {
+                setNavOpen(false);
+                void selectChat(id);
+              }}
+              onNewChat={(): void => {
+                setNavOpen(false);
+                startNewChat();
+              }}
+            />
+          </Card>
+        </div>
+      ) : null}
+
+      <Card className="flex min-w-0 flex-1 flex-col gap-3 p-4">
+        <div className="flex items-center gap-2 border-b pb-2" style={{ borderColor: 'var(--border-subtle)' }}>
+          <button
+            type="button"
+            onClick={(): void => setNavOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 md:hidden"
+            style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-primary)', ...TYPE.bodyStrong }}
+          >
+            <PanelLeft aria-hidden="true" size={16} />
+            Conversations
+          </button>
+          <div className="ml-auto">
+            <ToggleSwitch
+              checked={webAccess}
+              onChange={setWebAccess}
+              label="Web"
+              ariaLabel="Allow internet access in answers"
+              icon={<Globe aria-hidden="true" size={14} style={{ color: 'var(--text-secondary)' }} />}
+            />
+          </div>
         </div>
         {messagesLoading ? (
           <div className="flex flex-1 items-center">

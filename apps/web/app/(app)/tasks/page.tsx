@@ -26,6 +26,7 @@ import {
 import type { TaskUrgency } from '@/lib/client-display';
 import { ClientAvatar } from '@/components/ClientAvatar';
 import { Badge } from '@/components/ui/Badge';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { Table, THead, TBody, TRow, TH, TCell } from '@/components/ui/Table';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
 
@@ -148,7 +149,7 @@ export default function TasksPage(): React.JSX.Element {
   }
 
   return (
-    <section className="flex flex-col gap-6">
+    <PageContainer className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Task Board</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
@@ -212,7 +213,7 @@ export default function TasksPage(): React.JSX.Element {
           description="No tasks match the current filters. Adjust the client, owner, status, or priority filters to see results."
         />
       ) : (
-        <Table>
+        <Table minWidth="60rem" scrollRegionLabel="Task board">
           <THead>
             <TH style={{ width: '2.5rem' }}>
               <span className="sr-only">Expand notes</span>
@@ -243,7 +244,7 @@ export default function TasksPage(): React.JSX.Element {
           </TBody>
         </Table>
       )}
-    </section>
+    </PageContainer>
   );
 }
 

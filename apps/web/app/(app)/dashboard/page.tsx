@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Sunrise } from 'lucide-react';
 
 import { Card } from '@/components/ui/Card';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { PagePlaceholder } from '@/components/ui/PagePlaceholder';
 import { easternDateString, getDailySync } from '@/lib/data/daily-sync';
 import { todayEastern } from '@/lib/format';
@@ -51,7 +52,7 @@ async function DailySyncBanner(): Promise<React.JSX.Element> {
 /** Module 1 — Daily Command Center (docs/08 §8 M1). */
 export default async function DashboardPage(): Promise<React.JSX.Element> {
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer className="flex flex-col gap-6">
       <DailySyncBanner />
       <PagePlaceholder
         title="Daily Command Center"
@@ -59,6 +60,6 @@ export default async function DashboardPage(): Promise<React.JSX.Element> {
         emptyTitle="No activity yet"
         emptyDescription="Today's meeting pipeline, priority tasks, and needs-attention alerts will appear here once the data layer is connected."
       />
-    </div>
+    </PageContainer>
   );
 }

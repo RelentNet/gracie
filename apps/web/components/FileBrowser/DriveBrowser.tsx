@@ -320,9 +320,9 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
         ) : null}
       </header>
 
-      <div className="grid grid-cols-1 gap-0 md:grid-cols-[16rem_1fr]">
+      <div className="grid grid-cols-1 gap-0 lg:grid-cols-[16rem_1fr]">
         <aside
-          className="border-b p-3 md:border-b-0 md:border-r"
+          className="border-b p-3 lg:border-b-0 lg:border-r"
           style={{ borderColor: 'var(--border-subtle)' }}
         >
           <p className="mb-2 px-2" style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
@@ -330,7 +330,7 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
           </p>
           <FolderTree nodes={nodes} selectedKey={selectedKey} onSelect={setSelectedKey} />
         </aside>
-        <div className="p-4">
+        <div className="min-w-0 p-4">
           <FileList
             documents={documents}
             canEdit={editable}

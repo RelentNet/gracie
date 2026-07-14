@@ -18,6 +18,7 @@ import { formatEasternDate } from '@/lib/format';
 import { ClientAvatar } from '@/components/ClientAvatar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { CLIENT_CADENCES } from '@gracie/shared';
 import type { ClientCadence } from '@gracie/shared';
@@ -103,7 +104,7 @@ export default function ClientsPage(): React.JSX.Element {
   }
 
   return (
-    <section className="flex flex-col gap-6">
+    <PageContainer className="flex flex-col gap-6">
       <header className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 style={TYPE.pageTitle}>Clients</h1>
@@ -222,7 +223,7 @@ export default function ClientsPage(): React.JSX.Element {
           }}
         />
       ) : null}
-    </section>
+    </PageContainer>
   );
 }
 
