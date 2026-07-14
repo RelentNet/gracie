@@ -120,7 +120,7 @@ function PipelinePanel({ meetings }: { readonly meetings: readonly Meeting[] }):
     );
   }
   return (
-    <Table>
+    <Table minWidth="40rem" scrollRegionLabel="Pipeline runs">
       <THead>
         <TH>Meeting</TH>
         <TH>Date</TH>
