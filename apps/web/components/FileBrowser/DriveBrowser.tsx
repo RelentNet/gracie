@@ -59,6 +59,14 @@ interface DocumentsResponse {
 interface ClientsResponse {
   readonly clients: readonly Client[];
 }
+/** Orgs that own ≥1 folder/document (any party type) — the global-tree source. */
+interface OwnerOrg {
+  readonly id: string;
+  readonly name: string;
+}
+interface OwnerOrgsResponse {
+  readonly orgs: readonly OwnerOrg[];
+}
 
 /** Recent Documents virtual node size (docs/plan p2fix — last ~20–30 touched). */
 const RECENT_LIMIT = 25;
@@ -73,6 +81,7 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
   const [allFolders, setAllFolders] = useState<readonly Folder[] | null>(null);
   const [allDocuments, setAllDocuments] = useState<readonly Document[] | null>(null);
   const [clients, setClients] = useState<readonly Client[] | null>(null);
+  const [owners, setOwners] = useState<readonly OwnerOrg[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
 
@@ -92,12 +101,14 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
       apiClient.get<FoldersResponse>(`/api/folders${query}`),
       apiClient.get<DocumentsResponse>(`/api/documents${query}`),
       apiClient.get<ClientsResponse>('/api/clients'),
+      apiClient.get<OwnerOrgsResponse>('/api/documents/orgs'),
     ])
-      .then(([flds, docs, cls]) => {
+      .then(([flds, docs, cls, orgs]) => {
         if (!active) return;
         setAllFolders(flds.folders);
         setAllDocuments(docs.documents);
         setClients(cls.clients);
+        setOwners(orgs.orgs);
       })
       .catch((e: unknown) => {
         if (active) setError(e instanceof Error ? e.message : 'Failed to load files');
@@ -124,12 +135,21 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
     () => new Map(visibleFolders.map((folder) => [folder.id, folder])),
     [visibleFolders],
   );
+  // id→name from BOTH the client roster and the doc-owner orgs. Owners carry the
+  // internal/partner orgs that `/api/clients` omits, so every org that owns a
+  // document resolves to its real name instead of "Unknown Client".
+  const nameById = useMemo<ReadonlyMap<string, string>>(() => {
+    const map = new Map<string, string>();
+    for (const c of clients ?? []) map.set(c.id, c.name);
+    for (const o of owners ?? []) map.set(o.id, o.name);
+    return map;
+  }, [clients, owners]);
   const clientName = useCallback(
     (id: string | null): string => {
       if (id === null) return 'Unassigned';
-      return (clients ?? []).find((c) => c.id === id)?.name ?? 'Unknown Client';
+      return nameById.get(id) ?? 'Unknown Client';
     },
-    [clients],
+    [nameById],
   );
 
   // Documents the role may see (restricted-folder docs omitted; unfiled kept).
@@ -155,16 +175,19 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
       return [root];
     }
 
-    const sortedClients = [...(clients ?? [])].sort((a, b) => a.name.localeCompare(b.name));
-    const clientNodes: TreeNode[] = sortedClients.map((client) => ({
-      key: clientNodeKey(client.id),
-      label: client.name,
+    // Data-driven: a node per org that actually owns a folder/document (any
+    // party type, incl. internal), so GA's Generated Docs appear and doc-less
+    // orgs don't clutter the tree (docs/plan documents-area bugs).
+    const sortedOwners = [...(owners ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+    const clientNodes: TreeNode[] = sortedOwners.map((owner) => ({
+      key: clientNodeKey(owner.id),
+      label: owner.name,
       depth: 1,
       icon: 'client',
       isRestricted: false,
       showLock: false,
       children: buildFolderNodes(
-        visibleFolders.filter((f) => f.clientId === client.id),
+        visibleFolders.filter((f) => f.clientId === owner.id),
         2,
         isAdmin,
       ),
@@ -199,7 +222,7 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
         children: [],
       },
     ];
-  }, [isGlobal, visibleFolders, clients, isAdmin]);
+  }, [isGlobal, visibleFolders, owners, isAdmin]);
 
   // Documents shown in the right panel for the current selection.
   const documents = useMemo<readonly Document[]>(() => {
@@ -256,7 +279,7 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
   if (error !== null) {
     return <ErrorState title="Couldn’t load files" description={error} />;
   }
-  if (allFolders === null || allDocuments === null || clients === null) {
+  if (allFolders === null || allDocuments === null || clients === null || owners === null) {
     return (
       <Card className="p-6">
         <LoadingState label="Loading files…" />

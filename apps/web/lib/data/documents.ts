@@ -50,6 +50,44 @@ export async function listDocuments(opts?: ListDocumentsOptions): Promise<Docume
   return (data ?? []).map(mapDocument);
 }
 
+/** An org that owns at least one folder or document, with its display name. */
+export interface DocumentOwnerOrg {
+  readonly id: string;
+  readonly name: string;
+}
+
+/**
+ * List the orgs that ACTUALLY OWN a folder or a document, with their display
+ * name — regardless of party type (internal, partner, client, lead, prospect).
+ *
+ * This backs the global Documents tree + id→name map (docs/plan documents-area
+ * bugs): every org holding docs gets a node with the correct name, and doc-less
+ * orgs are omitted. Unlike `GET /api/clients` (which defaults to real `client`s
+ * and whose `?type=all` still excludes internal), this is NOT type-filtered, so
+ * the internal Grace & Associates workspace — which owns generated meeting docs
+ * — is included and no longer renders as "Unknown Client".
+ */
+export async function listDocumentOwnerOrgs(): Promise<DocumentOwnerOrg[]> {
+  const db = getServerClient();
+  const [folders, documents] = await Promise.all([
+    db.from('folders').select('client_id'),
+    db.from('documents').select('client_id'),
+  ]);
+  if (folders.error) throw new Error(`listDocumentOwnerOrgs(folders): ${folders.error.message}`);
+  if (documents.error) {
+    throw new Error(`listDocumentOwnerOrgs(documents): ${documents.error.message}`);
+  }
+
+  const ownerIds = new Set<string>();
+  for (const row of folders.data ?? []) if (row.client_id !== null) ownerIds.add(row.client_id);
+  for (const row of documents.data ?? []) if (row.client_id !== null) ownerIds.add(row.client_id);
+  if (ownerIds.size === 0) return [];
+
+  const { data, error } = await db.from('clients').select('id, name').in('id', [...ownerIds]);
+  if (error) throw new Error(`listDocumentOwnerOrgs(clients): ${error.message}`);
+  return (data ?? []).map((row) => ({ id: row.id, name: row.name }));
+}
+
 /** List documents in a single folder, ordered newest first. */
 export async function getDocumentsByFolder(folderId: string): Promise<Document[]> {
   const db = getServerClient();
