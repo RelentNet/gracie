@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
 import { ClientAvatar } from '@/components/ClientAvatar';
 import { Button } from '@/components/ui/Button';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 
 /**
@@ -87,7 +88,7 @@ export default function ClientDetailLayout({
   const basePath = `/clients/${clientId}`;
 
   return (
-    <section className="flex flex-col gap-6">
+    <PageContainer className="flex flex-col gap-6">
       <Link
         href="/clients"
         className="inline-flex items-center gap-1.5"
@@ -127,16 +128,18 @@ export default function ClientDetailLayout({
         className="border-b"
         style={{ borderColor: 'var(--border-subtle)' }}
       >
-        <ul className="flex flex-wrap gap-1">
+        {/* Horizontally scrollable on narrow screens so the 6–7 tabs never wrap
+            or overflow the viewport. */}
+        <ul className="flex gap-1 overflow-x-auto">
           {visibleTabs.map((tab) => {
             const href = `${basePath}/${tab.segment}`;
             const isActive = pathname === href || pathname.startsWith(`${href}/`);
             return (
-              <li key={tab.segment}>
+              <li key={tab.segment} className="shrink-0">
                 <Link
                   href={href}
                   aria-current={isActive ? 'page' : undefined}
-                  className="inline-block px-4 py-2"
+                  className="inline-block whitespace-nowrap px-4 py-2"
                   style={{
                     ...TYPE.bodyStrong,
                     color: isActive ? 'var(--color-blue-700)' : 'var(--text-secondary)',
@@ -154,6 +157,6 @@ export default function ClientDetailLayout({
       </nav>
 
       <div>{children}</div>
-    </section>
+    </PageContainer>
   );
 }

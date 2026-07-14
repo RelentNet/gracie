@@ -148,7 +148,7 @@ export function ClientTasksPanel({
           <EmptyState title="No tasks" description="No active tasks for this client." />
         </div>
       ) : (
-        <Table>
+        <Table minWidth="44rem" scrollRegionLabel="Client tasks">
           <THead>
             <TH>Task</TH>
             <TH>Owner</TH>
