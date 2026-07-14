@@ -137,8 +137,8 @@ export function ApiSettingsPanel(): React.JSX.Element {
         return (
           <Card key={item.service}>
             <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <span style={TYPE.bodyStrong}>{item.label}</span>
                   {item.isSet ? (
                     <Badge bg="#e7f6ec" fg="#166534">
@@ -162,7 +162,7 @@ export function ApiSettingsPanel(): React.JSX.Element {
                 <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>{item.service}</span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="password"
                   autoComplete="off"
@@ -172,7 +172,7 @@ export function ApiSettingsPanel(): React.JSX.Element {
                   onChange={(e) => {
                     patchRow(item.service, { secret: e.target.value });
                   }}
-                  className="flex-1 rounded-lg border px-3 py-2"
+                  className="min-w-[12rem] flex-1 rounded-lg border px-3 py-2"
                   style={{ borderColor: 'var(--border-subtle)', ...TYPE.body }}
                 />
                 <Button

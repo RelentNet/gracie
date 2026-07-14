@@ -1,6 +1,7 @@
 'use client';
 
 import { CollapsibleSection } from '@/components/ui/CollapsibleSection';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { ErrorState } from '@/components/ui/StateViews';
 import { TYPE } from '@/lib/typography';
 import { useAuth } from '@/lib/auth';
@@ -28,7 +29,7 @@ export default function SettingsPage(): React.JSX.Element {
 
   if (!can('settings.access')) {
     return (
-      <section className="flex flex-col gap-6">
+      <PageContainer className="flex flex-col gap-6">
         <header className="flex flex-col gap-1">
           <h1 style={TYPE.pageTitle}>Settings</h1>
         </header>
@@ -36,12 +37,12 @@ export default function SettingsPage(): React.JSX.Element {
           title="Access restricted"
           description="Settings is available to administrators only."
         />
-      </section>
+      </PageContainer>
     );
   }
 
   return (
-    <section className="flex flex-col gap-6">
+    <PageContainer className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Settings</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
@@ -115,6 +116,6 @@ export default function SettingsPage(): React.JSX.Element {
           <ApiSettingsPanel />
         </CollapsibleSection>
       </div>
-    </section>
+    </PageContainer>
   );
 }

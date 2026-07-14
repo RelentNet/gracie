@@ -38,7 +38,12 @@ interface RowState {
   readonly busy: boolean;
 }
 
-const GRID_COLUMNS = 'minmax(0, 2fr) minmax(0, 1.3fr) auto auto';
+/**
+ * The row is a stacked card on mobile/tablet and a 4-column grid (User / Role /
+ * Status / Actions) from `lg` up — so the dense table never squashes next to the
+ * static nav on smaller screens.
+ */
+const ROW_GRID = 'lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_auto_auto] lg:items-center';
 
 async function api(path: string, init?: RequestInit): Promise<unknown> {
   const res = await fetch(path, {
@@ -186,13 +191,11 @@ export function UsersPanel(): React.JSX.Element {
       ) : null}
 
       <Card className="p-0">
-        {/* Header */}
+        {/* Header — column labels only make sense in the grid layout, so it's
+            hidden while rows are stacked cards below md. */}
         <div
-          className="grid items-center gap-3 px-4 py-2"
-          style={{
-            gridTemplateColumns: GRID_COLUMNS,
-            borderBottom: '1px solid var(--border-subtle)',
-          }}
+          className={`hidden gap-3 px-4 py-2 ${ROW_GRID}`}
+          style={{ borderBottom: '1px solid var(--border-subtle)' }}
         >
           <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>User</span>
           <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>Role</span>
@@ -207,9 +210,8 @@ export function UsersPanel(): React.JSX.Element {
           return (
             <div
               key={u.id}
-              className="grid items-center gap-3 px-4 py-3"
+              className={`flex flex-col gap-3 px-4 py-3 ${ROW_GRID}`}
               style={{
-                gridTemplateColumns: GRID_COLUMNS,
                 borderTop: index === 0 ? undefined : '1px solid var(--border-subtle)',
                 opacity: u.deactivated ? 0.55 : 1,
               }}
