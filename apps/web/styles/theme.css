@@ -71,6 +71,20 @@ body {
   padding: 0;
 }
 
+/*
+ * Global horizontal-overflow guard (RL). Clip sideways overflow at BOTH the root
+ * and the body so no page can force the app shell to scroll horizontally at any
+ * width (320px → wide desktop); wide content must scroll inside its own container
+ * (e.g. the `overflow-x-auto` wrapper in `components/ui/Table.tsx`). The body-only
+ * guard doesn't reliably reach the viewport when an absolutely-positioned
+ * descendant escapes an intermediate scroll container, so the root needs it too.
+ * Vertical scrolling is unaffected (the app shell scrolls inside `<main>`).
+ */
+html,
+body {
+  overflow-x: hidden;
+}
+
 body {
   font-family: var(--font-sans);
   color: var(--text-primary);
