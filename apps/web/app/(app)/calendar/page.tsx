@@ -37,6 +37,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { ClientAvatar } from '@/components/ClientAvatar';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
@@ -329,7 +330,7 @@ export default function CalendarPage(): React.JSX.Element {
   }, []);
 
   return (
-    <section className="flex flex-col gap-6">
+    <PageContainer className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Calendar</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
@@ -447,7 +448,7 @@ export default function CalendarPage(): React.JSX.Element {
 
       {isAdmin ? <AmbiguousSection /> : null}
       <CadenceSection />
-    </section>
+    </PageContainer>
   );
 }
 
@@ -904,7 +905,7 @@ function CreateOrgModal({
             ))}
           </select>
         </label>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1">
             <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Primary contact</span>
             <input className={inputClass} style={inputStyle} value={contact} onChange={(e): void => setContact(e.target.value)} />
@@ -1763,8 +1764,8 @@ function CadenceSection(): React.JSX.Element {
       ) : rows.length === 0 ? (
         <EmptyState title="No clients" description="Cadence appears once clients and meetings exist." />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
+        <div role="region" aria-label="Cadence tracker" tabIndex={0} className="overflow-x-auto">
+          <table className="w-full border-collapse" style={{ minWidth: '44rem' }}>
             <thead>
               <tr style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
                 <th className="px-2 py-1 text-left">Client</th>
