@@ -6,6 +6,7 @@ import type { Client } from '@gracie/shared';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { ErrorState } from '@/components/ui/StateViews';
 
 import { AllContactsTab } from './AllContactsTab';
@@ -70,7 +71,7 @@ export default function ContactsPage(): React.JSX.Element {
   }, [editor]);
 
   return (
-    <section className="flex flex-col gap-6">
+    <PageContainer className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Contacts</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
@@ -112,6 +113,6 @@ export default function ContactsPage(): React.JSX.Element {
       ) : (
         <SuggestionsTab orgs={orgs ?? []} canEdit={editor} />
       )}
-    </section>
+    </PageContainer>
   );
 }

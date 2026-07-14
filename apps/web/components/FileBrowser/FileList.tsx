@@ -58,7 +58,7 @@ export function FileList({
   }
 
   return (
-    <Table>
+    <Table minWidth="52rem" scrollRegionLabel="Documents">
       <THead>
         <TH>Name</TH>
         {showClient ? <TH>Client</TH> : null}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 
 import { CollapsibleSection } from '@/components/ui/CollapsibleSection';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { TYPE } from '@/lib/typography';
 import { useAuth } from '@/lib/auth';
@@ -50,17 +51,17 @@ export default function AutomationsPage(): React.JSX.Element {
 
   if (!canView) {
     return (
-      <section className="flex flex-col gap-6">
+      <PageContainer className="flex flex-col gap-6">
         <header className="flex flex-col gap-1">
           <h1 style={TYPE.pageTitle}>Automations</h1>
         </header>
         <ErrorState title="Access restricted" description="You don’t have access to automations." />
-      </section>
+      </PageContainer>
     );
   }
 
   return (
-    <section className="flex flex-col gap-6">
+    <PageContainer className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Automations</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
@@ -110,6 +111,6 @@ export default function AutomationsPage(): React.JSX.Element {
           ))}
         </div>
       )}
-    </section>
+    </PageContainer>
   );
 }

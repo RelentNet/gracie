@@ -1,5 +1,6 @@
 'use client';
 
+import { PageContainer } from '@/components/ui/PageContainer';
 import { PagePlaceholder } from '@/components/ui/PagePlaceholder';
 import { EmptyState } from '@/components/ui/StateViews';
 import { TYPE } from '@/lib/typography';
@@ -15,7 +16,7 @@ export default function UploadPage(): React.JSX.Element {
 
   if (!can('file.upload')) {
     return (
-      <section className="flex flex-col gap-6">
+      <PageContainer className="flex flex-col gap-6">
         <header className="flex flex-col gap-1">
           <h1 style={TYPE.pageTitle}>Upload</h1>
         </header>
@@ -23,16 +24,18 @@ export default function UploadPage(): React.JSX.Element {
           title="Uploading is not available for your role"
           description="Your account has read-only access. Ask an administrator if you need to upload files."
         />
-      </section>
+      </PageContainer>
     );
   }
 
   return (
-    <PagePlaceholder
-      title="Upload"
-      description="Process transcripts and documents through the AI pipeline."
-      emptyTitle="Ready to upload"
-      emptyDescription="A client selector, multi-file picker, context/output prompts, and type selectors will appear here once the upload pipeline is connected."
-    />
+    <PageContainer>
+      <PagePlaceholder
+        title="Upload"
+        description="Process transcripts and documents through the AI pipeline."
+        emptyTitle="Ready to upload"
+        emptyDescription="A client selector, multi-file picker, context/output prompts, and type selectors will appear here once the upload pipeline is connected."
+      />
+    </PageContainer>
   );
 }

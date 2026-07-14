@@ -102,8 +102,14 @@ export function PipelineErrorsPanel(): React.JSX.Element {
           No failed or partial runs. The pipeline is healthy.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border" style={{ borderColor: 'var(--border-subtle)' }}>
-          <table className="w-full border-collapse" style={TYPE.secondary}>
+        <div
+          role="region"
+          aria-label="Pipeline errors"
+          tabIndex={0}
+          className="overflow-x-auto rounded-lg border"
+          style={{ borderColor: 'var(--border-subtle)' }}
+        >
+          <table className="w-full border-collapse" style={{ ...TYPE.secondary, minWidth: '44rem' }}>
             <thead>
               <tr style={{ backgroundColor: 'var(--color-slate-100)', textAlign: 'left' }}>
                 <Th>Meeting</Th>

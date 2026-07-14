@@ -5,6 +5,7 @@ import type { DailySyncContent, DailySyncMeeting } from '@gracie/shared';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Markdown } from '@/components/ui/Markdown';
+import { PageContainer } from '@/components/ui/PageContainer';
 import { EmptyState } from '@/components/ui/StateViews';
 import { Tabs } from '@/components/ui/Tabs';
 import { getTodayAndYesterday, type DailySyncRecord } from '@/lib/data/daily-sync';
@@ -206,7 +207,7 @@ export default async function DailySyncPage(): Promise<React.JSX.Element> {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    <PageContainer className="flex flex-col gap-6">
       <header className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 style={TYPE.pageTitle}>Daily Sync</h1>
@@ -217,6 +218,6 @@ export default async function DailySyncPage(): Promise<React.JSX.Element> {
         {user.role === 'admin' ? <GenerateSyncButton /> : null}
       </header>
       <Tabs items={items} ariaLabel="Daily sync day" />
-    </div>
+    </PageContainer>
   );
 }
