@@ -11,15 +11,44 @@ import { TYPE } from '@/lib/typography';
 export interface TableProps {
   readonly children: ReactNode;
   readonly className?: string;
+  /**
+   * RL (additive): a min-width on the inner `<table>` so data-dense tables keep
+   * their column widths on narrow viewports and the wrapper scrolls horizontally
+   * instead of squashing. Accepts any CSS length (e.g. `'40rem'`, `640`). Omit for
+   * the current fluid behaviour (unchanged default).
+   */
+  readonly minWidth?: string | number;
+  /**
+   * RL (additive): when set, the horizontal-scroll wrapper becomes a labelled,
+   * focusable scroll region (`role="region"` + `aria-label` + `tabIndex=0`) so
+   * keyboard users can scroll a wide table. Omit to leave the wrapper as a plain
+   * `<div>` (unchanged default).
+   */
+  readonly scrollRegionLabel?: string;
 }
 
-export function Table({ children, className = '' }: TableProps): React.JSX.Element {
+export function Table({
+  children,
+  className = '',
+  minWidth,
+  scrollRegionLabel,
+}: TableProps): React.JSX.Element {
+  const regionProps =
+    scrollRegionLabel !== undefined
+      ? ({ role: 'region', 'aria-label': scrollRegionLabel, tabIndex: 0 } as const)
+      : {};
   return (
     <div
       className="overflow-x-auto rounded-lg border bg-white"
       style={{ borderColor: 'var(--border-subtle)' }}
+      {...regionProps}
     >
-      <table className={`w-full border-collapse text-left ${className}`}>{children}</table>
+      <table
+        className={`w-full border-collapse text-left ${className}`}
+        style={minWidth !== undefined ? { minWidth } : undefined}
+      >
+        {children}
+      </table>
     </div>
   );
 }

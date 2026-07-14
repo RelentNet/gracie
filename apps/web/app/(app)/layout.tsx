@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 
 import { NotificationBell } from '@/components/NotificationBell';
 import { Sidebar } from '@/components/Sidebar';
+import { MobileNavToggle } from '@/components/ui/MobileNavToggle';
+import { NavCollapseProvider } from '@/components/ui/nav-collapse';
 import { isLogtoConfigured, logtoConfig, safeGetLogtoContext } from '@/lib/logto';
 
 /**
@@ -24,17 +26,25 @@ export default async function AppLayout({
   }
 
   return (
-    <div className="flex min-h-dvh">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header
-          className="flex h-14 shrink-0 items-center justify-end border-b bg-white px-8"
-          style={{ borderColor: 'var(--border-subtle)' }}
-        >
-          <NotificationBell />
-        </header>
-        <main className="flex-1 overflow-y-auto p-8">{children}</main>
+    // Fixed-height shell: `<main>` is the single vertical scroll container so the
+    // header (and sidebar) stay put, and `overflow-hidden` guarantees no
+    // horizontal body scroll at any width. The sidebar is static on `md`+ and an
+    // off-canvas drawer below it (both driven by the shared nav-collapse context).
+    <NavCollapseProvider>
+      <div className="flex h-dvh overflow-hidden">
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header
+            className="flex h-14 shrink-0 items-center gap-3 border-b bg-white px-4 sm:px-6 md:px-8"
+            style={{ borderColor: 'var(--border-subtle)' }}
+          >
+            <MobileNavToggle />
+            <div className="flex-1" />
+            <NotificationBell />
+          </header>
+          <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">{children}</main>
+        </div>
       </div>
-    </div>
+    </NavCollapseProvider>
   );
 }
