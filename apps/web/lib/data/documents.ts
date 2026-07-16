@@ -23,16 +23,43 @@ interface ListDocumentsOptions {
   readonly clientId?: string;
 }
 
-/** List folders — all, or scoped to one client when `clientId` is provided. */
-export async function listFolders(clientId?: string): Promise<Folder[]> {
+/** Folder discriminator (GF, migration 0011): per-client docs vs. the staff drive. */
+export type FolderKind = 'client' | 'staff';
+
+/**
+ * List folders — all, or scoped to one client when `clientId` is provided.
+ *
+ * `kind` defaults to `'client'`, so the client/global Documents views (the only
+ * callers) NEVER surface Gracie Files (`kind='staff'`) folders. The staff drive
+ * lists its own folders via `listStaffFolders` (kind='staff').
+ */
+export async function listFolders(
+  clientId?: string,
+  kind: FolderKind = 'client',
+): Promise<Folder[]> {
   const db = getServerClient();
-  let query = db.from('folders').select('*').order('path', { ascending: true });
+  let query = db.from('folders').select('*').eq('kind', kind).order('path', { ascending: true });
   if (clientId !== undefined) {
     query = query.eq('client_id', clientId);
   }
   const { data, error } = await query;
   if (error) throw new Error(`listFolders: ${error.message}`);
   return (data ?? []).map(mapFolder);
+}
+
+/**
+ * The ids of every `kind='staff'` folder (Gracie Files, GF). Used by the
+ * client/global `GET /api/documents` route to EXCLUDE staff-drive documents from
+ * the client Documents views for ALL roles — the staff drive is owned by the
+ * internal GA org's `client_id`, so without this a staff file would otherwise
+ * surface under the "Grace & Associates" node (and, for admins, bypass the
+ * folder-based visibility filter, which is admin-passthrough).
+ */
+export async function listStaffFolderIds(): Promise<Set<string>> {
+  const db = getServerClient();
+  const { data, error } = await db.from('folders').select('id').eq('kind', 'staff');
+  if (error) throw new Error(`listStaffFolderIds: ${error.message}`);
+  return new Set((data ?? []).map((row) => row.id));
 }
 
 /**

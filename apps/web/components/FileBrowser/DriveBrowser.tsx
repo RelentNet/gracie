@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FolderPlus, Upload } from 'lucide-react';
+import { FolderPlus, Trash2, Upload } from 'lucide-react';
 import type { Client, Document, Folder } from '@gracie/shared';
 
 import { apiClient } from '@/lib/api-client';
@@ -12,6 +12,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import type { Crumb } from '@/components/ui/Breadcrumb';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { FolderTree } from '@/components/FileBrowser/FolderTree';
 import { FileList } from '@/components/FileBrowser/FileList';
@@ -32,19 +33,26 @@ import {
 
 /**
  * DriveBrowser (docs/08 §8 M11; global view p2fix §5) — the two-panel folder
- * tree + file list, in one of two scopes:
+ * tree + file list, in one of three scopes:
  *   - `client`: one client's folders (client tab 6); left root is "All files".
  *   - `global`: All Clients → per-client → folders, plus a virtual Recent
  *     Documents node and a Knowledge Base nav link; the list adds a Client column.
+ *   - `staff`: Gracie Files (GF) — the internal team drive rooted at the `staff/`
+ *     folder, sourced from `/api/staff/*`. Editors additionally get Delete on files
+ *     and (admins) recursive folder delete; no client column.
  *
  * Editors get working Upload / New Folder / Move; viewers get a read-only browser
  * with Download only.
  *
  * SECURITY (docs/02 §D14, docs/08 §1/§7): restricted folders (e.g. Transcripts)
- * are OMITTED server-side for non-admins by `GET /api/folders|documents`; the
- * client-side `visibleFolders` filter below is defense-in-depth mirroring the API.
+ * are OMITTED server-side for non-admins by `GET /api/folders|documents` (and
+ * `/api/staff/*`); the client-side `visibleFolders` filter below is defense-in-depth
+ * mirroring the API.
  */
-export type DriveScope = { readonly kind: 'client'; readonly clientId: string } | { readonly kind: 'global' };
+export type DriveScope =
+  | { readonly kind: 'client'; readonly clientId: string }
+  | { readonly kind: 'global' }
+  | { readonly kind: 'staff' };
 
 export interface DriveBrowserProps {
   readonly scope: DriveScope;
@@ -67,6 +75,11 @@ interface OwnerOrg {
 interface OwnerOrgsResponse {
   readonly orgs: readonly OwnerOrg[];
 }
+/** Staff-drive (GF) folders response — carries the `staff/` root id for selection. */
+interface StaffFoldersResponse {
+  readonly folders: readonly Folder[];
+  readonly rootFolderId: string;
+}
 
 /** Recent Documents virtual node size (docs/plan p2fix — last ~20–30 touched). */
 const RECENT_LIMIT = 25;
@@ -76,26 +89,57 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
   const isAdmin = hasRole('admin');
   const editable = canEdit();
   const isGlobal = scope.kind === 'global';
+  const isStaff = scope.kind === 'staff';
   const scopedClientId = scope.kind === 'client' ? scope.clientId : null;
 
   const [allFolders, setAllFolders] = useState<readonly Folder[] | null>(null);
   const [allDocuments, setAllDocuments] = useState<readonly Document[] | null>(null);
   const [clients, setClients] = useState<readonly Client[] | null>(null);
   const [owners, setOwners] = useState<readonly OwnerOrg[] | null>(null);
+  const [staffRootId, setStaffRootId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   const [selectedKey, setSelectedKey] = useState<string>(
-    isGlobal ? ALL_CLIENTS_KEY : ALL_FILES_KEY,
+    isGlobal ? ALL_CLIENTS_KEY : isStaff ? '' : ALL_FILES_KEY,
   );
   const [uploadOpen, setUploadOpen] = useState(false);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [moveDoc, setMoveDoc] = useState<Document | null>(null);
+  const [deleteDoc, setDeleteDoc] = useState<Document | null>(null);
+  const [deleteFolderOpen, setDeleteFolderOpen] = useState(false);
 
   const refresh = useCallback((): void => setRefreshNonce((n) => n + 1), []);
 
   useEffect(() => {
     let active = true;
+
+    // Gracie Files (GF) — the staff drive has its own client-less endpoints; the
+    // internal org + `staff/` root are resolved server-side.
+    if (isStaff) {
+      Promise.all([
+        apiClient.get<StaffFoldersResponse>('/api/staff/folders'),
+        apiClient.get<DocumentsResponse>('/api/staff/documents'),
+      ])
+        .then(([flds, docs]) => {
+          if (!active) return;
+          setAllFolders(flds.folders);
+          setAllDocuments(docs.documents);
+          setStaffRootId(flds.rootFolderId);
+          // No client roster / owner orgs in the staff drive — satisfy the load guard.
+          setClients([]);
+          setOwners([]);
+          // First load selects the "Gracie Files" root; user selections persist.
+          setSelectedKey((prev) => (prev === '' ? flds.rootFolderId : prev));
+        })
+        .catch((e: unknown) => {
+          if (active) setError(e instanceof Error ? e.message : 'Failed to load files');
+        });
+      return (): void => {
+        active = false;
+      };
+    }
+
     const query = scopedClientId !== null ? `?clientId=${encodeURIComponent(scopedClientId)}` : '';
     Promise.all([
       apiClient.get<FoldersResponse>(`/api/folders${query}`),
@@ -116,7 +160,7 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
     return (): void => {
       active = false;
     };
-  }, [scopedClientId, refreshNonce]);
+  }, [isStaff, scopedClientId, refreshNonce]);
 
   // Defense-in-depth: drop restricted folders a non-admin may not see (the API
   // already omits them). Admins keep the full set.
@@ -162,6 +206,12 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
   );
 
   const nodes = useMemo<readonly TreeNode[]>(() => {
+    if (isStaff) {
+      // The `staff/` root folder is a real folder (so root uploads stay filed);
+      // it renders as the "Gracie Files" root with its subfolders nested beneath.
+      return buildFolderNodes(visibleFolders, 0, isAdmin);
+    }
+
     if (!isGlobal) {
       const root: TreeNode = {
         key: ALL_FILES_KEY,
@@ -222,10 +272,16 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
         children: [],
       },
     ];
-  }, [isGlobal, visibleFolders, owners, isAdmin]);
+  }, [isStaff, isGlobal, visibleFolders, owners, isAdmin]);
 
   // Documents shown in the right panel for the current selection.
   const documents = useMemo<readonly Document[]>(() => {
+    if (isStaff) {
+      // Selecting the "Gracie Files" root shows every staff file; a subfolder shows
+      // only its own documents.
+      if (selectedKey === staffRootId) return visibleDocuments;
+      return visibleDocuments.filter((doc) => doc.folderId === selectedKey);
+    }
     if (selectedKey === RECENT_KEY) {
       return [...visibleDocuments]
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -239,17 +295,17 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
       return visibleDocuments.filter((doc) => doc.clientId === clientId);
     }
     return visibleDocuments.filter((doc) => doc.folderId === selectedKey);
-  }, [visibleDocuments, selectedKey]);
+  }, [isStaff, staffRootId, visibleDocuments, selectedKey]);
 
   const breadcrumbItems = useMemo<readonly Crumb[]>(() => {
     const chain = findNodePath(nodes, selectedKey);
     if (chain.length === 0) {
-      return [{ label: isGlobal ? 'All Clients' : 'All files' }];
+      return [{ label: isGlobal ? 'All Clients' : isStaff ? 'Gracie Files' : 'All files' }];
     }
     return chain
       .filter((node) => node.href === undefined)
       .map((node) => ({ label: node.label, onClick: (): void => setSelectedKey(node.key) }));
-  }, [nodes, selectedKey, isGlobal]);
+  }, [nodes, selectedKey, isGlobal, isStaff]);
 
   // Client context for the header actions (the selected client, if any).
   const selectedFolder = foldersById.get(selectedKey) ?? null;
@@ -288,6 +344,10 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
   }
 
   const clientOptions = clients.map((c) => ({ id: c.id, name: c.name }));
+  // Gracie Files: admins may recursively delete a selected staff subfolder (never
+  // the "Gracie Files" root, which is re-ensured on load).
+  const staffFolderDeletable =
+    isStaff && isAdmin && selectedFolder !== null && selectedFolder.id !== staffRootId;
 
   return (
     <Card className="p-0">
@@ -298,7 +358,17 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
         <Breadcrumb items={breadcrumbItems} />
         {editable ? (
           <div className="flex items-center gap-2">
-            {activeClientId !== null ? (
+            {staffFolderDeletable ? (
+              <Button
+                variant="danger"
+                size="sm"
+                icon={<Trash2 aria-hidden="true" size={14} />}
+                onClick={(): void => setDeleteFolderOpen(true)}
+              >
+                Delete Folder
+              </Button>
+            ) : null}
+            {isStaff || activeClientId !== null ? (
               <Button
                 variant="secondary"
                 size="sm"
@@ -337,6 +407,7 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
             showClient={isGlobal}
             clientName={clientName}
             onMove={editable ? (doc): void => setMoveDoc(doc) : undefined}
+            onDelete={isStaff && editable ? (doc): void => setDeleteDoc(doc) : undefined}
           />
         </div>
       </div>
@@ -355,9 +426,10 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
           isAdmin={isAdmin}
           targetFolderId={parentFolderId}
           targetLabel={uploadTargetLabel}
+          variant={isStaff ? 'staff' : 'client'}
         />
       ) : null}
-      {editable && newFolderOpen && activeClientId !== null ? (
+      {editable && newFolderOpen && (isStaff || activeClientId !== null) ? (
         <NewFolderModal
           isOpen
           onClose={(): void => setNewFolderOpen(false)}
@@ -369,6 +441,7 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
           parentFolderId={parentFolderId}
           parentLabel={parentLabel}
           isAdmin={isAdmin}
+          variant={isStaff ? 'staff' : 'client'}
         />
       ) : null}
       {editable && moveDoc !== null ? (
@@ -378,6 +451,45 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
           onMoved={refresh}
           document={moveDoc}
           folders={moveFolders}
+          variant={isStaff ? 'staff' : 'client'}
+        />
+      ) : null}
+      {isStaff && deleteDoc !== null ? (
+        <ConfirmDialog
+          isOpen
+          title="Delete file"
+          message={
+            <>
+              Delete <strong>{deleteDoc.fileName}</strong>? This removes the file and
+              its AI index and cannot be undone.
+            </>
+          }
+          onConfirm={async (): Promise<void> => {
+            await apiClient.del(`/api/staff/files/${deleteDoc.id}`);
+            setDeleteDoc(null);
+            refresh();
+          }}
+          onClose={(): void => setDeleteDoc(null)}
+        />
+      ) : null}
+      {isStaff && deleteFolderOpen && selectedFolder !== null ? (
+        <ConfirmDialog
+          isOpen
+          title="Delete folder"
+          message={
+            <>
+              Delete <strong>{selectedFolder.displayName}</strong> and everything inside
+              it — all files, subfolders, and their AI index? This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete folder"
+          onConfirm={async (): Promise<void> => {
+            await apiClient.del(`/api/staff/folders/${selectedFolder.id}`);
+            setDeleteFolderOpen(false);
+            if (staffRootId !== null) setSelectedKey(staffRootId);
+            refresh();
+          }}
+          onClose={(): void => setDeleteFolderOpen(false)}
         />
       ) : null}
     </Card>

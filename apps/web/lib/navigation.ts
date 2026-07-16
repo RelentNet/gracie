@@ -4,6 +4,7 @@ import {
   Contact,
   GitBranch,
   FolderOpen,
+  HardDrive,
   ListTodo,
   Calendar,
   Sunrise,
@@ -43,6 +44,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Contacts', href: '/contacts', Icon: Contact, requires: 'contacts.view' },
   { label: 'Pipeline', href: '/pipeline', Icon: GitBranch },
   { label: 'Documents', href: '/documents', Icon: FolderOpen },
+  // Gracie Files (GF) — the shared staff/team working drive (AI-indexed). All roles
+  // browse (viewer read-only); editors upload/manage; admins delete + restricted.
+  { label: 'Gracie Files', href: '/gracie-files', Icon: HardDrive },
   { label: 'Task Board', href: '/tasks', Icon: ListTodo },
   { label: 'Calendar', href: '/calendar', Icon: Calendar },
   { label: 'Daily Sync', href: '/daily-sync', Icon: Sunrise },

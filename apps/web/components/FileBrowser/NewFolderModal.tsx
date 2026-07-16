@@ -17,10 +17,16 @@ export interface NewFolderModalProps {
   readonly isOpen: boolean;
   readonly onClose: () => void;
   readonly onCreated: (folder: Folder) => void;
-  readonly clientId: string;
+  /** Owning client — ignored in the `'staff'` variant (server resolves the org). */
+  readonly clientId: string | null;
   readonly parentFolderId: string | null;
   readonly parentLabel: string;
   readonly isAdmin: boolean;
+  /**
+   * `'client'` (default) posts to `/api/folders` with `clientId`. `'staff'` posts to
+   * `/api/staff/folders` (Gracie Files) — no client, `kind='staff'`, `staff/` root.
+   */
+  readonly variant?: 'client' | 'staff';
 }
 
 interface CreateFolderResponse {
@@ -35,6 +41,7 @@ export function NewFolderModal({
   parentFolderId,
   parentLabel,
   isAdmin,
+  variant = 'client',
 }: NewFolderModalProps): React.JSX.Element {
   const [name, setName] = useState('');
   const [restricted, setRestricted] = useState(false);
@@ -56,12 +63,12 @@ export function NewFolderModal({
     setSubmitting(true);
     setError(null);
     try {
-      const { folder } = await apiClient.post<CreateFolderResponse>('/api/folders', {
-        clientId,
-        parentFolderId,
-        name: name.trim(),
-        restricted,
-      });
+      const endpoint = variant === 'staff' ? '/api/staff/folders' : '/api/folders';
+      const payload =
+        variant === 'staff'
+          ? { parentFolderId, name: name.trim(), restricted }
+          : { clientId, parentFolderId, name: name.trim(), restricted };
+      const { folder } = await apiClient.post<CreateFolderResponse>(endpoint, payload);
       onCreated(folder);
       close();
     } catch (e) {

@@ -35,6 +35,12 @@ export interface FindOrCreateFolderInput {
   /** Defaults to all three roles (or `['admin']` when `restricted`). */
   readonly allowedRoles?: readonly UserRole[];
   readonly createdByUserId?: string | null;
+  /**
+   * `'client'` (default) for per-client document folders, or `'staff'` for the
+   * Gracie Files staff drive (GF, migration 0011). The discriminator keeps the
+   * staff tree out of the client Documents views and vice-versa.
+   */
+  readonly kind?: 'client' | 'staff';
 }
 
 /**
@@ -63,6 +69,7 @@ export async function findOrCreateFolder(input: FindOrCreateFolderInput): Promis
     visibility,
     allowed_roles: [...allowedRoles],
     created_by_user_id: input.createdByUserId ?? null,
+    kind: input.kind ?? 'client',
   };
 
   const inserted = await db.from('folders').insert(insert).select('id').single();

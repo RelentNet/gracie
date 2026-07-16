@@ -897,6 +897,7 @@ export type Database = {
           created_by_user_id: string | null
           display_name: string
           id: string
+          kind: string
           path: string
           visibility: Database["public"]["Enums"]["folder_visibility"]
         }
@@ -907,6 +908,7 @@ export type Database = {
           created_by_user_id?: string | null
           display_name: string
           id?: string
+          kind?: string
           path: string
           visibility?: Database["public"]["Enums"]["folder_visibility"]
         }
@@ -917,6 +919,7 @@ export type Database = {
           created_by_user_id?: string | null
           display_name?: string
           id?: string
+          kind?: string
           path?: string
           visibility?: Database["public"]["Enums"]["folder_visibility"]
         }

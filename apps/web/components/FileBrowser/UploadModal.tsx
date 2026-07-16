@@ -33,6 +33,13 @@ export interface UploadModalProps {
   readonly targetFolderId: string | null;
   /** Readable path of the target folder, shown as "Uploading to". */
   readonly targetLabel: string | null;
+  /**
+   * `'client'` (default) posts to `/api/upload` with a client + subtype. `'staff'`
+   * targets the Gracie Files drive: it hides the client + document-type selectors
+   * and posts to `/api/staff/upload` (the internal org + `staff/` root are resolved
+   * server-side).
+   */
+  readonly variant?: 'client' | 'staff';
 }
 
 function Field({ label, children }: { readonly label: string; readonly children: ReactNode }): React.JSX.Element {
@@ -57,7 +64,9 @@ export function UploadModal({
   isAdmin,
   targetFolderId,
   targetLabel,
+  variant = 'client',
 }: UploadModalProps): React.JSX.Element {
+  const isStaff = variant === 'staff';
   const [files, setFiles] = useState<FileList | null>(null);
   const [clientId, setClientId] = useState<string>(fixedClientId ?? '');
   const [subtype, setSubtype] = useState<UploadSubtypeValue>(defaultSubtype);
@@ -73,8 +82,9 @@ export function UploadModal({
 
   const chosenClientName =
     fixedClientName ?? clients.find((c) => c.id === clientId)?.name ?? null;
-  const destination =
-    targetLabel ?? `${chosenClientName ?? 'the selected client'} — Uploads (default)`;
+  const destination = isStaff
+    ? (targetLabel ?? 'Gracie Files')
+    : (targetLabel ?? `${chosenClientName ?? 'the selected client'} — Uploads (default)`);
 
   function close(): void {
     setFiles(null);
@@ -93,7 +103,7 @@ export function UploadModal({
       return;
     }
     const resolvedClientId = fixedClientId ?? clientId;
-    if (resolvedClientId === '') {
+    if (!isStaff && resolvedClientId === '') {
       setError('Choose a client for this upload.');
       return;
     }
@@ -102,14 +112,19 @@ export function UploadModal({
     setError(null);
     try {
       const body = new FormData();
-      body.set('clientId', resolvedClientId);
-      body.set('subtype', subtype);
+      if (!isStaff) {
+        body.set('clientId', resolvedClientId);
+        body.set('subtype', subtype);
+      }
       body.set('status', status);
       if (targetFolderId !== null) body.set('folderId', targetFolderId);
       if (singleFile && title.trim() !== '') body.set('title', title.trim());
       for (const file of Array.from(files)) body.append('file', file);
 
-      const res = await fetch('/api/upload', { method: 'POST', body });
+      const res = await fetch(isStaff ? '/api/staff/upload' : '/api/upload', {
+        method: 'POST',
+        body,
+      });
       const payload = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
       if (!res.ok) throw new Error(payload?.error?.message ?? `Request failed: ${res.status}`);
       onUploaded();
@@ -153,7 +168,7 @@ export function UploadModal({
           Uploading to: <strong style={{ color: 'var(--text-primary)' }}>{destination}</strong>
         </p>
 
-        {fixedClientId === null ? (
+        {!isStaff && fixedClientId === null ? (
           <Field label="Client *">
             <select
               className={INPUT_CLASS}
@@ -171,21 +186,23 @@ export function UploadModal({
           </Field>
         ) : null}
 
-        <Field label="Document type">
-          <select
-            className={INPUT_CLASS}
-            style={inputStyle}
-            value={subtype}
-            onChange={(event): void => setSubtype(event.target.value as UploadSubtypeValue)}
-          >
-            {subtypeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        {targetFolderId !== null ? (
+        {!isStaff ? (
+          <Field label="Document type">
+            <select
+              className={INPUT_CLASS}
+              style={inputStyle}
+              value={subtype}
+              onChange={(event): void => setSubtype(event.target.value as UploadSubtypeValue)}
+            >
+              {subtypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+        {!isStaff && targetFolderId !== null ? (
           <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
             Document type only picks the default Uploads folder — it’s ignored when
             you’re uploading into the folder above.

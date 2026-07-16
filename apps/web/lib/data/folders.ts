@@ -40,6 +40,8 @@ export interface CreateFolderInput {
   readonly displayName: string;
   readonly restricted: boolean;
   readonly createdByUserId: string | null;
+  /** `'client'` (default) or `'staff'` for the Gracie Files drive (GF, 0011). */
+  readonly kind?: 'client' | 'staff';
 }
 
 /**
@@ -54,6 +56,7 @@ export async function createFolder(input: CreateFolderInput): Promise<Folder> {
     visibility: input.restricted ? 'restricted' : 'all',
     allowedRoles: input.restricted ? ['admin'] : ['admin', 'standard', 'viewer'],
     createdByUserId: input.createdByUserId,
+    kind: input.kind ?? 'client',
   });
   const folder = await getFolderById(id);
   if (folder === null) throw new Error('createFolder: folder vanished after create');

@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, MoveRight } from 'lucide-react';
+import { Download, MoveRight, Trash2 } from 'lucide-react';
 import type { Document } from '@gracie/shared';
 
 import { getUserName } from '@/lib/mock';
@@ -28,6 +28,8 @@ export interface FileListProps {
   readonly clientName?: (clientId: string | null) => string;
   /** Editor-only: open the move/refile flow for a document. */
   readonly onMove?: (doc: Document) => void;
+  /** Editor/admin-only: open the delete-confirmation flow (Gracie Files). */
+  readonly onDelete?: (doc: Document) => void;
 }
 
 interface PresignResponse {
@@ -47,6 +49,7 @@ export function FileList({
   showClient = false,
   clientName,
   onMove,
+  onDelete,
 }: FileListProps): React.JSX.Element {
   if (documents.length === 0) {
     return (
@@ -118,6 +121,14 @@ export function FileList({
                       onClick={onMove !== undefined ? (): void => onMove(doc) : undefined}
                     />
                   ) : null}
+                  {onDelete !== undefined ? (
+                    <FileAction
+                      label={`Delete ${doc.fileName}`}
+                      icon={<Trash2 size={16} />}
+                      danger
+                      onClick={(): void => onDelete(doc)}
+                    />
+                  ) : null}
                 </span>
               </TCell>
             </TRow>
@@ -132,10 +143,13 @@ function FileAction({
   label,
   icon,
   onClick,
+  danger = false,
 }: {
   readonly label: string;
   readonly icon: React.ReactNode;
   readonly onClick?: () => void;
+  /** Render in the destructive color (delete). */
+  readonly danger?: boolean;
 }): React.JSX.Element {
   return (
     <button
@@ -145,7 +159,7 @@ function FileAction({
       disabled={onClick === undefined}
       className="rounded-md p-1"
       style={{
-        color: 'var(--text-secondary)',
+        color: danger ? 'var(--color-red-500)' : 'var(--text-secondary)',
         background: 'transparent',
         cursor: onClick === undefined ? 'default' : 'pointer',
         opacity: onClick === undefined ? 0.4 : 1,

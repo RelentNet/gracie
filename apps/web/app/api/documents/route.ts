@@ -18,6 +18,7 @@ import {
   filterVisibleFolders,
   listDocuments,
   listFolders,
+  listStaffFolderIds,
 } from '@/lib/data/documents';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -26,13 +27,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const admin = isAdmin(user);
     const clientId = request.nextUrl.searchParams.get('clientId') ?? undefined;
 
-    const [documents, folders] = await Promise.all([
+    const [documents, folders, staffFolderIds] = await Promise.all([
       listDocuments({ clientId }),
       listFolders(clientId),
+      listStaffFolderIds(),
     ]);
 
+    // GF (0011): Gracie Files documents live under the internal GA org's client_id.
+    // Drop them from the client Documents views for EVERY role (the folder filter
+    // below is admin-passthrough, so this exclusion must precede it).
+    const clientDocuments = documents.filter(
+      (doc) => doc.folderId === null || !staffFolderIds.has(doc.folderId),
+    );
+
     const visibleFolders = filterVisibleFolders(folders, admin);
-    const payload = filterVisibleDocuments(documents, visibleFolders, admin);
+    const payload = filterVisibleDocuments(clientDocuments, visibleFolders, admin);
 
     return NextResponse.json({ documents: payload });
   } catch (error) {

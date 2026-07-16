@@ -22,6 +22,11 @@ export interface MoveModalProps {
   readonly document: Document | null;
   /** Candidate destination folders (same client, already role-filtered). */
   readonly folders: readonly Folder[];
+  /**
+   * `'client'` (default) posts to `/api/documents/move`. `'staff'` posts to
+   * `/api/staff/move` (Gracie Files).
+   */
+  readonly variant?: 'client' | 'staff';
 }
 
 export function MoveModal({
@@ -30,6 +35,7 @@ export function MoveModal({
   onMoved,
   document,
   folders,
+  variant = 'client',
 }: MoveModalProps): React.JSX.Element {
   const [destinationFolderId, setDestinationFolderId] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -52,7 +58,7 @@ export function MoveModal({
     setSubmitting(true);
     setError(null);
     try {
-      await apiClient.post('/api/documents/move', {
+      await apiClient.post(variant === 'staff' ? '/api/staff/move' : '/api/documents/move', {
         documentId: document.id,
         destinationFolderId,
       });
