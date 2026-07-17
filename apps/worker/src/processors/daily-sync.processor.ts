@@ -74,6 +74,26 @@ export function easternDateString(d: Date): string {
   }).format(d);
 }
 
+/**
+ * Compact ET timestamp `YYYYMMDD-HHMM` (America/New_York) for an ISO instant —
+ * used to name per-meeting storage folders/keys deterministically. DST-safe via
+ * Intl; the `% 24` guard normalises the "24" some engines emit for midnight.
+ */
+export function easternStamp(iso: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ET,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(iso));
+  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '';
+  const hour = String(Number(get('hour')) % 24).padStart(2, '0');
+  return `${get('year')}${get('month')}${get('day')}-${hour}${get('minute')}`;
+}
+
 /** Milliseconds to add to an ET wall-clock to get the UTC instant (i.e. the offset). */
 function easternOffsetMs(at: Date): number {
   const utc = new Date(at.toLocaleString('en-US', { timeZone: 'UTC' }));
