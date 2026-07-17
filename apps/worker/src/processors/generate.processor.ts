@@ -16,6 +16,8 @@
  * retries with backoff; on the FINAL attempt the meeting is flagged
  * `needs_attention` and a `failed` `pipeline_runs` row is written.
  */
+import { createHash } from 'node:crypto';
+
 import type { Job, Processor } from 'bullmq';
 import type { FastifyBaseLogger } from 'fastify';
 
@@ -94,13 +96,25 @@ function titleSlug(title: string | null): string {
 }
 
 /**
+ * Group-folder segment for a meeting that belongs to a recurring series. Keyed off
+ * the stable `series_id` (the clean Outlook GOID, migration 0011) — NOT the title —
+ * so every occurrence groups together even if a title is edited, and two distinct
+ * series that happen to share a title stay separate. Opaque + short; the folder's
+ * human label stays the meeting title.
+ */
+function seriesGroupSegment(seriesId: string): string {
+  return `series-${createHash('sha1').update(seriesId).digest('hex').slice(0, 12)}`;
+}
+
+/**
  * Deterministic MinIO keys + a two-level folder layout for a meeting's generated
- * docs + transcript. Docs file under a per-SERIES group folder (keyed by title
- * slug — so every occurrence of a recurring meeting nests together) and then a
- * per-OCCURRENCE subfolder (ET-stamped + meeting id, so it stays unique):
+ * docs + transcript. Docs file under a per-SERIES group folder — keyed by the
+ * stable `seriesId` when the meeting recurs (so every occurrence nests together),
+ * else by the title slug (one-offs) — and then a per-OCCURRENCE subfolder
+ * (ET-stamped + meeting id, so it stays unique):
  *
- *   clients/<slug>/generated/<titleSlug>/<stamp>-<id8>/<type>.md
- *            └ client ┘        └ series ┘  └ occurrence ┘ └ file ┘
+ *   clients/<slug>/generated/<group>/<stamp>-<id8>/<type>.md
+ *            └ client ┘        └series┘ └ occurrence ┘ └ file ┘
  *
  * Keyed off `dateTimeIso` (ET stamp) + `meetingId` — NOT wall-clock — so re-runs
  * of the SAME meeting resolve the SAME paths (idempotent), while two different
@@ -129,10 +143,16 @@ export function buildMeetingStorageKeys(input: {
   readonly meetingId: string;
   readonly title: string | null;
   readonly slug: string;
+  /** Stable recurring-series key (meetings.series_id); null for one-offs. */
+  readonly seriesId: string | null;
 }): MeetingStorageKeys {
   const stamp = easternStamp(input.dateTimeIso);
   const id8 = input.meetingId.slice(0, 8);
-  const groupFolderPath = `clients/${input.slug}/generated/${titleSlug(input.title)}`;
+  const groupSegment =
+    input.seriesId !== null && input.seriesId !== ''
+      ? seriesGroupSegment(input.seriesId)
+      : titleSlug(input.title);
+  const groupFolderPath = `clients/${input.slug}/generated/${groupSegment}`;
   const occurrenceFolderPath = `${groupFolderPath}/${stamp}-${id8}`;
   const trimmedTitle = input.title?.trim() ?? '';
   // `YYYYMMDD-HHMM` → readable `YYYY-MM-DD HH:MM` (ET) for the occurrence label.
@@ -471,6 +491,7 @@ export function createGenerateProcessor(
         meetingId: meeting.id,
         title: meeting.title,
         slug,
+        seriesId: meeting.series_id,
       });
       const meetingDate = easternDateString(new Date(meeting.date_time));
 
