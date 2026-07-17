@@ -94,22 +94,33 @@ function titleSlug(title: string | null): string {
 }
 
 /**
- * Deterministic, per-meeting MinIO keys for a meeting's generated docs +
- * transcript. Keyed off `dateTimeIso` (ET stamp) + `meetingId` — NOT wall-clock —
- * so re-runs of the SAME meeting resolve the SAME paths (idempotent), while two
- * different meetings for one client on one ET day get DISTINCT folders/keys (no
+ * Deterministic MinIO keys + a two-level folder layout for a meeting's generated
+ * docs + transcript. Docs file under a per-SERIES group folder (keyed by title
+ * slug — so every occurrence of a recurring meeting nests together) and then a
+ * per-OCCURRENCE subfolder (ET-stamped + meeting id, so it stays unique):
+ *
+ *   clients/<slug>/generated/<titleSlug>/<stamp>-<id8>/<type>.md
+ *            └ client ┘        └ series ┘  └ occurrence ┘ └ file ┘
+ *
+ * Keyed off `dateTimeIso` (ET stamp) + `meetingId` — NOT wall-clock — so re-runs
+ * of the SAME meeting resolve the SAME paths (idempotent), while two different
+ * meetings for one client on one ET day get DISTINCT occurrence folders/keys (no
  * silent overwrite — the bug this fixes). Pure: unit-tested without a DB.
  */
 export interface MeetingStorageKeys {
-  /** ET timestamp `YYYYMMDD-HHMM` the names are stamped with. */
+  /** ET timestamp `YYYYMMDD-HHMM` the occurrence is stamped with. */
   readonly stamp: string;
-  /** Unique R2 prefix for this meeting's generated-docs folder. */
-  readonly folderPath: string;
-  /** Human folder label, e.g. `Kickoff Call 20260716-1430`. */
-  readonly folderDisplayName: string;
+  /** R2 prefix of the series/title group folder (shared by all occurrences). */
+  readonly groupFolderPath: string;
+  /** Human label for the group folder (the meeting title). */
+  readonly groupDisplayName: string;
+  /** Unique R2 prefix of this occurrence's folder (under the group). */
+  readonly occurrenceFolderPath: string;
+  /** Human label for the occurrence folder, e.g. `2026-07-16 14:30` (ET). */
+  readonly occurrenceDisplayName: string;
   /** Unique R2 key for this meeting's raw transcript. */
   readonly transcriptKey: string;
-  /** Unique R2 key for one generated doc file within this meeting's folder. */
+  /** Unique R2 key for one generated doc file within this occurrence's folder. */
   objectKey(fileName: string): string;
 }
 
@@ -121,15 +132,19 @@ export function buildMeetingStorageKeys(input: {
 }): MeetingStorageKeys {
   const stamp = easternStamp(input.dateTimeIso);
   const id8 = input.meetingId.slice(0, 8);
-  const folderPath = `clients/${input.slug}/generated/${stamp}-${titleSlug(input.title)}-${id8}`;
+  const groupFolderPath = `clients/${input.slug}/generated/${titleSlug(input.title)}`;
+  const occurrenceFolderPath = `${groupFolderPath}/${stamp}-${id8}`;
   const trimmedTitle = input.title?.trim() ?? '';
-  const displayTitle = trimmedTitle === '' ? 'Meeting' : trimmedTitle;
+  // `YYYYMMDD-HHMM` → readable `YYYY-MM-DD HH:MM` (ET) for the occurrence label.
+  const occurrenceDisplayName = `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)} ${stamp.slice(9, 11)}:${stamp.slice(11, 13)}`;
   return {
     stamp,
-    folderPath,
-    folderDisplayName: `${displayTitle} ${stamp}`,
+    groupFolderPath,
+    groupDisplayName: trimmedTitle === '' ? 'Meeting' : trimmedTitle,
+    occurrenceFolderPath,
+    occurrenceDisplayName,
     transcriptKey: `clients/${input.slug}/transcripts/${stamp}-${id8}.txt`,
-    objectKey: (fileName: string) => `${folderPath}/${fileName}`,
+    objectKey: (fileName: string) => `${occurrenceFolderPath}/${fileName}`,
   };
 }
 
@@ -316,19 +331,26 @@ async function persistDocuments(
   }
 
   // Drive-feel filing (docs/plan p2fix §2): file this run's docs under a
-  // per-MEETING subfolder of the client's `Generated Docs` folder. The subfolder
-  // is unique per meeting (ET-stamped + meeting id) so two same-day meetings never
-  // overwrite each other's objects. Ensure the parent first so the subfolder nests
-  // correctly in the browser tree.
+  // per-OCCURRENCE subfolder of a per-SERIES group folder (keyed by title slug),
+  // inside the client's `Generated Docs` folder. The occurrence folder is unique
+  // per meeting (ET-stamped + meeting id) so two same-day meetings never overwrite
+  // each other, while every occurrence of a recurring meeting nests under one
+  // group. Each ancestor must exist as its own row so the child nests correctly in
+  // the browser tree (the tree builder keys children by path prefix).
   await findOrCreateFolder({
     clientId,
     path: `clients/${slug}/generated`,
     displayName: 'Generated Docs',
   });
-  const meetingFolderId = await findOrCreateFolder({
+  await findOrCreateFolder({
     clientId,
-    path: keys.folderPath,
-    displayName: keys.folderDisplayName,
+    path: keys.groupFolderPath,
+    displayName: keys.groupDisplayName,
+  });
+  const occurrenceFolderId = await findOrCreateFolder({
+    clientId,
+    path: keys.occurrenceFolderPath,
+    displayName: keys.occurrenceDisplayName,
   });
 
   const ids = new Map<GeneratedDocType, string>();
@@ -340,7 +362,7 @@ async function persistDocuments(
     const insert: DocumentInsert = {
       client_id: clientId,
       meeting_id: meeting.id,
-      folder_id: meetingFolderId,
+      folder_id: occurrenceFolderId,
       document_type: DOC_TYPE_TO_ENUM[doc.type],
       source_badge: 'meeting',
       r2_key: objectKey,
