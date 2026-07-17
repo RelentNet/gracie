@@ -16,6 +16,8 @@
  * retries with backoff; on the FINAL attempt the meeting is flagged
  * `needs_attention` and a `failed` `pipeline_runs` row is written.
  */
+import { createHash } from 'node:crypto';
+
 import type { Job, Processor } from 'bullmq';
 import type { FastifyBaseLogger } from 'fastify';
 
@@ -38,6 +40,7 @@ import { chunkText } from '../lib/chunk.js';
 import { emailAdminsForAlert } from '../lib/email.js';
 import { generateDocuments, type GeneratedDocument } from '../lib/generate.js';
 import { fetchRecallTranscript } from '../lib/recall.js';
+import { easternDateString, easternStamp } from './daily-sync.processor.js';
 
 type DocumentTypeEnum = Database['public']['Enums']['document_type'];
 type PipelineStatus = Database['public']['Enums']['pipeline_status'];
@@ -80,6 +83,89 @@ function clientSlug(name: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
   return slug === '' ? 'client' : slug;
+}
+
+/** Path-safe slug from a meeting title (same rules as `clientSlug`; `untitled` fallback). */
+function titleSlug(title: string | null): string {
+  const slug = (title ?? '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug === '' ? 'untitled' : slug;
+}
+
+/**
+ * Group-folder segment for a meeting that belongs to a recurring series. Keyed off
+ * the stable `series_id` (the clean Outlook GOID, migration 0011) — NOT the title —
+ * so every occurrence groups together even if a title is edited, and two distinct
+ * series that happen to share a title stay separate. Opaque + short; the folder's
+ * human label stays the meeting title.
+ */
+function seriesGroupSegment(seriesId: string): string {
+  return `series-${createHash('sha1').update(seriesId).digest('hex').slice(0, 12)}`;
+}
+
+/**
+ * Deterministic MinIO keys + a two-level folder layout for a meeting's generated
+ * docs + transcript. Docs file under a per-SERIES group folder — keyed by the
+ * stable `seriesId` when the meeting recurs (so every occurrence nests together),
+ * else by the title slug (one-offs) — and then a per-OCCURRENCE subfolder
+ * (ET-stamped + meeting id, so it stays unique):
+ *
+ *   clients/<slug>/generated/<group>/<stamp>-<id8>/<type>.md
+ *            └ client ┘        └series┘ └ occurrence ┘ └ file ┘
+ *
+ * Keyed off `dateTimeIso` (ET stamp) + `meetingId` — NOT wall-clock — so re-runs
+ * of the SAME meeting resolve the SAME paths (idempotent), while two different
+ * meetings for one client on one ET day get DISTINCT occurrence folders/keys (no
+ * silent overwrite — the bug this fixes). Pure: unit-tested without a DB.
+ */
+export interface MeetingStorageKeys {
+  /** ET timestamp `YYYYMMDD-HHMM` the occurrence is stamped with. */
+  readonly stamp: string;
+  /** R2 prefix of the series/title group folder (shared by all occurrences). */
+  readonly groupFolderPath: string;
+  /** Human label for the group folder (the meeting title). */
+  readonly groupDisplayName: string;
+  /** Unique R2 prefix of this occurrence's folder (under the group). */
+  readonly occurrenceFolderPath: string;
+  /** Human label for the occurrence folder, e.g. `2026-07-16 14:30` (ET). */
+  readonly occurrenceDisplayName: string;
+  /** Unique R2 key for this meeting's raw transcript. */
+  readonly transcriptKey: string;
+  /** Unique R2 key for one generated doc file within this occurrence's folder. */
+  objectKey(fileName: string): string;
+}
+
+export function buildMeetingStorageKeys(input: {
+  readonly dateTimeIso: string;
+  readonly meetingId: string;
+  readonly title: string | null;
+  readonly slug: string;
+  /** Stable recurring-series key (meetings.series_id); null for one-offs. */
+  readonly seriesId: string | null;
+}): MeetingStorageKeys {
+  const stamp = easternStamp(input.dateTimeIso);
+  const id8 = input.meetingId.slice(0, 8);
+  const groupSegment =
+    input.seriesId !== null && input.seriesId !== ''
+      ? seriesGroupSegment(input.seriesId)
+      : titleSlug(input.title);
+  const groupFolderPath = `clients/${input.slug}/generated/${groupSegment}`;
+  const occurrenceFolderPath = `${groupFolderPath}/${stamp}-${id8}`;
+  const trimmedTitle = input.title?.trim() ?? '';
+  // `YYYYMMDD-HHMM` → readable `YYYY-MM-DD HH:MM` (ET) for the occurrence label.
+  const occurrenceDisplayName = `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)} ${stamp.slice(9, 11)}:${stamp.slice(11, 13)}`;
+  return {
+    stamp,
+    groupFolderPath,
+    groupDisplayName: trimmedTitle === '' ? 'Meeting' : trimmedTitle,
+    occurrenceFolderPath,
+    occurrenceDisplayName,
+    transcriptKey: `clients/${input.slug}/transcripts/${stamp}-${id8}.txt`,
+    objectKey: (fileName: string) => `${occurrenceFolderPath}/${fileName}`,
+  };
 }
 
 /** Patch a meeting row, throwing on error. */
@@ -240,7 +326,7 @@ function buildConsultantContext(meeting: MeetingRow): string {
   const parts: string[] = [];
   if (meeting.title !== null) parts.push(`Meeting: ${meeting.title}`);
   if (meeting.meeting_type !== null) parts.push(`Type: ${meeting.meeting_type}`);
-  parts.push(`Date: ${meeting.date_time.slice(0, 10)}`);
+  parts.push(`Date: ${easternDateString(new Date(meeting.date_time))}`);
   if (meeting.duration_minutes !== null) parts.push(`Duration: ${meeting.duration_minutes} min`);
   return parts.join('\n');
 }
@@ -252,9 +338,8 @@ async function persistDocuments(
   clientId: string,
   slug: string,
   documents: readonly GeneratedDocument[],
+  keys: MeetingStorageKeys,
 ): Promise<Map<GeneratedDocType, string>> {
-  const meetingDate = meeting.date_time.slice(0, 10);
-
   // Idempotent re-runs: clear prior meeting-generated docs for this meeting.
   const cleared = await db
     .from('documents')
@@ -266,29 +351,38 @@ async function persistDocuments(
   }
 
   // Drive-feel filing (docs/plan p2fix §2): file this run's docs under a
-  // per-run date subfolder of the client's `Generated Docs` folder. Ensure the
-  // parent first so the subfolder nests correctly in the browser tree.
+  // per-OCCURRENCE subfolder of a per-SERIES group folder (keyed by title slug),
+  // inside the client's `Generated Docs` folder. The occurrence folder is unique
+  // per meeting (ET-stamped + meeting id) so two same-day meetings never overwrite
+  // each other, while every occurrence of a recurring meeting nests under one
+  // group. Each ancestor must exist as its own row so the child nests correctly in
+  // the browser tree (the tree builder keys children by path prefix).
   await findOrCreateFolder({
     clientId,
     path: `clients/${slug}/generated`,
     displayName: 'Generated Docs',
   });
-  const dateFolderId = await findOrCreateFolder({
+  await findOrCreateFolder({
     clientId,
-    path: `clients/${slug}/generated/${meetingDate}`,
-    displayName: meetingDate,
+    path: keys.groupFolderPath,
+    displayName: keys.groupDisplayName,
+  });
+  const occurrenceFolderId = await findOrCreateFolder({
+    clientId,
+    path: keys.occurrenceFolderPath,
+    displayName: keys.occurrenceDisplayName,
   });
 
   const ids = new Map<GeneratedDocType, string>();
   for (const doc of documents) {
     const fileName = `${doc.type}.md`;
-    const objectKey = `clients/${slug}/generated/${meetingDate}/${fileName}`;
+    const objectKey = keys.objectKey(fileName);
     await putObject(objectKey, Buffer.from(doc.content, 'utf8'), 'text/markdown');
 
     const insert: DocumentInsert = {
       client_id: clientId,
       meeting_id: meeting.id,
-      folder_id: dateFolderId,
+      folder_id: occurrenceFolderId,
       document_type: DOC_TYPE_TO_ENUM[doc.type],
       source_badge: 'meeting',
       r2_key: objectKey,
@@ -389,6 +483,18 @@ export function createGenerateProcessor(
       const typedClient: ClientRow = client;
       const slug = clientSlug(typedClient.name);
 
+      // Deterministic, per-meeting storage keys (ET-stamped + meeting id) so two
+      // same-client/same-day meetings never overwrite each other, while a re-run of
+      // this meeting resolves the SAME keys (idempotent).
+      const keys = buildMeetingStorageKeys({
+        dateTimeIso: meeting.date_time,
+        meetingId: meeting.id,
+        title: meeting.title,
+        slug,
+        seriesId: meeting.series_id,
+      });
+      const meetingDate = easternDateString(new Date(meeting.date_time));
+
       await patchMeeting(db, meetingId, {
         pipeline_status: 'processing',
         pipeline_started_at: meeting.pipeline_started_at ?? startedAt.toISOString(),
@@ -396,9 +502,7 @@ export function createGenerateProcessor(
 
       // 2. Transcript → store raw in MinIO → mark received.
       const transcript = await resolveTranscript(job.data, log);
-      const meetingDate = meeting.date_time.slice(0, 10);
-      const transcriptKey = `clients/${slug}/transcripts/${meetingDate}.txt`;
-      await putObject(transcriptKey, Buffer.from(transcript, 'utf8'), 'text/plain');
+      await putObject(keys.transcriptKey, Buffer.from(transcript, 'utf8'), 'text/plain');
       await patchMeeting(db, meetingId, { transcript_received: true });
 
       // 3. Embed transcript → embeddings (source_type='transcript').
@@ -433,7 +537,7 @@ export function createGenerateProcessor(
       });
 
       // 6. Store docs + insert `documents` rows.
-      const docIds = await persistDocuments(db, meeting, clientId, slug, documents);
+      const docIds = await persistDocuments(db, meeting, clientId, slug, documents, keys);
 
       // 7. Tasks: insert parsed checklist (idempotent: clear prior for this meeting first).
       const clearedTasks = await db.from('tasks').delete().eq('source_meeting_id', meetingId);
