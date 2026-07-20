@@ -12,7 +12,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { getRequestUser } from '@/lib/api-auth';
 import {
   filterVisibleDocuments,
   filterVisibleFolders,
@@ -23,7 +23,6 @@ import {
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const user = await getRequestUser();
-    const admin = isAdmin(user);
     const clientId = request.nextUrl.searchParams.get('clientId') ?? undefined;
 
     const [documents, folders] = await Promise.all([
@@ -31,8 +30,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       listFolders(clientId),
     ]);
 
-    const visibleFolders = filterVisibleFolders(folders, admin);
-    const payload = filterVisibleDocuments(documents, visibleFolders, admin);
+    const visibleFolders = filterVisibleFolders(folders, user.role);
+    const payload = filterVisibleDocuments(documents, visibleFolders, user.role);
 
     return NextResponse.json({ documents: payload });
   } catch (error) {

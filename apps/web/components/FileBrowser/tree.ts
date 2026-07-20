@@ -14,7 +14,7 @@
  */
 import type { Folder } from '@gracie/shared';
 
-export type TreeIcon = 'folder' | 'clients' | 'client' | 'recent' | 'book';
+export type TreeIcon = 'folder' | 'clients' | 'client' | 'recent' | 'book' | 'trash';
 
 export interface TreeNode {
   /** Unique selection key. `href` nodes are navigational and not selectable. */
@@ -34,6 +34,24 @@ export const ALL_FILES_KEY = '__all_files__';
 export const ALL_CLIENTS_KEY = '__all_clients__';
 export const RECENT_KEY = '__recent__';
 export const KB_KEY = '__kb__';
+export const TRASH_KEY = '__trash__';
+
+/**
+ * True for nodes backed by a real `folders` row — the only nodes that can be
+ * renamed, re-permissioned or deleted. Everything else in the tree is synthetic
+ * (the roots, Recent, Knowledge Base, the Recycle Bin) or an org grouping, and must
+ * carry no management actions.
+ */
+export function isManageableFolderKey(key: string): boolean {
+  return (
+    key !== ALL_FILES_KEY &&
+    key !== ALL_CLIENTS_KEY &&
+    key !== RECENT_KEY &&
+    key !== KB_KEY &&
+    key !== TRASH_KEY &&
+    !key.startsWith(CLIENT_KEY_PREFIX)
+  );
+}
 
 /** Prefix for a per-client node key in the global tree (`client:<id>`). */
 export const CLIENT_KEY_PREFIX = 'client:';

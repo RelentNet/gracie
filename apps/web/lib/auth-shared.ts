@@ -10,7 +10,22 @@ import type { Role } from '@gracie/shared';
 
 /** The shape the UI consumes — a trimmed view of the `users` row. */
 export interface AuthUser {
+  /**
+   * The IDENTITY-PROVIDER subject (Logto `sub`) — NOT the `users.id` uuid that
+   * database foreign keys point at. Use it for identity, never for ownership.
+   */
   readonly id: string;
+  /**
+   * The internal `users.id` uuid, or null before the user's row exists (first-login
+   * bootstrap) or if the lookup failed.
+   *
+   * Ownership comparisons MUST use this, not `id`. Columns like
+   * `documents.uploaded_by_user_id` store the uuid, so comparing them against the
+   * Logto subject silently never matches — the same confusion that produced a
+   * production 500 in P9. Null means "ownership unknown", which callers should treat
+   * as "not the owner" so the UI fails closed.
+   */
+  readonly internalId: string | null;
   readonly name: string;
   readonly email: string;
   readonly initials: string;
@@ -31,6 +46,7 @@ export const MOCK_ROLE: Role = 'admin';
 export const MOCK_IDENTITIES: Readonly<Record<Role, AuthUser>> = {
   admin: {
     id: 'usr_allie',
+    internalId: 'usr_allie',
     name: 'Allie Grace',
     email: 'agrace@graceandassociates.com',
     initials: 'AG',
@@ -39,6 +55,7 @@ export const MOCK_IDENTITIES: Readonly<Record<Role, AuthUser>> = {
   },
   standard: {
     id: 'usr_sarah',
+    internalId: 'usr_sarah',
     name: 'Sarah Chen',
     email: 'schen@graceandassociates.com',
     initials: 'SC',
@@ -47,6 +64,7 @@ export const MOCK_IDENTITIES: Readonly<Record<Role, AuthUser>> = {
   },
   viewer: {
     id: 'usr_john',
+    internalId: 'usr_john',
     name: 'John Smith',
     email: 'jsmith@graceandassociates.com',
     initials: 'JS',
@@ -65,6 +83,7 @@ export const MOCK_USER: AuthUser = MOCK_IDENTITIES[MOCK_ROLE];
  */
 export const GUEST_USER: AuthUser = {
   id: 'guest',
+  internalId: null,
   name: 'Guest',
   email: '',
   initials: 'G',

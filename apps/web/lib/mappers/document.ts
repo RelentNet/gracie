@@ -27,6 +27,11 @@ export function mapDocument(row: DocumentRow): Document {
     requiresReview: row.requires_review,
     status: row.status,
     uploadedByUserId: row.uploaded_by_user_id,
+    visibility: row.visibility,
+    allowedRoles: row.allowed_roles,
+    deletedAt: row.deleted_at,
+    deletedByUserId: row.deleted_by_user_id,
+    deleteBatchId: row.delete_batch_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -42,5 +47,9 @@ export function mapFolder(row: FolderRow): Folder {
     allowedRoles: row.allowed_roles,
     createdByUserId: row.created_by_user_id,
     createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deletedAt: row.deleted_at,
+    deletedByUserId: row.deleted_by_user_id,
+    deleteBatchId: row.delete_batch_id,
   };
 }

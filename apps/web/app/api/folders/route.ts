@@ -19,10 +19,9 @@ import { clientSlug } from '@/lib/data/uploads';
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const user = await getRequestUser();
-    const admin = isAdmin(user);
     const clientId = request.nextUrl.searchParams.get('clientId') ?? undefined;
     const folders = await listFolders(clientId);
-    const payload = filterVisibleFolders(folders, admin);
+    const payload = filterVisibleFolders(folders, user.role);
     return NextResponse.json({ folders: payload });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

@@ -6,7 +6,7 @@ import 'server-only';
 
 import type { AuthUser } from './auth-shared';
 import { GUEST_USER, MOCK_USER, deriveInitials } from './auth-shared';
-import { getRoleByLogtoId } from './data/users';
+import { getRoleByLogtoId, getUserIdByLogtoId } from './data/users';
 import { isLogtoConfigured, logtoConfig, resolveRole, safeGetLogtoContext } from './logto';
 
 /**
@@ -32,10 +32,16 @@ export async function getCurrentUser(): Promise<AuthUser> {
   // Approach B: reflect the authoritative DB role so the UI (sidebar, badges,
   // Settings visibility) matches the API gate right after a role change. Fall
   // back to the claim on the bootstrap window / a transient DB error.
-  const dbRole = await getRoleByLogtoId(claims.sub).catch(() => null);
+  // Resolved alongside the role (both are `users` lookups keyed by logto_id). The
+  // uuid is what ownership checks compare against — see AuthUser.internalId.
+  const [dbRole, internalId] = await Promise.all([
+    getRoleByLogtoId(claims.sub).catch(() => null),
+    getUserIdByLogtoId(claims.sub).catch(() => null),
+  ]);
 
   return {
     id: claims.sub,
+    internalId,
     name: displayName === '' ? email : displayName,
     email,
     initials: deriveInitials(displayName, email),

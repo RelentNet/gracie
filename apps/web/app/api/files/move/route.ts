@@ -9,7 +9,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { moveObject } from '@gracie/shared/storage';
 
 import { getServerClient } from '@gracie/db';
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { getRequestUser } from '@/lib/api-auth';
 import { canAccessKey, canEditRole } from '@/lib/data/files';
 
 interface MoveBody {
@@ -46,10 +46,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const admin = isAdmin(user);
     const [srcOk, dstOk] = await Promise.all([
-      canAccessKey(sourceKey, admin),
-      canAccessKey(destinationKey, admin),
+      canAccessKey(sourceKey, user.role),
+      canAccessKey(destinationKey, user.role),
     ]);
     if (!srcOk || !dstOk) {
       return NextResponse.json(

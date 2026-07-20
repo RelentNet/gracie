@@ -82,6 +82,12 @@ export interface UploadDocumentInput {
   readonly fileSize: number;
   readonly status?: DocumentStatus;
   readonly documentType?: DocumentType;
+  /**
+   * INTERNAL `users.id` of the uploader (not the Logto subject). Attribution is what
+   * makes "delete files you uploaded" (`file.deleteOwn`) enforceable — the column
+   * existed but was never populated, so every upload looked system-owned.
+   */
+  readonly uploadedByUserId?: string | null;
 }
 
 /** Insert the `documents` row for an upload; returns the new document id. */
@@ -96,6 +102,7 @@ export async function insertUploadDocument(input: UploadDocumentInput): Promise<
     file_name: input.fileName,
     file_size: input.fileSize,
     status: input.status ?? 'ready',
+    uploaded_by_user_id: input.uploadedByUserId ?? null,
   };
   const { data, error } = await db.from('documents').insert(insert).select('id').single();
   if (error !== null) throw new Error(`insertUploadDocument: ${error.message}`);

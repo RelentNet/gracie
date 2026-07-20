@@ -775,8 +775,12 @@ export type Database = {
       }
       documents: {
         Row: {
+          allowed_roles: Database["public"]["Enums"]["user_role"][] | null
           client_id: string | null
           created_at: string
+          delete_batch_id: string | null
+          deleted_at: string | null
+          deleted_by_user_id: string | null
           document_type: Database["public"]["Enums"]["document_type"]
           file_name: string
           file_size: number | null
@@ -789,10 +793,15 @@ export type Database = {
           status: Database["public"]["Enums"]["document_status"]
           updated_at: string
           uploaded_by_user_id: string | null
+          visibility: Database["public"]["Enums"]["folder_visibility"] | null
         }
         Insert: {
+          allowed_roles?: Database["public"]["Enums"]["user_role"][] | null
           client_id?: string | null
           created_at?: string
+          delete_batch_id?: string | null
+          deleted_at?: string | null
+          deleted_by_user_id?: string | null
           document_type: Database["public"]["Enums"]["document_type"]
           file_name: string
           file_size?: number | null
@@ -805,10 +814,15 @@ export type Database = {
           status?: Database["public"]["Enums"]["document_status"]
           updated_at?: string
           uploaded_by_user_id?: string | null
+          visibility?: Database["public"]["Enums"]["folder_visibility"] | null
         }
         Update: {
+          allowed_roles?: Database["public"]["Enums"]["user_role"][] | null
           client_id?: string | null
           created_at?: string
+          delete_batch_id?: string | null
+          deleted_at?: string | null
+          deleted_by_user_id?: string | null
           document_type?: Database["public"]["Enums"]["document_type"]
           file_name?: string
           file_size?: number | null
@@ -821,8 +835,15 @@ export type Database = {
           status?: Database["public"]["Enums"]["document_status"]
           updated_at?: string
           uploaded_by_user_id?: string | null
+          visibility?: Database["public"]["Enums"]["folder_visibility"] | null
         }
         Relationships: [
+          {
+            foreignKeyName: "documents_deleted_by_user_id_fkey"
+            columns: ["deleted_by_user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "documents_client_id_fkey"
             columns: ["client_id"]
@@ -895,9 +916,13 @@ export type Database = {
           client_id: string | null
           created_at: string
           created_by_user_id: string | null
+          delete_batch_id: string | null
+          deleted_at: string | null
+          deleted_by_user_id: string | null
           display_name: string
           id: string
           path: string
+          updated_at: string
           visibility: Database["public"]["Enums"]["folder_visibility"]
         }
         Insert: {
@@ -905,9 +930,13 @@ export type Database = {
           client_id?: string | null
           created_at?: string
           created_by_user_id?: string | null
+          delete_batch_id?: string | null
+          deleted_at?: string | null
+          deleted_by_user_id?: string | null
           display_name: string
           id?: string
           path: string
+          updated_at?: string
           visibility?: Database["public"]["Enums"]["folder_visibility"]
         }
         Update: {
@@ -915,12 +944,22 @@ export type Database = {
           client_id?: string | null
           created_at?: string
           created_by_user_id?: string | null
+          delete_batch_id?: string | null
+          deleted_at?: string | null
+          deleted_by_user_id?: string | null
           display_name?: string
           id?: string
           path?: string
+          updated_at?: string
           visibility?: Database["public"]["Enums"]["folder_visibility"]
         }
         Relationships: [
+          {
+            foreignKeyName: "folders_deleted_by_user_id_fkey"
+            columns: ["deleted_by_user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "folders_client_id_fkey"
             columns: ["client_id"]
