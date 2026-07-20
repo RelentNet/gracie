@@ -26,6 +26,7 @@ import { enqueueGenerate } from '@/lib/queue';
 import {
   isTranscriptReadyEvent,
   parseRecallWebhook,
+  readSvixHeaders,
   verifyRecallSignature,
 } from '@/lib/recall-webhook';
 
@@ -43,13 +44,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // 1. Signature verification (enforced only once the secret is provisioned).
   const secret = process.env.RECALL_WEBHOOK_SECRET ?? '';
   if (secret !== '') {
+    // Recall sends the UNBRANDED Svix headers (`webhook-*`); `readSvixHeaders`
+    // accepts both spellings. Reading only `svix-*` rejected every real delivery.
     const ok = verifyRecallSignature(
       secret,
-      {
-        id: req.headers.get('svix-id') ?? '',
-        timestamp: req.headers.get('svix-timestamp') ?? '',
-        signature: req.headers.get('svix-signature') ?? '',
-      },
+      readSvixHeaders((name) => req.headers.get(name)),
       body,
     );
     if (!ok) {
