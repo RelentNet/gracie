@@ -22,6 +22,31 @@ export interface SvixHeaders {
   readonly signature: string;
 }
 
+/**
+ * Read the signature headers, accepting BOTH spellings Svix ships.
+ *
+ * Svix sends its headers under either the branded `svix-*` names or the
+ * unbranded `webhook-*` names, depending on how the sending application is
+ * configured. **Recall.ai sends the UNBRANDED form** (`webhook-id`,
+ * `webhook-timestamp`, `webhook-signature`).
+ *
+ * Reading only `svix-*` therefore yielded three empty strings for every real
+ * delivery, and {@link verifyRecallSignature} fails closed on empty inputs — so
+ * every `transcript.done` webhook was rejected 401 `invalid_signature` before an
+ * HMAC was ever computed, regardless of whether the secret was correct. That
+ * silently blocked ALL automatic document generation. Accept both spellings,
+ * preferring the branded names when present.
+ */
+export function readSvixHeaders(get: (name: string) => string | null): SvixHeaders {
+  const read = (branded: string, unbranded: string): string =>
+    get(branded) ?? get(unbranded) ?? '';
+  return {
+    id: read('svix-id', 'webhook-id'),
+    timestamp: read('svix-timestamp', 'webhook-timestamp'),
+    signature: read('svix-signature', 'webhook-signature'),
+  };
+}
+
 /** Decode the signing key bytes from a `whsec_<base64>` (or bare base64) secret. */
 function secretBytes(secret: string): Buffer {
   const base64 = secret.startsWith('whsec_') ? secret.slice('whsec_'.length) : secret;
