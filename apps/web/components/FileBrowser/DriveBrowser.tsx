@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FolderPlus, Upload } from 'lucide-react';
+import { canRoleSee, isUnderPath, toVisibilityRule } from '@gracie/shared';
 import type { Client, Document, Folder } from '@gracie/shared';
 
 import { apiClient } from '@/lib/api-client';
@@ -18,12 +19,17 @@ import { FileList } from '@/components/FileBrowser/FileList';
 import { UploadModal } from '@/components/FileBrowser/UploadModal';
 import { NewFolderModal } from '@/components/FileBrowser/NewFolderModal';
 import { MoveModal } from '@/components/FileBrowser/MoveModal';
+import { RenameModal } from '@/components/FileBrowser/RenameModal';
+import { PermissionsModal, describeAccess } from '@/components/FileBrowser/PermissionsModal';
+import { ConfirmDeleteDialog } from '@/components/FileBrowser/ConfirmDeleteDialog';
+import { TrashList, type TrashDocument, type TrashFolder } from '@/components/FileBrowser/TrashList';
 import {
   ALL_CLIENTS_KEY,
   ALL_FILES_KEY,
   CLIENT_KEY_PREFIX,
   KB_KEY,
   RECENT_KEY,
+  TRASH_KEY,
   buildFolderNodes,
   clientNodeKey,
   findNodePath,
@@ -67,12 +73,22 @@ interface OwnerOrg {
 interface OwnerOrgsResponse {
   readonly orgs: readonly OwnerOrg[];
 }
+interface TrashResponse {
+  readonly documents: readonly TrashDocument[];
+  readonly folders: readonly TrashFolder[];
+  readonly retentionDays: number;
+}
+
+/** A folder or file the user has opened a manage dialog for. */
+type ManageTarget =
+  | { readonly kind: 'folder'; readonly folder: Folder }
+  | { readonly kind: 'file'; readonly document: Document };
 
 /** Recent Documents virtual node size (docs/plan p2fix — last ~20–30 touched). */
 const RECENT_LIMIT = 25;
 
 export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
-  const { hasRole, canEdit } = useAuth();
+  const { user, hasRole, canEdit, can } = useAuth();
   const isAdmin = hasRole('admin');
   const editable = canEdit();
   const isGlobal = scope.kind === 'global';
@@ -91,6 +107,10 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [moveDoc, setMoveDoc] = useState<Document | null>(null);
+  const [renameTarget, setRenameTarget] = useState<ManageTarget | null>(null);
+  const [permissionsTarget, setPermissionsTarget] = useState<ManageTarget | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ManageTarget | null>(null);
+  const [trash, setTrash] = useState<TrashResponse | null>(null);
 
   const refresh = useCallback((): void => setRefreshNonce((n) => n + 1), []);
 
@@ -118,14 +138,34 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
     };
   }, [scopedClientId, refreshNonce]);
 
-  // Defense-in-depth: drop restricted folders a non-admin may not see (the API
-  // already omits them). Admins keep the full set.
+  // The bin is fetched lazily — only once the user actually opens it. Viewers never
+  // reach this (the node is not rendered for them, and the API 403s regardless).
+  useEffect(() => {
+    if (selectedKey !== TRASH_KEY || !editable) return;
+    let active = true;
+    apiClient
+      .get<TrashResponse>('/api/documents/trash')
+      .then((data) => {
+        if (active) setTrash(data);
+      })
+      .catch((e: unknown) => {
+        if (active) setError(e instanceof Error ? e.message : 'Failed to load the recycle bin');
+      });
+    return (): void => {
+      active = false;
+    };
+  }, [selectedKey, editable, refreshNonce]);
+
+  // Defense-in-depth: drop restricted folders this role may not see (the API already
+  // omits them). Uses the SAME resolver the server enforces with, so `allowed_roles` is
+  // honoured here too — the old mirror ignored the array and hid every restricted
+  // folder from every non-admin, which would now disagree with the API.
   const visibleFolders = useMemo<readonly Folder[]>(
     () =>
-      (allFolders ?? []).filter(
-        (folder) => folder.visibility !== 'restricted' || isAdmin,
+      (allFolders ?? []).filter((folder) =>
+        canRoleSee(toVisibilityRule(folder.visibility, folder.allowedRoles), user.role),
       ),
-    [allFolders, isAdmin],
+    [allFolders, user.role],
   );
   const visibleFolderIds = useMemo<ReadonlySet<string>>(
     () => new Set(visibleFolders.map((folder) => folder.id)),
@@ -152,13 +192,29 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
     [nameById],
   );
 
-  // Documents the role may see (restricted-folder docs omitted; unfiled kept).
+  // Documents the role may see: folder ceiling first, then any per-file override.
   const visibleDocuments = useMemo<readonly Document[]>(
     () =>
-      (allDocuments ?? []).filter(
-        (doc) => doc.folderId === null || visibleFolderIds.has(doc.folderId),
-      ),
-    [allDocuments, visibleFolderIds],
+      (allDocuments ?? []).filter((doc) => {
+        if (doc.folderId !== null && !visibleFolderIds.has(doc.folderId)) return false;
+        return canRoleSee(toVisibilityRule(doc.visibility, doc.allowedRoles), user.role);
+      }),
+    [allDocuments, visibleFolderIds, user.role],
+  );
+
+  // Pinned at the bottom of the tree, and only for roles that can delete — a viewer
+  // has no bin because a viewer can never put anything in one.
+  const trashNode = useMemo<TreeNode>(
+    () => ({
+      key: TRASH_KEY,
+      label: 'Recycle Bin',
+      depth: 0,
+      icon: 'trash',
+      isRestricted: false,
+      showLock: false,
+      children: [],
+    }),
+    [],
   );
 
   const nodes = useMemo<readonly TreeNode[]>(() => {
@@ -172,7 +228,7 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
         showLock: false,
         children: buildFolderNodes(visibleFolders, 1, isAdmin),
       };
-      return [root];
+      return editable ? [root, trashNode] : [root];
     }
 
     // Data-driven: a node per org that actually owns a folder/document (any
@@ -221,11 +277,13 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
         href: '/knowledge-base',
         children: [],
       },
+      ...(editable ? [trashNode] : []),
     ];
-  }, [isGlobal, visibleFolders, owners, isAdmin]);
+  }, [isGlobal, visibleFolders, owners, isAdmin, editable, trashNode]);
 
   // Documents shown in the right panel for the current selection.
   const documents = useMemo<readonly Document[]>(() => {
+    if (selectedKey === TRASH_KEY) return [];
     if (selectedKey === RECENT_KEY) {
       return [...visibleDocuments]
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -275,6 +333,54 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
         : visibleFolders.filter((folder) => folder.clientId === moveDoc.clientId),
     [visibleFolders, moveDoc],
   );
+
+  // Can this caller delete THIS file? `file.deleteAny` covers anyone's; otherwise it
+  // must be their own upload. Compares against `internalId` (the users.id uuid the FK
+  // stores) — `user.id` is the Logto subject and would never match. Fails closed when
+  // the internal id is unknown; the server enforces the same rule regardless.
+  const canDeleteDocument = useCallback(
+    (doc: Document): boolean => {
+      if (can('file.deleteAny')) return true;
+      if (!can('file.deleteOwn') || user.internalId === null) return false;
+      return doc.uploadedByUserId === user.internalId;
+    },
+    [can, user.internalId],
+  );
+
+  const folderActions = useMemo(
+    () =>
+      editable
+        ? {
+            onRename: (folderId: string): void => {
+              const folder = foldersById.get(folderId);
+              if (folder !== undefined) setRenameTarget({ kind: 'folder', folder });
+            },
+            onPermissions: (folderId: string): void => {
+              const folder = foldersById.get(folderId);
+              if (folder !== undefined) setPermissionsTarget({ kind: 'folder', folder });
+            },
+            onDelete: can('folder.delete')
+              ? (folderId: string): void => {
+                  const folder = foldersById.get(folderId);
+                  if (folder !== undefined) setDeleteTarget({ kind: 'folder', folder });
+                }
+              : undefined,
+          }
+        : undefined,
+    [editable, foldersById, can],
+  );
+
+  // How much a folder delete would take with it — shown in the confirm dialog so a
+  // recursive delete is never a surprise. Counted from what this role can see, which
+  // is a floor, not a guarantee; the server cascades over everything.
+  const deleteScope = useMemo(() => {
+    if (deleteTarget === null || deleteTarget.kind !== 'folder') return null;
+    const path = deleteTarget.folder.path;
+    const subfolders = visibleFolders.filter((f) => isUnderPath(f.path, path));
+    const subfolderIds = new Set(subfolders.map((f) => f.id));
+    const docs = visibleDocuments.filter((d) => d.folderId !== null && subfolderIds.has(d.folderId));
+    return { folderCount: subfolders.length, documentCount: docs.length };
+  }, [deleteTarget, visibleFolders, visibleDocuments]);
 
   if (error !== null) {
     return <ErrorState title="Couldn’t load files" description={error} />;
@@ -328,16 +434,46 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
           <p className="mb-2 px-2" style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
             Folders
           </p>
-          <FolderTree nodes={nodes} selectedKey={selectedKey} onSelect={setSelectedKey} />
+          <FolderTree
+            nodes={nodes}
+            selectedKey={selectedKey}
+            onSelect={setSelectedKey}
+            actions={folderActions}
+          />
         </aside>
         <div className="min-w-0 p-4">
-          <FileList
-            documents={documents}
-            canEdit={editable}
-            showClient={isGlobal}
-            clientName={clientName}
-            onMove={editable ? (doc): void => setMoveDoc(doc) : undefined}
-          />
+          {selectedKey === TRASH_KEY ? (
+            trash === null ? (
+              <LoadingState label="Loading recycle bin…" />
+            ) : (
+              <TrashList
+                documents={trash.documents}
+                folders={trash.folders}
+                clientName={clientName}
+                onRestored={refresh}
+              />
+            )
+          ) : (
+            <FileList
+              documents={documents}
+              canEdit={editable}
+              showClient={isGlobal}
+              clientName={clientName}
+              onMove={editable ? (doc): void => setMoveDoc(doc) : undefined}
+              onRename={
+                editable ? (doc): void => setRenameTarget({ kind: 'file', document: doc }) : undefined
+              }
+              onPermissions={
+                editable
+                  ? (doc): void => setPermissionsTarget({ kind: 'file', document: doc })
+                  : undefined
+              }
+              canDelete={editable ? canDeleteDocument : undefined}
+              onDelete={
+                editable ? (doc): void => setDeleteTarget({ kind: 'file', document: doc }) : undefined
+              }
+            />
+          )}
         </div>
       </div>
 
@@ -380,8 +516,100 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
           folders={moveFolders}
         />
       ) : null}
+      {editable && renameTarget !== null ? (
+        <RenameModal
+          isOpen
+          onClose={(): void => setRenameTarget(null)}
+          onRenamed={refresh}
+          target={
+            renameTarget.kind === 'folder'
+              ? { kind: 'folder', id: renameTarget.folder.id, name: renameTarget.folder.displayName }
+              : { kind: 'file', id: renameTarget.document.id, name: renameTarget.document.fileName }
+          }
+        />
+      ) : null}
+      {editable && permissionsTarget !== null ? (
+        <PermissionsModal
+          isOpen
+          onClose={(): void => setPermissionsTarget(null)}
+          onSaved={refresh}
+          isAdmin={isAdmin}
+          target={
+            permissionsTarget.kind === 'folder'
+              ? {
+                  kind: 'folder',
+                  id: permissionsTarget.folder.id,
+                  name: permissionsTarget.folder.displayName,
+                  visibility: permissionsTarget.folder.visibility,
+                  allowedRoles: permissionsTarget.folder.allowedRoles,
+                }
+              : {
+                  kind: 'file',
+                  id: permissionsTarget.document.id,
+                  name: permissionsTarget.document.fileName,
+                  visibility: permissionsTarget.document.visibility,
+                  allowedRoles: permissionsTarget.document.allowedRoles,
+                  inheritedFrom: inheritedAccess(
+                    permissionsTarget.document.folderId,
+                    foldersById,
+                  ),
+                }
+          }
+        />
+      ) : null}
+      {editable && deleteTarget !== null ? (
+        <ConfirmDeleteDialog
+          isOpen
+          onClose={(): void => setDeleteTarget(null)}
+          onDeleted={(): void => {
+            // A deleted folder may be the current selection — fall back to the root
+            // so the browser isn't left pointing at a node that no longer exists.
+            if (deleteTarget.kind === 'folder' && selectedKey === deleteTarget.folder.id) {
+              setSelectedKey(isGlobal ? ALL_CLIENTS_KEY : ALL_FILES_KEY);
+            }
+            refresh();
+          }}
+          retentionDays={trash?.retentionDays ?? DEFAULT_RETENTION_DAYS}
+          target={
+            deleteTarget.kind === 'folder'
+              ? {
+                  kind: 'folder',
+                  id: deleteTarget.folder.id,
+                  name: deleteTarget.folder.displayName,
+                  folderCount: deleteScope?.folderCount,
+                  documentCount: deleteScope?.documentCount,
+                }
+              : {
+                  kind: 'file',
+                  id: deleteTarget.document.id,
+                  name: deleteTarget.document.fileName,
+                }
+          }
+        />
+      ) : null}
     </Card>
   );
+}
+
+/**
+ * Mirrors the seeded `documents_trash_retention_days`. Only used for the confirm
+ * dialog before the bin has been opened once — the real value comes from the API, so
+ * the number shown always matches what the purge sweep will actually do.
+ */
+const DEFAULT_RETENTION_DAYS = 60;
+
+/** What a file currently inherits, for the Permissions dialog's "Inherit" option. */
+function inheritedAccess(
+  folderId: string | null,
+  foldersById: ReadonlyMap<string, Folder>,
+): { name: string; summary: string } | null {
+  if (folderId === null) return null;
+  const folder = foldersById.get(folderId);
+  if (folder === undefined) return null;
+  return {
+    name: folder.displayName,
+    summary: describeAccess(folder.visibility, folder.allowedRoles),
+  };
 }
 
 /** Pre-select the Upload modal's subtype from the currently selected folder. */

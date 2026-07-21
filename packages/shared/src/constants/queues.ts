@@ -32,6 +32,8 @@ export const QUEUE_NAMES = {
   contactSuggestions: 'contact-suggestions',
   /** Automations: due-sweep runs enabled+active automations + on-demand run-now (P8). */
   automations: 'automations',
+  /** Documents purge: destroy recycle-bin items past the retention window. */
+  documentsPurge: 'documents-purge',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -57,6 +59,8 @@ export const JOB_NAMES = {
   automationsSweep: 'automations.sweep',
   /** Single automation run — "Run now" / an immediate `once` confirm (P8). */
   automationsRun: 'automations.run',
+  /** Nightly purge sweep — permanently remove recycle-bin items past retention. */
+  documentsPurgeSweep: 'documents-purge.sweep',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
@@ -75,6 +79,7 @@ export const JOB_SCHEDULER_IDS = {
   dailySync: 'daily-sync.every-15m',
   contactSuggestions: 'contact-suggestions.nightly',
   automations: 'automations.every-5m',
+  documentsPurge: 'documents-purge.nightly',
 } as const;
 
 /** Heartbeat repeat interval (ms) — ~every 30s. A liveness signal, not real work. */
@@ -133,3 +138,6 @@ export const CONTACT_SUGGESTIONS_INTERVAL_MS = 24 * 60 * 60_000;
  * exact. The sweep only touches enabled+active rows whose `next_run_at <= now`.
  */
 export const AUTOMATIONS_SWEEP_INTERVAL_MS = 5 * 60_000;
+
+/** Documents recycle-bin purge sweep interval (ms) — nightly. */
+export const DOCUMENTS_PURGE_INTERVAL_MS = 24 * 60 * 60_000;

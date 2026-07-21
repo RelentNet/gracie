@@ -95,8 +95,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Destination key lives under the folder's path so its authorization governs.
     const destinationKey = `${dest.path}/${Date.now()}-${basename(doc.r2Key)}`;
     const [srcOk, dstOk] = await Promise.all([
-      canAccessKey(doc.r2Key, admin),
-      canAccessKey(destinationKey, admin),
+      canAccessKey(doc.r2Key, user.role),
+      canAccessKey(destinationKey, user.role),
     ]);
     if (!srcOk || !dstOk) {
       return NextResponse.json(

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   BookOpen,
@@ -9,13 +9,30 @@ import {
   Folder as FolderIcon,
   FolderOpen,
   Building2,
+  MoreHorizontal,
+  Pencil,
+  Shield,
+  Trash2,
   Users,
   Clock,
   Lock,
 } from 'lucide-react';
 
 import { TYPE } from '@/lib/typography';
-import { findNodePath, type TreeIcon, type TreeNode } from '@/components/FileBrowser/tree';
+import {
+  findNodePath,
+  isManageableFolderKey,
+  type TreeIcon,
+  type TreeNode,
+} from '@/components/FileBrowser/tree';
+
+/** Folder management actions offered on a real folder node. */
+export interface FolderNodeActions {
+  readonly onRename: (folderId: string) => void;
+  readonly onPermissions: (folderId: string) => void;
+  /** Omitted (not disabled) when the caller lacks `folder.delete`. */
+  readonly onDelete?: (folderId: string) => void;
+}
 
 /**
  * FolderTree (docs/08 §8 M11) — left panel of the two-panel file browser. Renders
@@ -39,6 +56,8 @@ export interface FolderTreeProps {
   readonly nodes: readonly TreeNode[];
   readonly selectedKey: string | null;
   readonly onSelect: (key: string) => void;
+  /** Editor-only. Absent = a read-only tree with no per-folder menu. */
+  readonly actions?: FolderNodeActions;
 }
 
 /** Branches start open unless they're a global client node (kept tidy by default). */
@@ -46,7 +65,12 @@ function defaultOpen(node: TreeNode): boolean {
   return node.icon !== 'client';
 }
 
-export function FolderTree({ nodes, selectedKey, onSelect }: FolderTreeProps): React.JSX.Element {
+export function FolderTree({
+  nodes,
+  selectedKey,
+  onSelect,
+  actions,
+}: FolderTreeProps): React.JSX.Element {
   // Explicit user overrides on top of `defaultOpen`; selection auto-expands its path.
   const [expandedOverride, setExpandedOverride] = useState<ReadonlySet<string>>(new Set());
   const [collapsedOverride, setCollapsedOverride] = useState<ReadonlySet<string>>(new Set());
@@ -108,6 +132,7 @@ export function FolderTree({ nodes, selectedKey, onSelect }: FolderTreeProps): R
           onSelect={onSelect}
           isOpen={isOpen}
           onToggle={toggle}
+          actions={actions}
         />
       ))}
     </nav>
@@ -120,12 +145,14 @@ function FolderBranch({
   onSelect,
   isOpen,
   onToggle,
+  actions,
 }: {
   readonly node: TreeNode;
   readonly selectedKey: string | null;
   readonly onSelect: (key: string) => void;
   readonly isOpen: (node: TreeNode) => boolean;
   readonly onToggle: (node: TreeNode) => void;
+  readonly actions?: FolderNodeActions;
 }): React.JSX.Element {
   const hasChildren = node.children.length > 0;
   const open = hasChildren && isOpen(node);
@@ -138,6 +165,7 @@ function FolderBranch({
         open={open}
         onSelect={onSelect}
         onToggle={onToggle}
+        actions={actions}
       />
       {open
         ? node.children.map((child) => (
@@ -148,6 +176,7 @@ function FolderBranch({
               onSelect={onSelect}
               isOpen={isOpen}
               onToggle={onToggle}
+              actions={actions}
             />
           ))
         : null}
@@ -161,6 +190,7 @@ const ICONS: Readonly<Record<TreeIcon, typeof FolderIcon>> = {
   client: Users,
   recent: Clock,
   book: BookOpen,
+  trash: Trash2,
 };
 
 function FolderRow({
@@ -170,6 +200,7 @@ function FolderRow({
   open,
   onSelect,
   onToggle,
+  actions,
 }: {
   readonly node: TreeNode;
   readonly isSelected: boolean;
@@ -177,6 +208,7 @@ function FolderRow({
   readonly open: boolean;
   readonly onSelect: (key: string) => void;
   readonly onToggle: (node: TreeNode) => void;
+  readonly actions?: FolderNodeActions;
 }): React.JSX.Element {
   const Icon = node.icon === 'folder' && (isSelected || open) ? FolderOpen : ICONS[node.icon];
   const iconColor = node.isRestricted ? 'var(--color-red-600)' : 'var(--text-secondary)';
@@ -237,6 +269,125 @@ function FolderRow({
           {label}
         </button>
       )}
+
+      {/* Only real `folders` rows get a menu — never the synthetic roots, the org
+          groupings, Recent, Knowledge Base or the Recycle Bin. */}
+      {actions !== undefined && isManageableFolderKey(node.key) && node.href === undefined ? (
+        <FolderMenu node={node} actions={actions} />
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * Per-folder ⋯ menu. Closes on outside click and on Escape, and returns focus to its
+ * trigger so keyboard users are not dropped at the top of the tree.
+ */
+function FolderMenu({
+  node,
+  actions,
+}: {
+  readonly node: TreeNode;
+  readonly actions: FolderNodeActions;
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent): void {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function onKey(event: KeyboardEvent): void {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return (): void => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  function run(action: (folderId: string) => void): void {
+    setOpen(false);
+    action(node.key);
+  }
+
+  return (
+    <div ref={containerRef} className="relative shrink-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={`Actions for ${node.label}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(): void => setOpen((v) => !v)}
+        className="flex h-6 w-6 items-center justify-center rounded"
+        style={{ color: 'var(--text-secondary)', background: 'transparent', cursor: 'pointer' }}
+      >
+        <MoreHorizontal size={14} />
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          className="absolute right-0 z-20 mt-1 min-w-[11rem] rounded-lg border bg-white py-1 shadow-xl"
+          style={{ borderColor: 'var(--border-subtle)' }}
+        >
+          <FolderMenuItem
+            icon={<Pencil size={14} />}
+            label="Rename"
+            onClick={(): void => run(actions.onRename)}
+          />
+          <FolderMenuItem
+            icon={<Shield size={14} />}
+            label="Permissions"
+            onClick={(): void => run(actions.onPermissions)}
+          />
+          {actions.onDelete !== undefined ? (
+            <FolderMenuItem
+              icon={<Trash2 size={14} />}
+              label="Delete"
+              danger
+              onClick={(): void => run(actions.onDelete as (folderId: string) => void)}
+            />
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function FolderMenuItem({
+  icon,
+  label,
+  onClick,
+  danger = false,
+}: {
+  readonly icon: React.ReactNode;
+  readonly label: string;
+  readonly onClick: () => void;
+  readonly danger?: boolean;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="flex w-full items-center gap-2 px-3 py-1.5 text-left"
+      style={{
+        background: 'transparent',
+        cursor: 'pointer',
+        color: danger ? 'var(--color-red-600)' : 'var(--text-primary)',
+        ...TYPE.body,
+      }}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

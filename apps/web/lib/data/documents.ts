@@ -15,7 +15,9 @@
 import 'server-only';
 
 import { getServerClient } from '@gracie/db';
-import type { Document, Folder } from '@gracie/shared';
+import type { Database } from '@gracie/db';
+import { canRoleSee, isUnderPath, toVisibilityRule } from '@gracie/shared';
+import type { Document, Folder, FolderVisibility, Role } from '@gracie/shared';
 
 import { mapDocument, mapFolder } from '../mappers/document.js';
 
@@ -23,10 +25,18 @@ interface ListDocumentsOptions {
   readonly clientId?: string;
 }
 
-/** List folders — all, or scoped to one client when `clientId` is provided. */
+/**
+ * List LIVE folders — all, or scoped to one client when `clientId` is provided.
+ * Recycle-bin rows are excluded here (and in every other normal listing); the bin
+ * has its own reader, `listTrash`.
+ */
 export async function listFolders(clientId?: string): Promise<Folder[]> {
   const db = getServerClient();
-  let query = db.from('folders').select('*').order('path', { ascending: true });
+  let query = db
+    .from('folders')
+    .select('*')
+    .is('deleted_at', null)
+    .order('path', { ascending: true });
   if (clientId !== undefined) {
     query = query.eq('client_id', clientId);
   }
@@ -36,12 +46,16 @@ export async function listFolders(clientId?: string): Promise<Folder[]> {
 }
 
 /**
- * List documents — global, or scoped to one client via `opts.clientId`.
- * Ordered newest first (created_at desc).
+ * List LIVE documents — global, or scoped to one client via `opts.clientId`.
+ * Ordered newest first (created_at desc). Deleted rows are excluded.
  */
 export async function listDocuments(opts?: ListDocumentsOptions): Promise<Document[]> {
   const db = getServerClient();
-  let query = db.from('documents').select('*').order('created_at', { ascending: false });
+  let query = db
+    .from('documents')
+    .select('*')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false });
   if (opts?.clientId !== undefined) {
     query = query.eq('client_id', opts.clientId);
   }
@@ -125,41 +139,204 @@ export async function moveDocumentToFolder(
   if (error) throw new Error(`moveDocumentToFolder: ${error.message}`);
 }
 
-/**
- * SECURITY-CRITICAL. A folder is visible if it is unrestricted, or it is
- * restricted AND the requesting role is allowed. Restricted folders are
- * admin-only (mirror of FileBrowser's `isVisibleToRole`).
- */
-function isVisibleToRole(folder: Folder, isAdmin: boolean): boolean {
-  if (folder.visibility !== 'restricted') return true;
-  return isAdmin && folder.allowedRoles.includes('admin');
+/** Rename and/or re-permission a document. Never touches `r2_key`. */
+export interface DocumentPatch {
+  readonly fileName?: string;
+  /** `null` clears the override so the file inherits its folder again. */
+  readonly visibility?: FolderVisibility | null;
+  readonly allowedRoles?: readonly Role[] | null;
 }
 
 /**
- * SECURITY-CRITICAL. Omit restricted folders the role may not see. Admins get
- * the full set; non-admins never receive a restricted folder in the response.
+ * Apply a metadata patch to a document.
+ *
+ * RENAME IS METADATA-ONLY. `documents.file_name` is a separate column from
+ * `documents.r2_key`, so a rename changes the display name and nothing else — no
+ * object copy, no key rewrite, no risk to the stored bytes or to `canAccessKey`
+ * (which authorizes on the key's folder prefix). Same idea as folder rename.
  */
-export function filterVisibleFolders(
-  folders: readonly Folder[],
-  isAdmin: boolean,
-): Folder[] {
-  return folders.filter((folder) => isVisibleToRole(folder, isAdmin));
+export async function updateDocument(id: string, patch: DocumentPatch): Promise<Document | null> {
+  const db = getServerClient();
+  const update: Database['public']['Tables']['documents']['Update'] = {};
+  if (patch.fileName !== undefined) update.file_name = patch.fileName;
+  if (patch.visibility !== undefined) update.visibility = patch.visibility;
+  if (patch.allowedRoles !== undefined) {
+    update.allowed_roles = patch.allowedRoles === null ? null : [...patch.allowedRoles];
+  }
+  if (Object.keys(update).length === 0) return getDocumentById(id);
+
+  const { data, error } = await db
+    .from('documents')
+    .update(update)
+    .eq('id', id)
+    .is('deleted_at', null)
+    .select('*')
+    .maybeSingle();
+  if (error !== null) throw new Error(`updateDocument: ${error.message}`);
+  return data === null ? null : mapDocument(data);
 }
 
 /**
- * SECURITY-CRITICAL. Omit documents that live in a hidden (restricted) folder.
- * A document is kept when it is unfiled (`folderId === null`) or its folder is
- * in the set of folders the role may see. Documents in a restricted folder are
- * never returned to a non-admin.
+ * Move a document to the recycle bin and drop its embeddings.
+ *
+ * The embeddings deletion is not incidental cleanup — `embeddings.source_id` is a
+ * polymorphic reference with NO foreign key, so nothing cascades. Leaving the rows
+ * behind would let the assistant keep quoting a document the user just deleted,
+ * which is a confidentiality leak, not just staleness. Removing them makes the leak
+ * structurally impossible rather than dependent on every retrieval query remembering
+ * to filter. Restore re-enqueues ingestion to rebuild them.
+ *
+ * `deleted_at is null` in the WHERE makes this idempotent: a double delete is a
+ * no-op returning null rather than re-stamping a new timestamp (which would silently
+ * extend the retention window).
+ */
+export async function softDeleteDocument(
+  id: string,
+  deletedByUserId: string | null,
+  batchId: string,
+): Promise<Document | null> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('documents')
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by_user_id: deletedByUserId,
+      delete_batch_id: batchId,
+    })
+    .eq('id', id)
+    .is('deleted_at', null)
+    .select('*')
+    .maybeSingle();
+  if (error !== null) throw new Error(`softDeleteDocument: ${error.message}`);
+  if (data === null) return null;
+
+  // `source_type='upload'` is what the ingest pipeline writes for a `documents` row
+  // (apps/worker ingest.processor). Generated meeting docs are not embedded per-doc —
+  // only the transcript is, keyed by MEETING id — so deleting one generated document
+  // deliberately leaves the meeting's transcript embeddings alone.
+  const cleared = await db
+    .from('embeddings')
+    .delete()
+    .eq('source_type', 'upload')
+    .eq('source_id', id);
+  if (cleared.error !== null) {
+    throw new Error(`softDeleteDocument embeddings: ${cleared.error.message}`);
+  }
+  return mapDocument(data);
+}
+
+/** Bring a document back from the recycle bin. Caller re-enqueues ingestion. */
+export async function restoreDocument(id: string): Promise<Document | null> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('documents')
+    .update({ deleted_at: null, deleted_by_user_id: null, delete_batch_id: null })
+    .eq('id', id)
+    .not('deleted_at', 'is', null)
+    .select('*')
+    .maybeSingle();
+  if (error !== null) throw new Error(`restoreDocument: ${error.message}`);
+  return data === null ? null : mapDocument(data);
+}
+
+/**
+ * Recycle-bin contents.
+ *
+ * `deletedByUserId` scopes the result to one user's own deletions (standard users);
+ * pass null for the unrestricted admin view. Folders come back too, so the bin can
+ * show a deleted subtree as one restorable folder rather than as loose files.
+ */
+export async function listTrash(
+  deletedByUserId: string | null,
+): Promise<{ documents: Document[]; folders: Folder[] }> {
+  const db = getServerClient();
+  let docQuery = db
+    .from('documents')
+    .select('*')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: true });
+  let folderQuery = db
+    .from('folders')
+    .select('*')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: true });
+  if (deletedByUserId !== null) {
+    docQuery = docQuery.eq('deleted_by_user_id', deletedByUserId);
+    folderQuery = folderQuery.eq('deleted_by_user_id', deletedByUserId);
+  }
+
+  const [docs, folders] = await Promise.all([docQuery, folderQuery]);
+  if (docs.error !== null) throw new Error(`listTrash(documents): ${docs.error.message}`);
+  if (folders.error !== null) throw new Error(`listTrash(folders): ${folders.error.message}`);
+
+  // A folder delete stamps its whole subtree, so the bin would otherwise list every
+  // descendant file alongside the folder the user actually deleted. Show only the
+  // items that head their batch: the folder itself, and files deleted on their own.
+  const batchFolderIds = new Set(
+    (folders.data ?? [])
+      .filter((f) => f.delete_batch_id !== null)
+      .map((f) => f.delete_batch_id as string),
+  );
+  const topLevelDocs = (docs.data ?? []).filter(
+    (d) => d.delete_batch_id === null || !batchFolderIds.has(d.delete_batch_id),
+  );
+  const topLevelFolders = dropNestedFolders(folders.data ?? []);
+
+  return {
+    documents: topLevelDocs.map(mapDocument),
+    folders: topLevelFolders.map(mapFolder),
+  };
+}
+
+/** Within one delete batch only the highest folder is shown; descendants are implied. */
+function dropNestedFolders<T extends { path: string; delete_batch_id: string | null }>(
+  rows: readonly T[],
+): T[] {
+  return rows.filter(
+    (row) =>
+      !rows.some(
+        (other) =>
+          other !== row &&
+          other.delete_batch_id === row.delete_batch_id &&
+          other.path.length < row.path.length &&
+          isUnderPath(row.path, other.path),
+      ),
+  );
+}
+
+/**
+ * SECURITY-CRITICAL. Omit restricted folders the role may not see.
+ *
+ * Delegates to the shared resolver, so `allowed_roles` is now honoured as a real
+ * role list: a folder restricted to `{admin,standard}` is visible to a standard
+ * user, which the previous admin-only reduction made impossible to express.
+ */
+export function filterVisibleFolders(folders: readonly Folder[], role: Role): Folder[] {
+  return folders.filter((folder) =>
+    canRoleSee(toVisibilityRule(folder.visibility, folder.allowedRoles), role),
+  );
+}
+
+/**
+ * SECURITY-CRITICAL. Omit documents the role may not see.
+ *
+ * Two gates, in order: the governing folder (a document in a hidden folder is never
+ * returned — pass the ALREADY-FILTERED folder set), then the document's own override
+ * if it has one. Unfiled documents (`folderId === null`) have no folder ceiling.
+ *
+ * Note this no longer short-circuits for admins: an admin still sees everything,
+ * because `canRoleSee` grants `folder.viewRestricted`, but routing admins through the
+ * same code path means there is only one rule to reason about — and it keeps a future
+ * non-admin-visible override from being silently skipped for admins.
  */
 export function filterVisibleDocuments(
   documents: readonly Document[],
   visibleFolders: readonly Folder[],
-  isAdmin: boolean,
+  role: Role,
 ): Document[] {
-  if (isAdmin) return [...documents];
   const visibleFolderIds = new Set(visibleFolders.map((folder) => folder.id));
-  return documents.filter(
-    (doc) => doc.folderId === null || visibleFolderIds.has(doc.folderId),
-  );
+  return documents.filter((doc) => {
+    if (doc.folderId !== null && !visibleFolderIds.has(doc.folderId)) return false;
+    return canRoleSee(toVisibilityRule(doc.visibility, doc.allowedRoles), role);
+  });
 }

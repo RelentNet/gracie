@@ -21,6 +21,7 @@ import { createBotDispatchProcessor } from './processors/bot-dispatch.processor.
 import { createCalendarScanProcessor } from './processors/calendar-scan.processor.js';
 import { createContactSuggestionsProcessor } from './processors/contact-suggestions.processor.js';
 import { createDailySyncProcessor } from './processors/daily-sync.processor.js';
+import { createDocumentsPurgeProcessor } from './processors/documents-purge.processor.js';
 import { createGenerateProcessor } from './processors/generate.processor.js';
 import { createHeartbeatProcessor } from './processors/heartbeat.processor.js';
 import { createIngestProcessor } from './processors/ingest.processor.js';
@@ -35,6 +36,10 @@ import {
   scheduleContactSuggestions,
 } from './queues/contact-suggestions.queue.js';
 import { createDailySyncQueue, scheduleDailySync } from './queues/daily-sync.queue.js';
+import {
+  createDocumentsPurgeQueue,
+  scheduleDocumentsPurge,
+} from './queues/documents-purge.queue.js';
 import { createWorker } from './queues/factory.js';
 import { createGenerateQueue } from './queues/generate.queue.js';
 import { createHeartbeatQueue, scheduleHeartbeat } from './queues/heartbeat.queue.js';
@@ -104,6 +109,7 @@ async function start(): Promise<void> {
   const dailySyncQueue = createDailySyncQueue(connection);
   const contactSuggestionsQueue = createContactSuggestionsQueue(connection);
   const automationsQueue = createAutomationsQueue(connection);
+  const documentsPurgeQueue = createDocumentsPurgeQueue(connection);
 
   /**
    * Best-effort single-client health recompute, deduped by a `health:<clientId>` job
@@ -132,6 +138,7 @@ async function start(): Promise<void> {
       dailySyncQueue,
       contactSuggestionsQueue,
       automationsQueue,
+      documentsPurgeQueue,
     ],
   });
 
@@ -247,6 +254,17 @@ async function start(): Promise<void> {
     app.log.error({ jobId: job?.id, err: error }, 'automations job failed');
   });
 
+  // Documents purge: nightly destruction of recycle-bin items past retention. Ships
+  // behind `documents_trash_purge_enabled` (off) — until that flips it only reports.
+  const documentsPurgeWorker = createWorker(
+    QUEUE_NAMES.documentsPurge,
+    createDocumentsPurgeProcessor(app.log),
+    connection,
+  );
+  documentsPurgeWorker.on('failed', (job, error) => {
+    app.log.error({ jobId: job?.id, err: error }, 'documents-purge job failed');
+  });
+
   await scheduleHeartbeat(heartbeatQueue);
   await scheduleTranscriptWatchdog(watchdogQueue);
   await scheduleCalendarScan(calendarScanQueue);
@@ -255,6 +273,7 @@ async function start(): Promise<void> {
   await scheduleDailySync(dailySyncQueue);
   await scheduleContactSuggestions(contactSuggestionsQueue);
   await scheduleAutomations(automationsQueue);
+  await scheduleDocumentsPurge(documentsPurgeQueue);
 
   installShutdown({
     app,
@@ -271,6 +290,7 @@ async function start(): Promise<void> {
       dailySyncQueue,
       contactSuggestionsQueue,
       automationsQueue,
+      documentsPurgeQueue,
     ],
     workers: [
       heartbeatWorker,
@@ -284,6 +304,7 @@ async function start(): Promise<void> {
       dailySyncWorker,
       contactSuggestionsWorker,
       automationsWorker,
+      documentsPurgeWorker,
     ],
   });
 

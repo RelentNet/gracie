@@ -21,6 +21,12 @@ export interface Folder {
   readonly allowedRoles: readonly Role[];
   readonly createdByUserId: UUID | null;
   readonly createdAt: ISOTimestamp;
+  readonly updatedAt: ISOTimestamp;
+  /** Soft delete (recycle bin). Non-null = in the bin, not viewable/downloadable. */
+  readonly deletedAt: ISOTimestamp | null;
+  readonly deletedByUserId: UUID | null;
+  /** Groups one recursive folder delete so Restore returns the subtree as a unit. */
+  readonly deleteBatchId: UUID | null;
 }
 
 /**
@@ -40,4 +46,14 @@ export interface Document extends Timestamps {
   readonly requiresReview: boolean;
   readonly status: DocumentStatus;
   readonly uploadedByUserId: UUID | null;
+  /**
+   * Per-file permission override. `null` on BOTH = inherit the governing folder
+   * (the default). The folder stays a ceiling — an override can only subtract.
+   */
+  readonly visibility: FolderVisibility | null;
+  readonly allowedRoles: readonly Role[] | null;
+  /** Soft delete (recycle bin). Non-null = in the bin, not viewable/downloadable. */
+  readonly deletedAt: ISOTimestamp | null;
+  readonly deletedByUserId: UUID | null;
+  readonly deleteBatchId: UUID | null;
 }

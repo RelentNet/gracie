@@ -9,7 +9,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { presignGet, presignPut } from '@gracie/shared/storage';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { getRequestUser } from '@/lib/api-auth';
 import { canAccessKey, canEditRole } from '@/lib/data/files';
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -33,8 +33,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     const user = await getRequestUser();
 
-    // Authorize the folder path for this role before signing anything.
-    const allowed = await canAccessKey(key, isAdmin(user));
+    // Authorize the folder path for this role before signing anything. This ALSO
+    // rejects keys whose document (or folder) is in the recycle bin — the deleted-is-
+    // inert rule, enforced at the only endpoint that hands out object URLs.
+    const allowed = await canAccessKey(key, user.role);
     if (!allowed) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Not authorized for this path' } },

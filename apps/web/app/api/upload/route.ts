@@ -18,6 +18,7 @@ import { getRequestUser, isAdmin } from '@/lib/api-auth';
 import { canEditRole } from '@/lib/data/files';
 import { getClient } from '@/lib/data/clients';
 import { getFolderById } from '@/lib/data/folders';
+import { getUserIdByLogtoId } from '@/lib/data/users';
 import {
   buildUploadKey,
   clientSlug,
@@ -132,6 +133,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       folderId = ensured.folderId;
       folderPath = ensured.folderPath;
     }
+    // Stamp the uploader so `file.deleteOwn` can be enforced later. Resolve the
+    // INTERNAL users.id — `user.userId` is the Logto subject, which is not what the
+    // FK points at. Best-effort: a failed lookup leaves the column null (system-owned,
+    // admin-deletable) rather than failing the upload.
+    const uploadedByUserId = await getUserIdByLogtoId(user.userId).catch(() => null);
     const now = new Date();
     const results: UploadedFileResult[] = [];
 
@@ -151,6 +157,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         fileName,
         fileSize: bytes.byteLength,
         status,
+        uploadedByUserId,
       });
       const jobId = await enqueueIngest({
         documentId,

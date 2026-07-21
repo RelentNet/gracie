@@ -160,3 +160,16 @@ export interface AutomationJobPayload {
   /** A single automation to run now; omit for the due-sweep. */
   readonly automationId?: string;
 }
+
+/**
+ * Payload for the documents recycle-bin purge sweep
+ * (`QUEUE_NAMES.documentsPurge`). No per-item data — each run selects every
+ * soft-deleted document/folder past the retention window and destroys it.
+ *
+ * Gated by the `documents_trash_purge_enabled` setting: when off (the shipped
+ * default) the sweep still runs and reports what it WOULD purge, but deletes nothing.
+ */
+export interface DocumentsPurgeJobPayload {
+  /** Logical origin — e.g. `'scheduler'` for the repeatable nightly sweep. */
+  readonly source: string;
+}
