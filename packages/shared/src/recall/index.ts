@@ -55,8 +55,10 @@ export interface RecallAutoLeave {
  *   - `meeting_captions` — the meeting platform's own closed captions. No extra
  *     ASR cost, but Teams **Business** only and depends on captions being enabled
  *     at the org/meeting level (Recall: "not 100% reliable").
- *   - `recallai` — Recall's own streaming ASR. Reliable regardless of caption
- *     settings; billed per hour.
+ *   - `recallai` — Recall's own ASYNC (post-meeting) ASR. Reliable regardless of
+ *     caption settings; billed per hour. Transcribes AFTER the recording
+ *     completes — deliberately not the streaming variant, see
+ *     {@link buildTranscriptProviderConfig}.
  */
 export type RecallTranscriptProvider = 'meeting_captions' | 'recallai';
 
@@ -93,9 +95,21 @@ const DEFAULT_BOT_NAME = 'Gracie';
 
 /**
  * Map our provider selector to Recall's `recording_config.transcript.provider`
- * wire shape (docs: transcription). Bot-creation-time providers:
+ * wire shape (docs: recallai-transcription, async-transcription):
  *   - meeting_captions → `{ meeting_captions: {} }`
- *   - recallai         → `{ recallai_streaming: { mode, language_code } }`
+ *   - recallai         → `{ recallai_async: { language_code } }`
+ *
+ * `recallai` maps to the ASYNC provider, NOT `recallai_streaming`. Streaming
+ * holds a live per-bot connection for the whole call and can fail with
+ * `provider_connection_failed`, killing the transcript for a meeting that
+ * recorded perfectly (2026-07-21 GA/Leap Metrics: recording done, transcript
+ * FAILED, zero documents). Nothing in gracie consumes a live stream — the
+ * pipeline only reacts to the post-meeting `transcript.done` webhook — so
+ * streaming bought nothing but that failure mode. Async transcribes the
+ * completed recording afterwards and fires the same `transcript.done` event.
+ * Mapping ALL `recallai` values here (including ones stored in `bot_config`
+ * before this fix) means no stale settings row can silently keep streaming.
+ * (`mode` is a streaming-only option; async does not accept it.)
  * Exported for unit tests (pure).
  */
 export function buildTranscriptProviderConfig(
@@ -105,7 +119,7 @@ export function buildTranscriptProviderConfig(
     case 'meeting_captions':
       return { meeting_captions: {} };
     case 'recallai':
-      return { recallai_streaming: { mode: 'prioritize_accuracy', language_code: 'auto' } };
+      return { recallai_async: { language_code: 'auto' } };
   }
 }
 
