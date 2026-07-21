@@ -25,9 +25,18 @@ export function canEditRole(role: Role): boolean {
  *
  * THE RECYCLE-BIN GATE LIVES HERE ON PURPOSE. This function is the choke point for
  * every presigned URL (`/api/files/url`) and both move endpoints, so denying deleted
- * keys here means a bin item cannot be fetched, moved, or overwritten by any path —
- * including with a URL minted moments before the delete. Restoring is the only way
- * back to the bytes.
+ * keys here means no NEW access to a bin item can be obtained through the app:
+ * downloads, moves and overwrites all fail until it is restored.
+ *
+ * KNOWN LIMIT — an ALREADY-ISSUED presigned URL survives the delete. The signature is
+ * validated by MinIO against the bucket credentials, not against our database, so we
+ * cannot revoke it; it keeps serving the object for the remainder of its window
+ * (PRESIGN_EXPIRY_SECONDS, 15 min). Verified, not theoretical. The exposure is bounded
+ * and mild — the holder necessarily had read rights at the moment they requested the
+ * URL, so delete cannot retroactively un-share something they were already entitled to
+ * fetch — but "deleted" means "no further access", NOT "every outstanding link dies".
+ * Closing that window would mean proxying downloads through the app instead of
+ * presigning, which is a much larger change than this feature warrants.
  */
 export async function canAccessKey(key: string, role: Role): Promise<boolean> {
   const db = getServerClient();
