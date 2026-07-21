@@ -29,9 +29,27 @@ One meeting's generation = **fetch transcript → embed the whole thing → 6 do
 - `PipelineErrorsPanel` → a fuller table with a status filter and a pinned "needs attention" group; keep the existing re-trigger button; add a row-link to `/meetings/[id]`.
 - Fix the page copy so "Pipeline" honestly reflects an activity feed.
 
-### 3.2 Pre-flight recoverability check
-- A server action / route that, for a set of stuck meetings, asks Recall (`GET /bot/{bot_job_id}/`) whether a recording exists with `media_shortcuts.transcript.data.download_url` present → `recoverable: true`. Only recoverable meetings get an enabled "re-sync" control. (This mirrors the throwaway diagnostic used during the incident: `scratchpad/check_stuck.py`.)
-- **Log/annotate the non-recoverable ones** ("no transcript on Recall") so it's clear why they can't be re-run — do not silently hide them.
+### 3.2 Pre-flight recoverability check — **THREE-WAY, not two-way** (revised 2026-07-21)
+⚠️ **A second, more common failure mode was found live on 2026-07-21 that this section originally got wrong.** `GA/Leap Metrics` recorded perfectly (`recording.status=done`, `video_mixed` downloadable) but its **transcription failed** — `media_shortcuts.transcript.status = {code: "failed", sub_code: "provider_connection_failed"}`, so there is **no transcript `download_url`**. The original rule ("no download_url → not recoverable") would wrongly mark it dead and hide it. **It is fully recoverable — by re-transcribing the surviving recording.**
+
+Classify each stuck meeting into one of three states, and drive a different action from each:
+| State | Detected by | Action offered |
+|---|---|---|
+| **`regenerate`** | transcript exists (`transcript.status=done`, `download_url` present) | Re-trigger generation (the existing `POST /api/pipeline/[meetingId]/retrigger`) |
+| **`retranscribe`** | transcript missing **or** `status=failed`, **but** a recording exists (`recording.status=done`, any media present) | **Request ASYNC transcription on the existing recording, then generate.** ← the Leap Metrics case |
+| **`unrecoverable`** | no recording at all (silent / never-admitted / too-short bot) | None — show the reason, don't offer a dead button |
+
+- Surface the **actual sub_code/reason** on the row (e.g. "transcription failed — provider connection"), never a generic "failed".
+- Re-triggering generation on a `retranscribe` meeting just fails again — the UI must not offer it.
+
+### 3.4 SELF-HEALING (the operator will not always be around) — **required, 2026-07-21**
+A dashboard button still needs a human to press it. The system must recover **unattended**:
+- **Worker auto-retry:** extend the existing transcript watchdog so that when a meeting is stuck (`bot_dispatched` + `NOT transcript_received`) and Recall reports the transcript **missing/failed while a recording exists**, the worker **automatically requests async transcription** on that recording, then lets the normal `transcript.done` → generate path run. This turns today's incident into a non-event.
+- **Bound it:** cap automatic re-transcribe attempts per meeting (e.g. 2) with backoff; record attempts so a permanently-broken meeting can't loop or burn spend. Respect the same cost reality as §2.
+- **Escalate only when it truly can't self-heal:** after the cap, flag `needs_attention` and fire the existing admin alert (P7 `emailAdminsForAlert`) with the reason — so a human is pulled in *by exception*, not by default.
+- The Pipeline fleet view (§3.1) then shows mostly *self-healed* meetings, and the manual controls become the fallback for the genuinely stuck.
+
+**Related root-cause fix (separate worker brief):** transcription currently uses `recallai_streaming` — a *real-time* provider holding a live connection per bot, which is what failed. Nothing in gracie consumes a live stream (we process post-meeting), so switching to an **async** provider removes this failure mode at the source; §3.4's auto-retry then covers whatever still slips through. Also pending there: dedupe bot dispatch on (`video_link` + start time) — two bots in one call (duplicate invites) is the suspected trigger for the double `provider_connection_failed`.
 
 ### 3.3 Bounded bulk re-sync
 - A "re-sync selected / re-sync all recoverable" action that: caps at **N per invocation** (config, e.g. 10), **previews exactly what will run** first, then enqueues **individual** generate jobs (reusing `enqueueGenerate`). No custom throttling — BullMQ concurrency serializes.
