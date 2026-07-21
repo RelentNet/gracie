@@ -39,8 +39,8 @@ Classify each stuck meeting into one of three states, and drive a different acti
 | **`retranscribe`** | transcript missing **or** `status=failed`, **but** a recording exists (`recording.status=done`, any media present) | **Request ASYNC transcription on the existing recording, then generate.** ← the Leap Metrics case |
 | **`unrecoverable`** | no recording at all (silent / never-admitted / too-short bot) | None — show the reason, don't offer a dead button |
 
-- Surface the **actual sub_code/reason** on the row (e.g. "transcription failed — provider connection"), never a generic "failed".
-- Re-triggering generation on a `retranscribe` meeting just fails again — the UI must not offer it.
+- Surface the reason on the row **in plain language a non-technical staffer understands** — never a raw code and never a generic "failed". Translate: `provider_connection_failed` → *"The recording is fine, but the notes couldn't be created."*; no recording → *"No recording was captured — there's nothing to recover."* Keep the raw code available for support (tooltip/details), not as the headline.
+- Re-triggering generation on a `retranscribe` meeting just fails again — the UI must not offer it (see §6: never show a button guaranteed to fail).
 
 ### 3.4 SELF-HEALING (the operator will not always be around) — **required, 2026-07-21**
 A dashboard button still needs a human to press it. The system must recover **unattended**:
@@ -64,3 +64,17 @@ Pipeline = **fleet view**; the meeting-occurrence page = **detail view**. Rows l
 - Admin-gated exactly like today (`pipeline.viewErrors` / `pipeline.triggerManual`).
 - Idempotent generation is preserved (clears prior docs/tasks/embeddings by meeting).
 - No secrets staged; worker + web deploy separately (a payload-flag change touches BOTH — ship the worker's tolerance for the flag before/with the web producer).
+
+## 6. ⭐ Standing operability constraint (this brief is the flagship test of it)
+At handover the only actors are **the AI and non-technical GA staff** — Daniel and Claude are gone. Every recovery so far (the webhook backlog, the un-transcribed meeting, GA/Leap Metrics) required a builder driving the Recall API and SQL by hand. **This brief exists to end that dependency.**
+
+Non-negotiables for this feature:
+- **No recovery path may require a console, a script, SQL, or a container log.** If the only way to fix a meeting is a `fetch()` in devtools, it isn't done.
+- **Nothing stuck may be invisible.** The original failure was precisely this: meetings that die before the webhook have no `pipeline_runs` row, so the Pipeline page — the very screen built to surface failures — showed nothing while a client meeting sat broken for hours.
+- **Plain language, always.** Say what happened, what it means, and what to do. No enum values or provider codes as the headline.
+- **One obvious button**, safe defaults, no required parameters.
+- **Never a button guaranteed to fail** — classify first (§3.2), then offer only the action that can actually work, or explain why none can.
+- **Self-heal the mechanical, button the judgment calls** (§3.4). Human intervention is acceptable; routine babysitting is not.
+- **Mind the role.** Recovery is gated `pipeline.triggerManual` (admin-only) today. If no admin is around at handover, nobody can press the button. **Recommendation: allow the standard/editor tier to run the idempotent recovery actions** (worst case is a safe re-run), keeping genuinely destructive actions admin-only. Confirm with the operator before narrowing.
+
+**Acceptance test for every screen in this brief:** *could a new GA staff member, with no context, no engineer, and no Claude, see what's broken and fix it from the dashboard?*
