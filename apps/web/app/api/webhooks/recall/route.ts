@@ -2,16 +2,18 @@
  * POST /api/webhooks/recall — Recall.ai "transcript ready" webhook (docs/05
  * Webhooks, docs/06 §4). Signature-verified (Svix); NOT user-authenticated.
  *
- * Flow: verify the signature → parse the event + `bot_job_id` → ignore anything
- * that is not the `transcript.done` event (200, no-op) → confirm a `meetings` row
- * exists whose `bot_job_id` matches (else 4xx reject) → enqueue a `generate` job →
- * set `meetings.pipeline_status = 'processing'` → return 202 immediately. The
- * long-running 6-document pipeline runs in apps/worker (docs/06 §9).
- *
- * The bot is dispatched with a `recording_config.transcript` provider (see
- * `@gracie/shared/recall`), so Recall produces a transcript and fires
- * `transcript.done` when it is ready — the event this route generates on. Register
- * this endpoint in the Recall dashboard subscribed to `transcript.done`.
+ * Flow: verify the signature → parse the event + `bot_job_id` → match the
+ * `meetings` row by `bot_job_id` (else 4xx reject) → then:
+ *   - `recording.done` → request the async transcript on the finished recording
+ *     (`ensureAsyncTranscript`; `recallai` bots dispatch record-only because
+ *     create-bot rejects `recallai_async` on our account) and flip the meeting
+ *     to `awaiting_transcript` → 202.
+ *   - `transcript.done` → enqueue a `generate` job → set
+ *     `meetings.pipeline_status = 'processing'` → 202. The long-running
+ *     6-document pipeline runs in apps/worker (docs/06 §9).
+ *   - anything else → 200 no-op.
+ * Register this endpoint in the Recall dashboard subscribed to BOTH
+ * `recording.done` and `transcript.done`.
  *
  * DEPLOY FOLLOW-UP: `RECALL_WEBHOOK_SECRET` is not provisioned until the endpoint
  * is registered with Recall at deploy. While it is unset, signature verification
@@ -20,10 +22,12 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { getServerClient } from '@gracie/db';
+import { getCredential, getServerClient } from '@gracie/db';
+import { ensureAsyncTranscript } from '@gracie/shared/recall';
 
 import { enqueueGenerate } from '@/lib/queue';
 import {
+  isRecordingDoneEvent,
   isTranscriptReadyEvent,
   parseRecallWebhook,
   readSvixHeaders,
@@ -72,12 +76,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return reject(400, 'bad_request', 'Payload is missing a bot id');
   }
 
-  // 2b. Only the transcript-ready event triggers generation. Recall also emits
-  // earlier bot-status events (bot.done, etc.) that carry the same bot id but
-  // fire BEFORE the transcript exists — enqueuing on those would race the
-  // pipeline against a not-yet-ready transcript. Acknowledge (200) so Svix does
-  // not retry, but do not enqueue. See RECALL_TRANSCRIPT_DONE_EVENT.
-  if (!isTranscriptReadyEvent(event)) {
+  // 2b. Only two events matter: `recording.done` (request the async transcript —
+  // `recallai` bots dispatch record-only because create-bot rejects
+  // `recallai_async` on our account) and `transcript.done` (run generation).
+  // Everything else — bot-status events etc. — is acknowledged (200) so Svix
+  // does not retry, but ignored.
+  const recordingDone = isRecordingDoneEvent(event);
+  if (!recordingDone && !isTranscriptReadyEvent(event)) {
     return NextResponse.json({ accepted: true, ignored: true, event }, { status: 200 });
   }
 
@@ -93,6 +98,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   if (meeting === null) {
     return reject(404, 'meeting_not_found', `No meeting matches bot_job_id ${botJobId}`);
+  }
+
+  // 3b. Recording finished → make sure a transcript is on its way (idempotent —
+  // a meeting_captions bot already has one; Svix retries are no-ops). A throw
+  // here 500s so Svix retries. Status flips scheduled → awaiting_transcript so
+  // the app can show "recorded, notes on the way" instead of a stale schedule.
+  if (recordingDone) {
+    const apiKey = await getCredential('recall');
+    if (apiKey === null || apiKey === '') {
+      return reject(500, 'no_recall_key', 'No Recall API key configured (Admin → API Settings)');
+    }
+    const result = await ensureAsyncTranscript(botJobId, {
+      apiKey,
+      region: process.env.RECALL_REGION,
+    });
+    await db
+      .from('meetings')
+      .update({ pipeline_status: 'awaiting_transcript' })
+      .eq('id', meeting.id)
+      .eq('pipeline_status', 'scheduled');
+    return NextResponse.json({ accepted: true, meetingId: meeting.id, transcript: result }, { status: 202 });
   }
 
   // 4. Enqueue the generation job + mark the meeting processing, then 202.

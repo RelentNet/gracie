@@ -19,6 +19,7 @@ import {
   DEFAULT_TRANSCRIPT_PROVIDER,
   buildTranscriptProviderConfig,
   dispatchRecallBot,
+  ensureAsyncTranscript,
   fetchRecallTranscript,
   flattenRecallTranscript,
 } from '@gracie/shared/recall';
@@ -49,15 +50,16 @@ function jsonResponse(body: unknown, ok = true, status = 200): unknown {
 
 test('buildTranscriptProviderConfig emits the exact Recall wire shapes', () => {
   assert.deepEqual(buildTranscriptProviderConfig('meeting_captions'), { meeting_captions: {} });
-  // ASYNC, not recallai_streaming: streaming's live connection failure mode
-  // (provider_connection_failed) cost a client meeting its documents while the
-  // recording itself was fine. No `recallai` value may ever map to streaming.
-  assert.deepEqual(buildTranscriptProviderConfig('recallai'), {
-    recallai_async: { language_code: 'auto' },
-  });
+  // recallai = record-only at create: our account's create-bot rejects
+  // recallai_async (verified 2026-07-22, HTTP 400), and streaming's live
+  // connection failure mode cost a client meeting its documents. The async
+  // transcript is requested post-recording (ensureAsyncTranscript). No
+  // `recallai` value may ever map to recallai_streaming.
+  assert.equal(buildTranscriptProviderConfig('recallai'), null);
 });
 
-test('dispatchRecallBot always requests a transcript (default provider)', async () => {
+test('dispatchRecallBot sends NO transcript config for the default (recallai) provider', async () => {
+  assert.equal(DEFAULT_TRANSCRIPT_PROVIDER, 'recallai');
   let sent: Record<string, unknown> | undefined;
   await withFetch(
     (_url, init) => {
@@ -69,8 +71,9 @@ test('dispatchRecallBot always requests a transcript (default provider)', async 
       assert.equal(id, 'bot_123');
     },
   );
-  const recordingConfig = sent?.recording_config as { transcript?: { provider?: unknown } } | undefined;
-  assert.deepEqual(recordingConfig?.transcript?.provider, buildTranscriptProviderConfig(DEFAULT_TRANSCRIPT_PROVIDER));
+  // Record-only: recording_config must be absent entirely — an empty transcript
+  // block or a null provider would 400 at Recall.
+  assert.equal(sent?.recording_config, undefined);
 });
 
 test('dispatchRecallBot honors an explicit provider', async () => {
@@ -148,6 +151,52 @@ test('fetchRecallTranscript throws when the transcript is not ready', async () =
     () => Promise.resolve(jsonResponse(botPayload)),
     async () => {
       await assert.rejects(fetchRecallTranscript('bot_x', { apiKey: 'k' }), /not ready/);
+    },
+  );
+});
+
+test('ensureAsyncTranscript requests recallai_async on a bare finished recording', async () => {
+  const botPayload = { recordings: [{ id: 'rec_1', media_shortcuts: {} }] };
+  const calls: Array<{ url: string; body?: string }> = [];
+  await withFetch(
+    (url, init) => {
+      calls.push({ url, body: init?.body });
+      return Promise.resolve(jsonResponse(url.includes('create_transcript') ? {} : botPayload));
+    },
+    async () => {
+      assert.equal(await ensureAsyncTranscript('bot_a', { apiKey: 'k' }), 'created');
+    },
+  );
+  assert.equal(calls.length, 2);
+  const create = calls[1];
+  assert.ok(create !== undefined);
+  assert.ok(create.url.endsWith('/recording/rec_1/create_transcript/'));
+  const body = JSON.parse(create.body ?? '{}') as { provider?: unknown };
+  assert.deepEqual(body.provider, { recallai_async: { language_code: 'auto' } });
+});
+
+test('ensureAsyncTranscript is a no-op when a transcript already exists (idempotent on Svix retries)', async () => {
+  const botPayload = {
+    recordings: [{ id: 'rec_1', media_shortcuts: { transcript: { status: { code: 'processing' } } } }],
+  };
+  let createCalled = false;
+  await withFetch(
+    (url) => {
+      if (url.includes('create_transcript')) createCalled = true;
+      return Promise.resolve(jsonResponse(botPayload));
+    },
+    async () => {
+      assert.equal(await ensureAsyncTranscript('bot_a', { apiKey: 'k' }), 'already_requested');
+    },
+  );
+  assert.equal(createCalled, false);
+});
+
+test('ensureAsyncTranscript reports no_recording when the bot never recorded', async () => {
+  await withFetch(
+    () => Promise.resolve(jsonResponse({ recordings: [] })),
+    async () => {
+      assert.equal(await ensureAsyncTranscript('bot_a', { apiKey: 'k' }), 'no_recording');
     },
   );
 });

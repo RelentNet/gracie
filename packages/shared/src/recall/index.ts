@@ -14,12 +14,13 @@
  * key is resolved by the CALLER (`getCredential('recall')`, `@gracie/db`) and the
  * region by env (`RECALL_REGION`); this module stays pure.
  *
- * TRANSCRIPTION (go-live fix): every dispatched bot now asks Recall to produce a
- * transcript via `recording_config.transcript.provider` (docs: transcription).
- * WITHOUT this the bot only records audio/video and `media_shortcuts.transcript`
- * stays null — the exact failure that left the first real bots un-transcribed.
- * The provider is tunable at dispatch (Settings → Meeting Bot → `getBotConfig`);
- * see `buildTranscriptProviderConfig` for the wire shapes.
+ * TRANSCRIPTION: `meeting_captions` bots carry their transcript config at
+ * create; `recallai` (async ASR, the default) bots record only, and the
+ * `recording.done` webhook calls `ensureAsyncTranscript` to request the
+ * transcript on the finished recording — our account's create-bot API rejects
+ * `recallai_async`, and the streaming provider is the one that failed a real
+ * client meeting (see `buildTranscriptProviderConfig`). The provider is tunable
+ * at dispatch (Settings → Meeting Bot → `getBotConfig`).
  *
  * When the transcript finishes Recall fires the `transcript.done` webhook (which
  * carries `data.bot.id`); the route matches the meeting by `bot_job_id` and
@@ -84,9 +85,10 @@ export interface RecallDispatchOptions extends RecallFetchOptions {
   /** Auto-leave timeouts; omitted fields fall back to Recall defaults. */
   readonly autoLeave?: RecallAutoLeave;
   /**
-   * Transcription provider for `recording_config.transcript`. Omitted →
-   * {@link DEFAULT_TRANSCRIPT_PROVIDER}. A provider is ALWAYS sent so Recall
-   * produces a transcript (see the module header).
+   * Transcription provider selector. Omitted → {@link DEFAULT_TRANSCRIPT_PROVIDER}.
+   * `meeting_captions` is sent as `recording_config.transcript`; `recallai`
+   * dispatches record-only (the transcript is requested post-recording — see
+   * the module header).
    */
   readonly transcriptProvider?: RecallTranscriptProvider;
 }
@@ -95,31 +97,30 @@ const DEFAULT_BOT_NAME = 'Gracie';
 
 /**
  * Map our provider selector to Recall's `recording_config.transcript.provider`
- * wire shape (docs: recallai-transcription, async-transcription):
+ * wire shape at BOT CREATION (docs: recallai-transcription):
  *   - meeting_captions → `{ meeting_captions: {} }`
- *   - recallai         → `{ recallai_async: { language_code } }`
+ *   - recallai         → `null` — no transcript config at create (record-only)
  *
- * `recallai` maps to the ASYNC provider, NOT `recallai_streaming`. Streaming
- * holds a live per-bot connection for the whole call and can fail with
- * `provider_connection_failed`, killing the transcript for a meeting that
- * recorded perfectly (2026-07-21 GA/Leap Metrics: recording done, transcript
- * FAILED, zero documents). Nothing in gracie consumes a live stream — the
- * pipeline only reacts to the post-meeting `transcript.done` webhook — so
- * streaming bought nothing but that failure mode. Async transcribes the
- * completed recording afterwards and fires the same `transcript.done` event.
- * Mapping ALL `recallai` values here (including ones stored in `bot_config`
- * before this fix) means no stale settings row can silently keep streaming.
- * (`mode` is a streaming-only option; async does not accept it.)
+ * `recallai` means Recall's ASYNC ASR, but our account's create-bot API does
+ * NOT accept `recallai_async` (verified live 2026-07-22: HTTP 400, allowed list
+ * is streaming providers + meeting_captions only). And `recallai_streaming` is
+ * the provider that failed with `provider_connection_failed` and cost the
+ * 2026-07-21 GA/Leap Metrics meeting its documents. So for `recallai` the bot
+ * records WITHOUT a transcript config, and when Recall fires `recording.done`
+ * the webhook requests the async transcript on the finished recording via
+ * {@link ensureAsyncTranscript} — the flow Recall documents for post-meeting
+ * transcription, and the one proven to work on this account (the Leap Metrics
+ * recovery). `transcript.done` then drives generation exactly as before.
  * Exported for unit tests (pure).
  */
 export function buildTranscriptProviderConfig(
   provider: RecallTranscriptProvider,
-): Record<string, unknown> {
+): Record<string, unknown> | null {
   switch (provider) {
     case 'meeting_captions':
       return { meeting_captions: {} };
     case 'recallai':
-      return { recallai_async: { language_code: 'auto' } };
+      return null;
   }
 }
 
@@ -197,27 +198,30 @@ export function flattenRecallTranscript(segments: unknown): string {
 
 /**
  * Dispatch a Recall bot into a meeting (docs/07 §1). Creates the bot via
- * `POST /bot` with the meeting's join URL AND a `recording_config.transcript`
- * provider so Recall produces a transcript; returns the Recall bot id, which the
- * caller stores as `meetings.bot_job_id`. When the transcript is ready Recall
- * fires the `transcript.done` webhook — which matches the meeting by that
- * `bot_job_id` and runs generation. P4's job ends here.
+ * `POST /bot` with the meeting's join URL; returns the Recall bot id, which the
+ * caller stores as `meetings.bot_job_id`. Transcription: `meeting_captions` is
+ * configured at create; `recallai` bots record only, and the `recording.done`
+ * webhook requests the async transcript ({@link ensureAsyncTranscript}). When
+ * the transcript is ready Recall fires the `transcript.done` webhook — which
+ * matches the meeting by that `bot_job_id` and runs generation.
  *
  * Throws on a non-OK response so the caller decides how to recover: the worker
  * cron retries the next sweep, and the on-demand join route rolls back the
  * just-created meeting row so a failed dispatch is never silently dropped.
  */
 export async function dispatchRecallBot(options: RecallDispatchOptions): Promise<string> {
-  // Always request a transcript — omitting this is the bug that left real bots
-  // un-transcribed (media_shortcuts.transcript stayed null).
+  // meeting_captions carries its transcript config at create; recallai bots are
+  // record-only here — the recording.done webhook requests the async transcript
+  // (see buildTranscriptProviderConfig for why create-bot can't).
   const provider = options.transcriptProvider ?? DEFAULT_TRANSCRIPT_PROVIDER;
+  const providerConfig = buildTranscriptProviderConfig(provider);
   const body: Record<string, unknown> = {
     meeting_url: options.meetingUrl,
     bot_name: options.botName ?? DEFAULT_BOT_NAME,
-    recording_config: {
-      transcript: { provider: buildTranscriptProviderConfig(provider) },
-    },
   };
+  if (providerConfig !== null) {
+    body.recording_config = { transcript: { provider: providerConfig } };
+  }
 
   // Static image tile: show it both while recording and before, so the bot always
   // presents Gracie's face rather than a blank participant tile.
@@ -254,6 +258,7 @@ export async function dispatchRecallBot(options: RecallDispatchOptions): Promise
 /** Bot-retrieve response subset we depend on (docs: bot_retrieve). */
 interface RecallBotRecordings {
   readonly recordings?: ReadonlyArray<{
+    readonly id?: string | null;
     readonly media_shortcuts?: {
       readonly transcript?: {
         readonly status?: { readonly code?: string | null } | null;
@@ -322,4 +327,69 @@ export async function fetchRecallTranscript(
     throw new Error(`Recall transcript for bot ${botJobId} was empty`);
   }
   return transcript;
+}
+
+/**
+ * Request Recall's async ASR on a finished recording (docs: async-transcription):
+ * `POST /recording/{id}/create_transcript/` with `recallai_async`. This is the
+ * ONLY way our account gets Recall's own transcription — create-bot rejects
+ * `recallai_async` (see buildTranscriptProviderConfig). When the transcript
+ * finishes, Recall fires `transcript.done` and generation proceeds as usual.
+ * Throws on a non-OK response so the webhook 500s and Svix retries.
+ */
+export async function createRecallAsyncTranscript(
+  recordingId: string,
+  options: RecallFetchOptions,
+): Promise<void> {
+  const res = await fetch(`${baseUrl(options.region)}/recording/${recordingId}/create_transcript/`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Token ${options.apiKey}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      provider: { recallai_async: { language_code: 'auto' } },
+      // Per-participant audio streams give real speaker names in the transcript.
+      diarization: { use_separate_streams_when_available: true },
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(
+      `Recall create_transcript failed for recording ${recordingId} (HTTP ${res.status}): ${body.slice(0, 300)}`,
+    );
+  }
+}
+
+/** Outcome of {@link ensureAsyncTranscript}, for webhook logging/response. */
+export type EnsureAsyncTranscriptResult = 'created' | 'already_requested' | 'no_recording';
+
+/**
+ * Idempotently make sure a bot's finished recording has a transcript coming:
+ * GET the bot; if any recording already carries a transcript (done, processing,
+ * or requested at create — e.g. meeting_captions), do nothing; otherwise request
+ * the async transcript on the first recording. Called from the `recording.done`
+ * webhook, whose Svix retries make the idempotence necessary.
+ */
+export async function ensureAsyncTranscript(
+  botJobId: string,
+  options: RecallFetchOptions,
+): Promise<EnsureAsyncTranscriptResult> {
+  const botRes = await fetch(`${baseUrl(options.region)}/bot/${botJobId}/`, {
+    headers: { Authorization: `Token ${options.apiKey}`, Accept: 'application/json' },
+  });
+  if (!botRes.ok) {
+    const body = await botRes.text().catch(() => '');
+    throw new Error(
+      `Recall bot fetch failed for bot ${botJobId} (HTTP ${botRes.status}): ${body.slice(0, 300)}`,
+    );
+  }
+  const bot = (await botRes.json()) as RecallBotRecordings;
+  const recordings = bot.recordings ?? [];
+  if (recordings.some((r) => r?.media_shortcuts?.transcript != null)) return 'already_requested';
+  const recordingId = recordings.map((r) => r?.id).find((id) => typeof id === 'string' && id !== '');
+  if (recordingId == null) return 'no_recording';
+  await createRecallAsyncTranscript(recordingId as string, options);
+  return 'created';
 }
