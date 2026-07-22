@@ -6,7 +6,7 @@ import type { Document, Folder } from '@gracie/shared';
 
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
-import { formatEasternDate } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { formatFileSize } from '@/lib/client-display';
 import { Badge } from '@/components/ui/Badge';
 import { Table, THead, TBody, TRow, TH, TCell } from '@/components/ui/Table';
@@ -140,7 +140,7 @@ export function TrashList({
                     {clientName?.(row.clientId) ?? 'Unassigned'}
                   </Badge>
                 </TCell>
-                <TCell>{row.deletedAt === null ? '—' : formatEasternDate(row.deletedAt)}</TCell>
+                <TCell>{row.deletedAt === null ? '—' : formatDate(row.deletedAt)}</TCell>
                 <TCell>
                   <span
                     style={{

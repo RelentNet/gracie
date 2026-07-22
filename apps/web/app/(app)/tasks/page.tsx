@@ -16,7 +16,7 @@ import { apiClient } from '@/lib/api-client';
 import { getClientName, getUserInitials, getUserName } from '@/lib/mock';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
-import { formatEasternDate, formatEasternDateTime } from '@/lib/format';
+import { formatDate, formatDateTime } from '@/lib/format';
 import {
   daysOverdue,
   priorityBadge,
@@ -380,7 +380,7 @@ function DueDateCell({
   const overdueDays = urgency === 'overdue' ? daysOverdue(task.dueDate, TODAY) : 0;
   return (
     <span className="flex flex-col">
-      <span style={TYPE.secondary}>{formatEasternDate(task.dueDate)}</span>
+      <span style={TYPE.secondary}>{formatDate(task.dueDate)}</span>
       {urgency === 'overdue' ? (
         <span style={{ ...TYPE.label, color: 'var(--color-red-600)' }}>
           {overdueDays} day{overdueDays === 1 ? '' : 's'} overdue
@@ -443,7 +443,7 @@ function TaskNotes({ taskId }: { readonly taskId: string }): React.JSX.Element {
             <span className="flex items-center gap-2">
               <span style={TYPE.bodyStrong}>{getUserName(note.authorUserId)}</span>
               <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-                {formatEasternDateTime(note.createdAt)}
+                {formatDateTime(note.createdAt)}
               </span>
             </span>
             <span style={TYPE.body}>{note.content}</span>

@@ -6,7 +6,7 @@ import type { Document } from '@gracie/shared';
 import { getUserName } from '@/lib/mock';
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
-import { formatEasternDate } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { docStatusBadge, formatFileSize, sourceBadge } from '@/lib/client-display';
 import { Badge } from '@/components/ui/Badge';
 import { Table, THead, TBody, TRow, TH, TCell } from '@/components/ui/Table';
@@ -114,7 +114,7 @@ export function FileList({
                   {source.label}
                 </Badge>
               </TCell>
-              <TCell>{formatEasternDate(doc.createdAt)}</TCell>
+              <TCell>{formatDate(doc.createdAt)}</TCell>
               <TCell>{doc.uploadedByUserId !== null ? getUserName(doc.uploadedByUserId) : 'System'}</TCell>
               <TCell>
                 <span className="font-data">{formatFileSize(doc.fileSize)}</span>

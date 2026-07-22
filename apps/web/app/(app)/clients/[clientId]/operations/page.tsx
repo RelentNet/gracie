@@ -7,7 +7,7 @@ import type { Meeting, Task } from '@gracie/shared';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
-import { formatEasternDateTime } from '@/lib/format';
+import { formatDateTime } from '@/lib/format';
 import { Badge } from '@/components/ui/Badge';
 import { Tabs } from '@/components/ui/Tabs';
 import { Table, THead, TBody, TRow, TH, TCell } from '@/components/ui/Table';
@@ -133,7 +133,7 @@ function PipelinePanel({ meetings }: { readonly meetings: readonly Meeting[] }):
           return (
             <TRow key={meeting.id}>
               <TCell>{meeting.title ?? 'Untitled meeting'}</TCell>
-              <TCell>{formatEasternDateTime(meeting.dateTime)}</TCell>
+              <TCell>{formatDateTime(meeting.dateTime)}</TCell>
               <TCell>
                 <Badge bg={color.bg} fg={color.fg}>
                   {PIPELINE_STATUS_LABEL[meeting.pipelineStatus]}
@@ -141,7 +141,7 @@ function PipelinePanel({ meetings }: { readonly meetings: readonly Meeting[] }):
               </TCell>
               <TCell>
                 {meeting.pipelineCompletedAt !== null
-                  ? formatEasternDateTime(meeting.pipelineCompletedAt)
+                  ? formatDateTime(meeting.pipelineCompletedAt)
                   : '—'}
               </TCell>
             </TRow>
@@ -177,7 +177,7 @@ function TranscriptsPanel({
           <div className="flex flex-col">
             <span style={TYPE.body}>{meeting.title ?? 'Untitled meeting'}</span>
             <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-              {formatEasternDateTime(meeting.dateTime)}
+              {formatDateTime(meeting.dateTime)}
             </span>
           </div>
         </li>

@@ -6,7 +6,7 @@ import { Inbox } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { LoadingState } from '@/components/ui/StateViews';
 import { TYPE } from '@/lib/typography';
-import { formatEasternDateTime } from '@/lib/format';
+import { formatDateTime } from '@/lib/format';
 
 import type { AutomationRequestClientView } from './types';
 
@@ -85,7 +85,7 @@ export function AdvancedRequestsPanel(): React.JSX.Element {
               <p style={TYPE.body}>{r.intent}</p>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-                  {r.requestedByName ?? 'A teammate'} · {formatEasternDateTime(r.createdAt)}
+                  {r.requestedByName ?? 'A teammate'} · {formatDateTime(r.createdAt)}
                 </span>
                 <div className="flex gap-2">
                   <Button

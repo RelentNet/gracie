@@ -32,7 +32,7 @@ import { deriveOrgNameFromDomain } from '@gracie/shared';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
-import { formatEasternDateTime } from '@/lib/format';
+import { formatDateTime } from '@/lib/format';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -55,34 +55,33 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews
  */
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-const ET = 'America/New_York';
+// Times render in the VIEWER's timezone (no `timeZone` option → device tz).
+// This page renders only after a client-side fetch, so the device is always
+// the user's, never the server.
 
-/** ET calendar-day key (YYYY-MM-DD) for an ISO instant. */
-function easternDayKey(iso: string): string {
+/** Viewer-local calendar-day key (YYYY-MM-DD) for an ISO instant. */
+function localDayKey(iso: string): string {
   return new Intl.DateTimeFormat('en-CA', {
-    timeZone: ET,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
   }).format(new Date(iso));
 }
 
-/** ET time-of-day (e.g. "2:00 PM") for an ISO instant. */
-function easternTime(iso: string): string {
+/** Viewer-local time-of-day (e.g. "2:00 PM") for an ISO instant. */
+function localTime(iso: string): string {
   return new Intl.DateTimeFormat('en-US', {
-    timeZone: ET,
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(iso));
 }
 
-/** Long ET date label (e.g. "Monday, July 6, 2026") for a day key. */
-function easternDayLabel(dayKey: string): string {
-  // Anchor at mid-day UTC so the ET calendar day is unambiguous across DST.
+/** Long viewer-local date label (e.g. "Monday, July 6, 2026") for a day key. */
+function localDayLabel(dayKey: string): string {
+  // Anchor at 16:00 UTC so the calendar day is unambiguous for any US timezone.
   const [y, m, d] = dayKey.split('-').map(Number);
   const anchor = new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1, 16));
   return new Intl.DateTimeFormat('en-US', {
-    timeZone: ET,
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -142,15 +141,15 @@ interface GridCell {
   readonly isToday: boolean;
 }
 
-/** Build the 6×7 month grid (ET-consistent) for the given year/month (0-based). */
+/** Build the 6×7 month grid (viewer-local day keys) for the given year/month (0-based). */
 function buildMonthGrid(year: number, month: number): { cells: GridCell[]; fromIso: string; toIso: string } {
-  const todayKey = easternDayKey(new Date().toISOString());
+  const todayKey = localDayKey(new Date().toISOString());
   const firstAnchor = new Date(Date.UTC(year, month, 1, 16));
   const firstWeekday = firstAnchor.getUTCDay(); // 0=Sun
   const cells: GridCell[] = [];
   for (let i = 0; i < 42; i += 1) {
     const anchor = new Date(Date.UTC(year, month, 1 - firstWeekday + i, 16));
-    const key = easternDayKey(anchor.toISOString());
+    const key = localDayKey(anchor.toISOString());
     const [, mm, dd] = key.split('-').map(Number);
     cells.push({
       key,
@@ -210,7 +209,7 @@ export default function CalendarPage(): React.JSX.Element {
   const isAdmin = can('calendar.configure');
   const editable = canEdit();
 
-  const nowKey = easternDayKey(new Date().toISOString());
+  const nowKey = localDayKey(new Date().toISOString());
   const [nowY, nowM] = nowKey.split('-').map(Number);
   const [viewYear, setViewYear] = useState<number>(nowY ?? 2026);
   const [viewMonth, setViewMonth] = useState<number>((nowM ?? 1) - 1);
@@ -298,7 +297,7 @@ export default function CalendarPage(): React.JSX.Element {
   const meetingsByDay = useMemo(() => {
     const map = new Map<string, CalendarMeeting[]>();
     for (const m of visibleMeetings) {
-      const key = easternDayKey(m.dateTime);
+      const key = localDayKey(m.dateTime);
       const list = map.get(key) ?? [];
       list.push(m);
       map.set(key, list);
@@ -555,7 +554,7 @@ function MonthGrid({
                         className="truncate rounded px-1"
                         style={{ ...TYPE.label, backgroundColor: bg, color: fg }}
                       >
-                        {easternTime(m.dateTime)} {meetingGridLabel(m)}
+                        {localTime(m.dateTime)} {meetingGridLabel(m)}
                       </span>
                     );
                   })}
@@ -589,7 +588,7 @@ function DayDetail({
 }): React.JSX.Element {
   return (
     <Card>
-      <CardHeader title={easternDayLabel(dayKey)} description={`${meetings.length} meeting${meetings.length === 1 ? '' : 's'}`} />
+      <CardHeader title={localDayLabel(dayKey)} description={`${meetings.length} meeting${meetings.length === 1 ? '' : 's'}`} />
       {loading ? (
         <LoadingState label="Loading meetings…" />
       ) : meetings.length === 0 ? (
@@ -700,7 +699,7 @@ function MeetingCard({
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-0.5">
           <span style={TYPE.bodyStrong}>{m.title ?? 'Untitled meeting'}</span>
-          <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>{easternTime(m.dateTime)}</span>
+          <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>{localTime(m.dateTime)}</span>
         </div>
         <StatusBadge status={toBadgeStatus(m.pipelineStatus)} size="sm" />
       </div>
@@ -1367,7 +1366,7 @@ function ConnectionPanel({
             ? undefined
             : status.groupConfigured
               ? status.lastSyncedAt !== null
-                ? `Last synced ${formatEasternDateTime(status.lastSyncedAt)}`
+                ? `Last synced ${formatDateTime(status.lastSyncedAt)}`
                 : 'Connected'
               : 'Not yet synced'
         }
@@ -1691,7 +1690,7 @@ function AmbiguousSection(): React.JSX.Element {
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span style={TYPE.bodyStrong}>{m.title ?? 'Untitled meeting'}</span>
                 <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-                  {formatEasternDateTime(m.dateTime)}
+                  {formatDateTime(m.dateTime)}
                   {m.attendees.length > 0 ? ` · ${m.attendees.map((p) => p.name).join(', ')}` : ''}
                 </span>
                 {m.unknownOrgDomains.length > 0 ? (
@@ -1785,10 +1784,10 @@ function CadenceSection(): React.JSX.Element {
                     {row.cadence.replace('_', ' ')}
                   </td>
                   <td className="px-2 py-2" style={TYPE.secondary}>
-                    {row.lastMeetingAt !== null ? formatEasternDateTime(row.lastMeetingAt) : '—'}
+                    {row.lastMeetingAt !== null ? formatDateTime(row.lastMeetingAt) : '—'}
                   </td>
                   <td className="px-2 py-2" style={TYPE.secondary}>
-                    {row.nextMeetingAt !== null ? formatEasternDateTime(row.nextMeetingAt) : '—'}
+                    {row.nextMeetingAt !== null ? formatDateTime(row.nextMeetingAt) : '—'}
                   </td>
                   <td className="px-2 py-2">
                     {row.isOverdue ? (

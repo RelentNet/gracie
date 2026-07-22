@@ -6,7 +6,7 @@ import { Plus, Sparkles } from 'lucide-react';
 import type { KbStatus, KnowledgeBaseDocumentView } from '@gracie/shared';
 
 import { useAuth } from '@/lib/auth';
-import { formatEasternDate } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { TYPE } from '@/lib/typography';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -44,7 +44,7 @@ const STATUS_BADGE: Readonly<Record<KbStatus, { bg: string; fg: string; label: s
 
 /** Format a `YYYY-MM-DD` date without crossing a timezone day boundary. */
 function formatDateOnly(date: string): string {
-  return formatEasternDate(`${date}T12:00:00Z`);
+  return formatDate(`${date}T12:00:00Z`);
 }
 
 export default function KnowledgeBasePage(): React.JSX.Element {
@@ -269,7 +269,7 @@ export default function KnowledgeBasePage(): React.JSX.Element {
                         {doc.fileType}
                       </span>
                     </TCell>
-                    <TCell>{formatEasternDate(doc.uploadedAt)}</TCell>
+                    <TCell>{formatDate(doc.uploadedAt)}</TCell>
                     <TCell>
                       <span className="flex flex-wrap items-center gap-1">
                         <Badge bg={statusBadge.bg} fg={statusBadge.fg}>
