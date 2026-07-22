@@ -15,6 +15,7 @@ import { createHmac } from 'node:crypto';
 import { test } from 'node:test';
 
 import {
+  isRecordingDoneEvent,
   isTranscriptReadyEvent,
   parseRecallWebhook,
   readSvixHeaders,
@@ -116,4 +117,15 @@ test('parses the real payload: transcript.done + bot id', () => {
   assert.equal(parsed.event, 'transcript.done');
   assert.equal(parsed.botJobId, '06af5b4a-b72b-4f71-b9ca-798970870e26');
   assert.equal(isTranscriptReadyEvent(parsed.event), true);
+  assert.equal(isRecordingDoneEvent(parsed.event), false);
+});
+
+test('recording.done is recognized and carries the bot id (same media-event envelope)', () => {
+  const parsed = parseRecallWebhook({
+    event: 'recording.done',
+    data: { recording: { id: 'rec_1' }, bot: { id: 'bot_1' } },
+  });
+  assert.equal(isRecordingDoneEvent(parsed.event), true);
+  assert.equal(isTranscriptReadyEvent(parsed.event), false);
+  assert.equal(parsed.botJobId, 'bot_1');
 });

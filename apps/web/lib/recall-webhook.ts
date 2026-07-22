@@ -99,6 +99,21 @@ export function isTranscriptReadyEvent(event: string | null): boolean {
   return event === RECALL_TRANSCRIPT_DONE_EVENT;
 }
 
+/**
+ * The event Recall emits when a bot's recording has finished processing. For
+ * `recallai` bots — dispatched record-only because create-bot rejects
+ * `recallai_async` on our account — this is the trigger to request the async
+ * transcript on the finished recording (`ensureAsyncTranscript`), which later
+ * fires `transcript.done` and runs generation as usual. Subscribe the Recall
+ * webhook endpoint to this event alongside `transcript.done`.
+ */
+export const RECALL_RECORDING_DONE_EVENT = 'recording.done';
+
+/** True for the webhook event that signals the bot's recording is complete. */
+export function isRecordingDoneEvent(event: string | null): boolean {
+  return event === RECALL_RECORDING_DONE_EVENT;
+}
+
 /** Result of parsing a Recall webhook body. */
 export interface RecallWebhookEvent {
   readonly event: string | null;
