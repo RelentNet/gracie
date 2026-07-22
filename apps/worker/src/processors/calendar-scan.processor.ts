@@ -472,6 +472,7 @@ async function loadScanContext(db: ServerClient): Promise<ScanContext> {
       clientId: row.client_id,
       domain: row.domain.trim().toLowerCase(),
       createdAt: org.created_at,
+      isClient: org.type === 'client',
     });
   }
 

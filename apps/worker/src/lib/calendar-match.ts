@@ -22,8 +22,15 @@ export interface OrgDomainEntry {
   readonly clientId: string;
   /** Lower-cased domain. */
   readonly domain: string;
-  /** Org `created_at` (ISO) — the primary org is the earliest-created match. */
+  /** Org `created_at` (ISO) — tie-break within the same org-type tier. */
   readonly createdAt: string;
+  /**
+   * True when the org's `type` is `client`. A `client`-type org ALWAYS wins the
+   * primary slot over partners/leads/prospects — a client+partner meeting must
+   * home to (and file its documents under) the client, not whichever org
+   * happened to be created first.
+   */
+  readonly isClient: boolean;
 }
 
 /** A meeting participant (attendee or organizer) for org resolution. */
@@ -106,13 +113,15 @@ export function resolveMeetingOrgs(
     else unknownOrgDomains.push(domain);
   }
 
-  // Distinct matched org ids; primary = earliest-created (tie-break by id) so the
+  // Distinct matched org ids; primary = client-type orgs first (a client always
+  // beats a partner/lead/prospect), then earliest-created, then id — so the
   // denormalized `client_id` is deterministic across re-scans.
   const matchedClientIds = [...new Set(matched.map((m) => m.clientId))];
   const primaryClientId =
     matched.length === 0
       ? null
       : [...matched].sort((a, b) => {
+          if (a.isClient !== b.isClient) return a.isClient ? -1 : 1;
           const t = Date.parse(a.createdAt) - Date.parse(b.createdAt);
           return t !== 0 ? t : a.clientId.localeCompare(b.clientId);
         })[0]?.clientId ?? null;
