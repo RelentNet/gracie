@@ -8,7 +8,7 @@ import { getUserName } from '@/lib/mock';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
-import { formatEasternDateTime } from '@/lib/format';
+import { formatDateTime } from '@/lib/format';
 import { priorityBadge, taskStatusLabel } from '@/lib/client-display';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -90,7 +90,7 @@ export default function ClientOverviewPage({
             <div className="flex flex-col gap-1">
               <p style={TYPE.bodyStrong}>{lastMeeting.title ?? 'Untitled meeting'}</p>
               <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-                {formatEasternDateTime(lastMeeting.dateTime)}
+                {formatDateTime(lastMeeting.dateTime)}
                 {lastMeeting.durationMinutes !== null ? ` · ${lastMeeting.durationMinutes} min` : null}
               </p>
               <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>

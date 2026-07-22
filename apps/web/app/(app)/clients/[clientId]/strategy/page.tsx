@@ -8,7 +8,7 @@ import type { Client, ClientNote, MasterRecordEntry } from '@gracie/shared';
 import { getUserName } from '@/lib/mock';
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
-import { formatEasternDate, formatEasternDateTime } from '@/lib/format';
+import { formatDate, formatDateTime } from '@/lib/format';
 import { cadenceLabel, trendDisplay } from '@/lib/client-display';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
@@ -107,7 +107,7 @@ export default function ClientStrategyPage({
           </p>
           <p className="mt-1" style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
             Last meeting{' '}
-            {client.lastMeetingAt !== null ? formatEasternDate(client.lastMeetingAt) : 'not recorded'}
+            {client.lastMeetingAt !== null ? formatDate(client.lastMeetingAt) : 'not recorded'}
           </p>
         </Card>
       </div>
@@ -164,7 +164,7 @@ export default function ClientStrategyPage({
                 style={{ borderColor: 'var(--color-blue-500)' }}
               >
                 <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-                  {formatEasternDateTime(entry.createdAt)}
+                  {formatDateTime(entry.createdAt)}
                 </p>
                 <p className="mt-1" style={TYPE.body}>
                   {entry.summary}
@@ -193,7 +193,7 @@ export default function ClientStrategyPage({
               >
                 <p style={TYPE.body}>{note.content}</p>
                 <p className="mt-1" style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-                  {getUserName(note.authorUserId)} · {formatEasternDateTime(note.createdAt)}
+                  {getUserName(note.authorUserId)} · {formatDateTime(note.createdAt)}
                 </p>
               </li>
             ))}

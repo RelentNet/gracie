@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 import { TYPE } from '@/lib/typography';
-import { formatEasternDateTime } from '@/lib/format';
+import { formatDateTime } from '@/lib/format';
 
 /**
  * Notification bell + inbox dropdown (P7 §5). Lives in the app-shell top bar.
@@ -241,7 +241,7 @@ export function NotificationBell(): React.JSX.Element {
                             </span>
                           ) : null}
                           <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-                            {formatEasternDateTime(item.createdAt)}
+                            {formatDateTime(item.createdAt)}
                           </span>
                         </span>
                       </button>

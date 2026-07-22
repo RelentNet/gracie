@@ -8,7 +8,7 @@ import { getUserInitials, getUserName } from '@/lib/mock';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
-import { formatEasternDateTime } from '@/lib/format';
+import { formatDateTime } from '@/lib/format';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { ClientAvatar } from '@/components/ClientAvatar';
@@ -203,7 +203,7 @@ function NoteRow({
           <span className="flex flex-wrap items-baseline gap-2">
             <span style={TYPE.bodyStrong}>{getUserName(note.authorUserId)}</span>
             <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-              {formatEasternDateTime(note.createdAt)}
+              {formatDateTime(note.createdAt)}
             </span>
           </span>
           {editing ? (

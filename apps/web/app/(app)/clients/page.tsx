@@ -14,7 +14,7 @@ import {
   healthColor,
   healthLabel,
 } from '@/lib/client-display';
-import { formatEasternDate } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { ClientAvatar } from '@/components/ClientAvatar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -281,7 +281,7 @@ function ClientCard({
               Last meeting
             </dt>
             <dd style={TYPE.secondary}>
-              {client.lastMeetingAt !== null ? formatEasternDate(client.lastMeetingAt) : 'None yet'}
+              {client.lastMeetingAt !== null ? formatDate(client.lastMeetingAt) : 'None yet'}
             </dd>
           </div>
 

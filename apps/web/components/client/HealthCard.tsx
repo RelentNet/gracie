@@ -7,7 +7,7 @@ import type { ClientHealth, HealthSignalBreakdown, HealthSignalKey } from '@grac
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
-import { formatEasternDateTime } from '@/lib/format';
+import { formatDateTime } from '@/lib/format';
 import { healthColor, healthLabel, trendDisplay } from '@/lib/client-display';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -79,7 +79,7 @@ export function HealthCard({
 
       {health?.updatedAt != null ? (
         <p className="mt-1" style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          Updated {formatEasternDateTime(health.updatedAt)}
+          Updated {formatDateTime(health.updatedAt)}
         </p>
       ) : null}
 

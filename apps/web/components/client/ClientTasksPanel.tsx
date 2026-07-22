@@ -8,7 +8,7 @@ import { TASK_STATUSES } from '@gracie/shared';
 import { getUserName } from '@/lib/mock';
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
-import { formatEasternDate } from '@/lib/format';
+import { formatDate } from '@/lib/format';
 import { priorityBadge, taskStatusLabel } from '@/lib/client-display';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -166,7 +166,7 @@ export function ClientTasksPanel({
                 <TRow key={task.id}>
                   <TCell>{task.description}</TCell>
                   <TCell>{getUserName(task.ownerUserId)}</TCell>
-                  <TCell>{task.dueDate !== null ? formatEasternDate(task.dueDate) : '—'}</TCell>
+                  <TCell>{task.dueDate !== null ? formatDate(task.dueDate) : '—'}</TCell>
                   <TCell>{taskStatusLabel(task.status)}</TCell>
                   <TCell>
                     <Badge bg={badge.bg} fg={badge.fg}>

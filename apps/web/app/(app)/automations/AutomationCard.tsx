@@ -6,7 +6,7 @@ import { AlertTriangle, CalendarClock, Clock, Play, Trash2, Pause, PlayCircle, C
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { TYPE } from '@/lib/typography';
-import { formatEasternDateTime } from '@/lib/format';
+import { formatDateTime } from '@/lib/format';
 
 import { AUTOMATION_TYPE_LABELS, recipientsSummary, type AutomationClientView } from './types';
 
@@ -174,7 +174,7 @@ export function AutomationCard({
             <>
               <Clock size={12} aria-hidden="true" />
               {a.nextRunAt !== null && a.status === 'active'
-                ? `Next: ${formatEasternDateTime(a.nextRunAt)}`
+                ? `Next: ${formatDateTime(a.nextRunAt)}`
                 : a.status === 'paused'
                   ? 'Next: paused'
                   : 'Next: —'}
@@ -185,7 +185,7 @@ export function AutomationCard({
           Last run:{' '}
           {a.lastRunAt !== null ? (
             <>
-              {formatEasternDateTime(a.lastRunAt)}
+              {formatDateTime(a.lastRunAt)}
               {a.lastRunStatus !== null ? (
                 <span style={{ color: RUN_STATUS_COLOR[a.lastRunStatus] ?? 'var(--text-secondary)', fontWeight: 600 }}>
                   {' '}
