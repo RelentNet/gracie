@@ -49,7 +49,7 @@ const TRANSCRIPT_PROVIDER_OPTIONS: ReadonlyArray<{
   {
     value: 'recallai',
     label: 'Recall ASR (recommended)',
-    hint: "Recall transcribes the audio itself. Reliable on any Teams/Zoom/Meet call regardless of caption settings. Billed per hour.",
+    hint: "Recall transcribes the recording after the meeting ends. Reliable on any Teams/Zoom/Meet call regardless of caption settings. Billed per hour.",
   },
   {
     value: 'meeting_captions',

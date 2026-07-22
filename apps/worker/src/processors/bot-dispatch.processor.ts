@@ -17,6 +17,16 @@
  * Exactly-once: the claim is a conditional UPDATE (`… WHERE bot_dispatched =
  * false`), which is atomic at the row level — two overlapping sweeps can't both
  * claim the same meeting, so a client is never joined by two bots.
+ *
+ * ONE BOT PER REAL CALL (2026-07-21 fix): the row-level claim is not enough when
+ * two DISTINCT calendar events point at the same real call — duplicate/
+ * overlapping Outlook invites share one join URL at the same start time, each
+ * got its own row, and a paying client saw two "Gracie" notetakers. Dispatch
+ * now also dedupes on (video_link + exact start): a meeting whose call is
+ * already covered by a confirmed bot is SKIPPED, marked `cancelled`, and the
+ * reason is recorded in `pipeline_runs` in plain language so it never reads as
+ * a silent failure. Keyed on link AND start — never link alone, because a
+ * recurring series legitimately reuses one join URL across different dates.
  */
 import type { Job, Processor } from 'bullmq';
 import type { FastifyBaseLogger } from 'fastify';
@@ -43,7 +53,53 @@ export interface BotDispatchResult {
   readonly scanned: number;
   readonly dispatched: number;
   readonly skippedOptOut: number;
+  /** Meetings skipped because another bot already covers the same real call. */
+  readonly skippedDuplicate: number;
 }
+
+/**
+ * Identity of one REAL call: the join URL plus the exact start instant. Two
+ * meeting rows with equal keys are duplicate invites for the same call and must
+ * share ONE bot; a recurring series reuses the URL on different dates, so its
+ * occurrences get distinct keys and dispatch normally. The timestamp is
+ * normalised through Date so equal instants compare equal across the formats
+ * Postgres/PostgREST emit (`2026-07-21 14:00:00+00` vs `2026-07-21T14:00:00+00:00`).
+ * Exported for unit tests (pure).
+ */
+export function callKey(videoLink: string, dateTime: string): string {
+  const ms = Date.parse(dateTime);
+  return `${videoLink}|${Number.isNaN(ms) ? dateTime : new Date(ms).toISOString()}`;
+}
+
+/**
+ * Sweep-local view of which real calls already have a bot. Seeded from the DB
+ * (confirmed bots: `bot_dispatched` AND a stored `bot_job_id`, so a rolled-back
+ * claim never blocks anyone) and extended as this sweep dispatches. Exported for
+ * unit tests (pure).
+ */
+export function createCallCoverage(initialKeys: Iterable<string> = []): {
+  isCovered(videoLink: string, dateTime: string): boolean;
+  markCovered(videoLink: string, dateTime: string): void;
+} {
+  const covered = new Set(initialKeys);
+  return {
+    isCovered: (videoLink, dateTime) => covered.has(callKey(videoLink, dateTime)),
+    markCovered: (videoLink, dateTime) => {
+      covered.add(callKey(videoLink, dateTime));
+    },
+  };
+}
+
+/**
+ * Plain-language reason recorded when a duplicate invite is skipped — written to
+ * `pipeline_runs.error_message` (status left null: this is an explanation, not a
+ * failure, so it stays out of the admin error log while giving the Pipeline view
+ * something to show a non-technical staffer).
+ */
+const DUPLICATE_SKIP_REASON =
+  'Not dispatched — another Gracie bot is already covering this call. ' +
+  'This calendar invite shares its join link and start time with another invite (a duplicate), ' +
+  "so Gracie joined once and files the meeting's notes under the other invite.";
 
 /** Build the bot-dispatch processor, logging through the worker's Fastify logger. */
 export function createBotDispatchProcessor(
@@ -61,7 +117,7 @@ export function createBotDispatchProcessor(
     // (internal OR client-linked) is resolved below, after the kill-switch.
     const { data: candidates, error } = await db
       .from('meetings')
-      .select('id, video_link, meeting_lead_user_id, is_internal')
+      .select('id, video_link, date_time, meeting_lead_user_id, is_internal')
       .eq('bot_dispatched', false)
       .eq('pipeline_status', 'scheduled')
       .not('video_link', 'is', null)
@@ -75,10 +131,12 @@ export function createBotDispatchProcessor(
     // The scan still runs on its own cron, so meetings keep populating for preview.
     if (!(await isBotDispatchEnabled(db))) {
       log.info({ scanned: inWindow.length }, 'bot-dispatch: globally disabled');
-      return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0 };
+      return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0, skippedDuplicate: 0 };
     }
 
-    if (inWindow.length === 0) return { scanned: 0, dispatched: 0, skippedOptOut: 0 };
+    if (inWindow.length === 0) {
+      return { scanned: 0, dispatched: 0, skippedOptOut: 0, skippedDuplicate: 0 };
+    }
 
     // Bot-eligible = internal (GA-only) OR linked to ≥1 `client`-type org. A
     // lead-only / prospect-only / unassigned meeting must NOT dispatch.
@@ -87,7 +145,9 @@ export function createBotDispatchProcessor(
       inWindow.map((m) => m.id),
     );
     const due = inWindow.filter((m) => m.is_internal || clientLinked.has(m.id));
-    if (due.length === 0) return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0 };
+    if (due.length === 0) {
+      return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0, skippedDuplicate: 0 };
+    }
 
     // Per-user opt-out: leads who set auto_join_meetings = false.
     const optedOut = await loadOptedOutLeads(db);
@@ -96,9 +156,14 @@ export function createBotDispatchProcessor(
     const apiKey = await getCredential('recall');
     if (apiKey === null || apiKey === '') {
       log.warn('bot-dispatch: no Recall API key configured (Admin → API Settings) — skipping sweep');
-      return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0 };
+      return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0, skippedDuplicate: 0 };
     }
     const region = process.env.RECALL_REGION;
+
+    // One bot per real call: seed coverage with every call (join link + start)
+    // that already has a CONFIRMED bot — from earlier sweeps or the on-demand
+    // join route — then extend it as this sweep dispatches.
+    const coverage = createCallCoverage(await loadCoveredCallKeys(db, due));
 
     // Resolve the meeting-bot appearance/behavior once per sweep (name, avatar,
     // auto-leave). Admins change these in Settings → Meeting Bot; applied here.
@@ -107,6 +172,7 @@ export function createBotDispatchProcessor(
 
     let dispatched = 0;
     let skippedOptOut = 0;
+    let skippedDuplicate = 0;
 
     for (const meeting of due) {
       if (meeting.meeting_lead_user_id !== null && optedOut.has(meeting.meeting_lead_user_id)) {
@@ -115,6 +181,22 @@ export function createBotDispatchProcessor(
         continue;
       }
       if (meeting.video_link === null) continue; // narrowed by the query, re-checked for TS
+
+      // Duplicate invite for a call that already has a bot → skip, and record
+      // the reason where the app can show it (never dispatch a second bot even
+      // if the bookkeeping write fails).
+      if (coverage.isCovered(meeting.video_link, meeting.date_time)) {
+        skippedDuplicate += 1;
+        log.info(
+          { meetingId: meeting.id, videoLink: meeting.video_link, dateTime: meeting.date_time },
+          'bot-dispatch: duplicate invite — another bot already covers this call, skipping',
+        );
+        await markSkippedDuplicate(db, meeting.id).catch((markError: unknown) => {
+          const message = markError instanceof Error ? markError.message : String(markError);
+          log.error({ meetingId: meeting.id, err: message }, 'bot-dispatch: failed to record duplicate skip');
+        });
+        continue;
+      }
 
       // Atomically claim: flip false→true; a 0-row result means another sweep won.
       const claim = await db
@@ -139,6 +221,9 @@ export function createBotDispatchProcessor(
         const stored = await db.from('meetings').update({ bot_job_id: botJobId }).eq('id', meeting.id);
         if (stored.error !== null) throw new Error(stored.error.message);
         dispatched += 1;
+        // Only a CONFIRMED dispatch covers the call — a rolled-back failure below
+        // must not suppress a later duplicate invite's own retry.
+        coverage.markCovered(meeting.video_link, meeting.date_time);
         log.info({ meetingId: meeting.id, botJobId }, 'bot-dispatch: Recall bot dispatched');
       } catch (dispatchError) {
         // Roll back the claim so the meeting is retried on the next sweep. Awaiting
@@ -156,8 +241,15 @@ export function createBotDispatchProcessor(
       }
     }
 
-    const result: BotDispatchResult = { scanned: inWindow.length, dispatched, skippedOptOut };
-    if (dispatched > 0 || skippedOptOut > 0) log.info(result, 'bot-dispatch sweep complete');
+    const result: BotDispatchResult = {
+      scanned: inWindow.length,
+      dispatched,
+      skippedOptOut,
+      skippedDuplicate,
+    };
+    if (dispatched > 0 || skippedOptOut > 0 || skippedDuplicate > 0) {
+      log.info(result, 'bot-dispatch sweep complete');
+    }
     return result;
   };
 }
@@ -175,6 +267,62 @@ async function isBotDispatchEnabled(db: ServerClient): Promise<boolean> {
     .maybeSingle();
   if (error !== null) throw new Error(`bot-dispatch: read kill-switch: ${error.message}`);
   return data?.value === 'true';
+}
+
+/**
+ * Call keys (see {@link callKey}) of every meeting sharing a join URL with a due
+ * candidate that already has a CONFIRMED bot (`bot_dispatched` + stored
+ * `bot_job_id` — a claim that later rolled back has a null job id and does not
+ * count). One bulk query per sweep; the exact (link + start) pairing happens via
+ * key equality, so a recurring series' other occurrences load here harmlessly
+ * without ever matching a different date.
+ */
+async function loadCoveredCallKeys(
+  db: ServerClient,
+  candidates: ReadonlyArray<{ readonly video_link: string | null }>,
+): Promise<string[]> {
+  const links = [...new Set(candidates.map((m) => m.video_link).filter((v): v is string => v !== null))];
+  if (links.length === 0) return [];
+  const { data, error } = await db
+    .from('meetings')
+    .select('video_link, date_time')
+    .in('video_link', links)
+    .eq('bot_dispatched', true)
+    .not('bot_job_id', 'is', null);
+  if (error !== null) throw new Error(`bot-dispatch: load covered calls: ${error.message}`);
+  return (data ?? [])
+    .filter((m): m is { video_link: string; date_time: string } => m.video_link !== null)
+    .map((m) => callKey(m.video_link, m.date_time));
+}
+
+/**
+ * Record a duplicate-invite skip so it never reads as a silent failure (§5
+ * operability: a non-technical staffer must be able to understand this state
+ * from the app, not a container log):
+ *   - the meeting is marked `cancelled` (terminal: it will not re-dispatch, the
+ *     transcript watchdog will not flag it, and it cannot later self-heal into a
+ *     second document set);
+ *   - a `pipeline_runs` row keyed to the meeting carries the plain-language
+ *     reason for the Pipeline view (status null — an explanation, not an error).
+ */
+async function markSkippedDuplicate(db: ServerClient, meetingId: string): Promise<void> {
+  const cancelled = await db
+    .from('meetings')
+    .update({ pipeline_status: 'cancelled' })
+    .eq('id', meetingId)
+    .eq('pipeline_status', 'scheduled');
+  if (cancelled.error !== null) {
+    throw new Error(`bot-dispatch: mark duplicate cancelled: ${cancelled.error.message}`);
+  }
+  const recorded = await db.from('pipeline_runs').insert({
+    meeting_id: meetingId,
+    source: 'recall',
+    completed_at: new Date().toISOString(),
+    error_message: DUPLICATE_SKIP_REASON,
+  });
+  if (recorded.error !== null) {
+    throw new Error(`bot-dispatch: record duplicate skip: ${recorded.error.message}`);
+  }
 }
 
 /** Set of user ids who have opted out of auto-join (auto_join_meetings = false). */

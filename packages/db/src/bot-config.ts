@@ -26,16 +26,17 @@ export const DEFAULT_BOT_NAME = 'Gracie';
  * straight through at dispatch (db must not depend on shared):
  *   - `meeting_captions` — the platform's own captions; no extra ASR cost, but
  *     Teams Business only + depends on captions being enabled (not 100% reliable).
- *   - `recallai` — Recall's own streaming ASR; reliable regardless of caption
- *     settings, billed per hour.
+ *   - `recallai` — Recall's own ASYNC (post-meeting) ASR; reliable regardless of
+ *     caption settings, billed per hour. Deliberately not streaming — see
+ *     `buildTranscriptProviderConfig` in `@gracie/shared/recall`.
  */
 export type BotTranscriptProvider = 'meeting_captions' | 'recallai';
 
 /**
- * Default transcription provider when unset. `recallai` (paid ASR) — chosen over
- * `meeting_captions` for reliability, since GA runs on Microsoft Teams where
- * caption availability depends on tenant/meeting settings. Kept in sync with
- * `@gracie/shared`'s `DEFAULT_TRANSCRIPT_PROVIDER`.
+ * Default transcription provider when unset. `recallai` (paid async ASR) —
+ * chosen over `meeting_captions` for reliability, since GA runs on Microsoft
+ * Teams where caption availability depends on tenant/meeting settings. Kept in
+ * sync with `@gracie/shared`'s `DEFAULT_TRANSCRIPT_PROVIDER`.
  */
 export const DEFAULT_TRANSCRIPT_PROVIDER: BotTranscriptProvider = 'recallai';
 

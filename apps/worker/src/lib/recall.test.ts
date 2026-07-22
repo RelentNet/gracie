@@ -49,8 +49,11 @@ function jsonResponse(body: unknown, ok = true, status = 200): unknown {
 
 test('buildTranscriptProviderConfig emits the exact Recall wire shapes', () => {
   assert.deepEqual(buildTranscriptProviderConfig('meeting_captions'), { meeting_captions: {} });
+  // ASYNC, not recallai_streaming: streaming's live connection failure mode
+  // (provider_connection_failed) cost a client meeting its documents while the
+  // recording itself was fine. No `recallai` value may ever map to streaming.
   assert.deepEqual(buildTranscriptProviderConfig('recallai'), {
-    recallai_streaming: { mode: 'prioritize_accuracy', language_code: 'auto' },
+    recallai_async: { language_code: 'auto' },
   });
 });
 
