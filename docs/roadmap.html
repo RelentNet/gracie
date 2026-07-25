@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GA App — Build Roadmap</title>
+<style>
+  :root{
+    --color-text-primary:#1b1d21;
+    --color-text-secondary:#5a616b;
+    --color-background-primary:#ffffff;
+    --color-border-secondary:#d6d9de;
+    --page-bg:#f6f7f9;
+    --card-bg:#ffffff;
+    --done:#2f9e6b;
+    --now:#e08a2b;
+    --addon:#6b6fe0;
+    --defer:#9aa0a6;
+    --row-alt:#fafbfc;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --color-text-primary:#ececee;
+      --color-text-secondary:#a0a5ad;
+      --color-background-primary:#23262b;
+      --color-border-secondary:#3a3f47;
+      --page-bg:#16181c;
+      --card-bg:#1e2127;
+      --row-alt:#22262c;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;padding:40px 20px;background:var(--page-bg);
+    color:var(--color-text-primary);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55;
+  }
+  .wrap{max-width:880px;margin:0 auto;}
+  header.doc{margin-bottom:8px;}
+  h1{font-size:28px;margin:0 0 4px;letter-spacing:-0.01em;}
+  .sub{color:var(--color-text-secondary);font-size:14px;margin:0 0 12px;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 26px;}
+  .chip{font-size:12.5px;font-weight:600;padding:3px 11px;border-radius:999px;background:rgba(47,158,107,.15);color:var(--done);}
+  .card{
+    background:var(--card-bg);border:1px solid var(--color-border-secondary);
+    border-radius:14px;padding:22px 24px;margin:0 0 22px;
+  }
+  .card.viz{padding:14px;}
+  h2{font-size:16px;margin:0 0 14px;letter-spacing:.02em;text-transform:uppercase;color:var(--color-text-secondary);font-weight:700;}
+  svg{display:block;width:100%;height:auto;}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--color-border-secondary);}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--color-text-secondary);}
+  tbody tr:nth-child(odd){background:var(--row-alt);}
+  td.code{font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;}
+  .badge{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap;}
+  .b-done{background:rgba(47,158,107,.15);color:var(--done);}
+  .b-now{background:rgba(224,138,43,.18);color:var(--now);}
+  .b-addon{background:rgba(107,111,224,.15);color:var(--addon);}
+  .b-todo{border:1px solid var(--color-border-secondary);color:var(--color-text-secondary);}
+  .b-partial{background:rgba(224,138,43,.10);color:var(--now);border:1px solid rgba(224,138,43,.35);}
+  ul{margin:0;padding-left:20px;}
+  li{margin:7px 0;}
+  .path{font-size:15px;line-height:2;}
+  .path b{background:rgba(224,138,43,.14);padding:1px 7px;border-radius:6px;}
+  .path b.addon{background:rgba(107,111,224,.16);}
+  .note{font-size:13px;color:var(--color-text-secondary);margin-top:20px;text-align:center;}
+  code{background:var(--row-alt);padding:1px 5px;border-radius:5px;font-size:.9em;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="doc">
+    <h1>GA App — Build Roadmap</h1>
+    <p class="sub">Codename <code>gracie</code> · snapshot 2026-07-22 · 13 phases shipped &amp; live <em>(+ revisions P2.1, P2.2, P4.1, P4.2, P6B.1, P6B.2)</em> · <span style="color:var(--now)">Gracie SMS up next</span> · then <span style="color:var(--ahead)">P10</span> · Gracie Files + n8n deferred to v2.0</p>
+    <div class="chips">
+      <span class="chip">● Live in production — gracie.graceandassociates.com</span>
+      <span class="chip">✓ Microsoft SSO</span>
+      <span class="chip">✓ Auto meeting pipeline (Calendar)</span>
+      <span class="chip">✓ Company-aware Assistant</span>
+      <span class="chip">✓ Briefs · Daily Sync · Notifications</span>
+      <span class="chip">✓ Contacts &amp; Org Charts</span>
+      <span class="chip">✓ Gracie Automations</span>
+      <span class="chip">✓ Settings · Admin · Scoring</span>
+      <span class="chip">✓ Responsive &amp; mobile</span>
+    </div>
+  </header>
+
+  <!-- ============ ROADMAP VISUAL ============ -->
+  <div class="card viz">
+    <svg viewBox="0 0 768 490" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <title>GA App — build roadmap</title>
+    <desc>Thirteen build packages shipped and live, plus six in-place revisions shown as their own nodes: P1 Foundation, P2 Clients and Files (revision P2.1), P3 Tasks, P4 Calendar (revisions P4.1 meetings-first and P4.2 on-demand join), P5a Ingest, P5b Generation, P6 Intelligence, P6B Assistant (revisions P6B.1 company-aware and P6B.2 web access), P7 Briefs Daily Sync and Notifications, CO Contacts and Org Charts, P8 Gracie Automations (revision P8.1 shorter intervals and meeting triggers), P9 Settings and Admin and Scoring, and RL Responsive and Mobile (a full responsive sweep across every page plus a collapsible sticky nav). A complete build log of every merged PR is below. Up next: two add-ons — Gracie Files (self-hosted drive) and Gracie SMS (two-way text) — then P10 Launch prep. Deferred to version 2.0: n8n. Live in production with Microsoft SSO.</desc>
+    <text x="24" y="34" font-size="22" font-weight="700" fill="var(--color-text-primary)">GA App — build roadmap</text>
+    <text x="24" y="57" font-size="13" fill="var(--color-text-secondary)">13 shipped &amp; live · full build log below · Gracie SMS up next</text>
+    <text x="744" y="78" font-size="11" text-anchor="end" fill="var(--color-text-secondary)">~91%</text>
+    <rect x="24" y="84" width="720" height="6" rx="3" fill="var(--color-border-secondary)" opacity="0.5"/>
+    <rect x="24" y="84" width="655.2" height="6" rx="3" fill="#2f9e6b"/>
+    <line x1="64" y1="180" x2="730" y2="180" stroke="#2f9e6b" stroke-width="3"/>
+    <path d="M730,180 C730,250 70,250 70,310" fill="none" stroke="var(--color-border-secondary)" stroke-width="2.5"/>
+    <line x1="70" y1="310" x2="82" y2="310" stroke="#e08a2b" stroke-width="3"/>
+    <line x1="82" y1="310" x2="700" y2="310" stroke="var(--color-border-secondary)" stroke-width="2.5"/>
+    <g fill="#2f9e6b">
+    <circle cx="64" cy="180" r="13"/>
+    <circle cx="120" cy="180" r="13"/>
+    <circle cx="175" cy="180" r="13"/>
+    <circle cx="231" cy="180" r="13"/>
+    <circle cx="286" cy="180" r="13"/>
+    <circle cx="342" cy="180" r="13"/>
+    <circle cx="397" cy="180" r="13"/>
+    <circle cx="453" cy="180" r="13"/>
+    <circle cx="508" cy="180" r="13"/>
+    <circle cx="564" cy="180" r="13"/>
+    <circle cx="619" cy="180" r="13"/>
+    <circle cx="675" cy="180" r="13"/>
+    <circle cx="730" cy="180" r="13"/>
+    </g>
+    <g font-size="9.5" font-weight="700" fill="#ffffff" text-anchor="middle">
+    <text x="64" y="183.5">P1</text>
+    <text x="120" y="183.5">P2</text>
+    <text x="175" y="183.5">P3</text>
+    <text x="231" y="183.5">P4</text>
+    <text x="286" y="183.5">P5a</text>
+    <text x="342" y="183.5">P5b</text>
+    <text x="397" y="183.5">P6</text>
+    <text x="453" y="183.5">P6B</text>
+    <text x="508" y="183.5">P7</text>
+    <text x="564" y="183.5">CO</text>
+    <text x="619" y="183.5">P8</text>
+    <text x="675" y="183.5">P9</text>
+    <text x="730" y="183.5">RL</text>
+    </g>
+    <g font-size="10" fill="var(--color-text-secondary)" text-anchor="middle">
+    <text x="64" y="205">Foundation</text>
+    <text x="120" y="205">Clients</text>
+    <text x="175" y="205">Tasks</text>
+    <text x="231" y="205">Calendar</text>
+    <text x="286" y="205">Ingest</text>
+    <text x="342" y="205">Gen</text>
+    <text x="397" y="205">Intel</text>
+    <text x="453" y="205">Assistant</text>
+    <text x="508" y="205">Briefs</text>
+    <text x="564" y="205">Contacts</text>
+    <text x="619" y="205">Automations</text>
+    <text x="675" y="205">Settings</text>
+    <text x="730" y="205">Responsive</text>
+    </g>
+    <g stroke="#2f9e6b" stroke-width="1.5" stroke-dasharray="2 2"><line x1="120" y1="167" x2="120" y2="118"/><line x1="231" y1="167" x2="231" y2="118"/><line x1="453" y1="167" x2="453" y2="118"/><line x1="619" y1="167" x2="619" y2="150"/></g>
+    <g fill="#2f9e6b"><circle cx="120" cy="150" r="7"/><circle cx="120" cy="126" r="7"/><circle cx="231" cy="150" r="7"/><circle cx="231" cy="126" r="7"/><circle cx="453" cy="150" r="7"/><circle cx="453" cy="126" r="7"/><circle cx="619" cy="142" r="8"/></g>
+    <g font-size="9.5" font-weight="700" fill="#2f9e6b"><text x="131" y="153" text-anchor="start">P2.1</text><text x="131" y="129" text-anchor="start">P2.2</text><text x="242" y="153" text-anchor="start">P4.1</text><text x="242" y="129" text-anchor="start">P4.2</text><text x="464" y="153" text-anchor="start">P6B.1</text><text x="464" y="129" text-anchor="start">P6B.2</text><text x="619" y="127" text-anchor="middle">P8.1</text></g>
+    <circle cx="70" cy="310" r="19" fill="none" stroke="#e08a2b" stroke-width="2" opacity="0.4"/>
+    <circle cx="70" cy="310" r="13" fill="#e08a2b"/>
+    <text x="70" y="313.5" font-size="9.5" font-weight="700" fill="#ffffff" text-anchor="middle">GS</text>
+    <rect x="52" y="266" width="36" height="17" rx="8.5" fill="#e08a2b"/>
+    <text x="70" y="278.5" font-size="9.5" font-weight="700" fill="#ffffff" text-anchor="middle">NEXT</text>
+    <circle cx="700" cy="310" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
+    <text x="700" y="313.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">P10</text>
+    <text x="70" y="335" font-size="10.5" fill="var(--color-text-primary)" font-weight="600" text-anchor="middle">SMS</text>
+    <text x="700" y="335" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">Launch</text>
+    <g font-size="11" fill="var(--color-text-secondary)">
+    <circle cx="110" cy="388" r="6" fill="#2f9e6b"/><text x="122" y="392">Shipped &amp; live</text>
+    <circle cx="232" cy="388" r="4" fill="#2f9e6b"/><text x="241" y="392">Revision</text>
+    <circle cx="330" cy="388" r="6" fill="#e08a2b"/><text x="342" y="392">Up next</text>
+    <circle cx="420" cy="388" r="6" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/><text x="432" y="392">Ahead</text>
+    </g>
+    <line x1="24" y1="410" x2="744" y2="410" stroke="var(--color-border-secondary)" stroke-width="1" stroke-dasharray="4 4"/>
+    <text x="24" y="430" font-size="12" font-weight="700" letter-spacing="0.04em" fill="#9aa0a6">Deferred to Gracie v2.0</text>
+    <g fill="var(--color-background-primary)" stroke="#9aa0a6" stroke-width="2" stroke-dasharray="3 2">
+    <circle cx="64" cy="452" r="12"/>
+    <circle cx="730" cy="452" r="12"/>
+    </g>
+    <g font-size="9" font-weight="700" fill="#9aa0a6" text-anchor="middle">
+    <text x="64" y="455.5">n8n</text>
+    <text x="730" y="455.5">GF</text>
+    </g>
+    <g font-size="10" fill="#9aa0a6" text-anchor="middle">
+    <text x="64" y="474">Integrations</text>
+    <text x="730" y="474">Files</text>
+    </g>
+    </svg>
+  </div>
+
+  <div class="card">
+    <h2>Build packages</h2>
+    <table>
+      <thead><tr><th>#</th><th>Phase</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="code">P1</td><td>Foundation</td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr><td class="code">P2</td><td>Client Profiles &amp; Files <em>(+ Documents drive v0.2.1)</em></td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr><td class="code">↳ P2.1</td><td>Editable client tabs · add task/note · finance inputs · algorithmic relationship health</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr><td class="code">↳ P2.2</td><td>Documents management — rename · permissions · delete, with a 60-day recycle bin</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr><td class="code">P3</td><td>Task Board &amp; Notes</td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr><td class="code">P4</td><td>Calendar Integration <em>(auto meeting pipeline)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr><td class="code">↳ P4.1</td><td>Meetings-first orgs · multi-domain clients · reconcile · Sync now</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr><td class="code">↳ P4.2</td><td>On-demand meeting join — paste a link → Gracie joins &amp; records now</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr><td class="code">P5a</td><td>AI Pipeline — Ingest</td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr><td class="code">P5b</td><td>AI Pipeline — Generation</td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr><td class="code">P6</td><td>Intelligence &amp; Knowledge Base</td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr><td class="code">P6B</td><td>Assistant Module</td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr><td class="code">↳ P6B.1</td><td>Company-aware Assistant — read-only, role-mirrored company brain</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr><td class="code">↳ P6B.2</td><td>On-demand web access — SearXNG search + fetch behind a per-chat Web toggle</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr><td class="code">P7</td><td>Briefs · Daily Sync · Notifications <em>(internal team email via Resend)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr><td class="code">CO</td><td>Contacts &amp; Org Charts <em>(contacts directory · per-org office hierarchy / org chart · affiliation history)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr><td class="code">P8</td><td>Gracie Automations <em>(native scheduled tasks · agentic Assistant · confirm-before-acting)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr><td class="code">↳ P8.1</td><td>Shorter intervals (hourly floor) &amp; before-meeting brief triggers</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr><td class="code">P9</td><td>Settings / Admin / Scoring <em>(in-app user &amp; role management shipped)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr><td class="code">RL</td><td>Responsive &amp; Mobile <em>(full responsive · tables · mobile · collapsible sticky nav)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr><td class="code">GS</td><td>Gracie SMS — two-way text channel (SMS gateway)</td><td><span class="badge b-now">Up next</span></td></tr>
+        <tr><td class="code">P10</td><td>Testing · Security · Launch</td><td><span class="badge b-todo">Not started</span></td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:13px;color:var(--color-text-secondary);margin:14px 0 0;">Already <strong>live in production</strong> at <code>gracie.graceandassociates.com</code> with Microsoft SSO — remaining phases add to a running product. Bot auto-join kill-switch is deliberately <strong>OFF</strong> (taking bots live is a separate explicit decision).</p>
+  </div>
+
+  <div class="card">
+    <h2>Build log — every shipped increment (P1 → RL · Jun–Jul 2026)</h2>
+    <table>
+      <thead><tr><th>PR</th><th>Step</th><th>What shipped</th></tr></thead>
+      <tbody>
+        <tr><td class="code">init</td><td>P1–P3, P5a</td><td>Foundation (monorepo · app shell · Logto/Microsoft SSO), Client Profiles &amp; Files, Task Board &amp; Notes, and the Ingest pipeline (upload → extract → chunk → embed → pgvector) — the pre-PR foundation.</td></tr>
+        <tr><td class="code">#1</td><td>P5b</td><td>Generation pipeline — Recall webhook → 6 docs → task extraction → master record → per-attendee notify.</td></tr>
+        <tr><td class="code">#2</td><td>P6</td><td>Intelligence Chat &amp; Knowledge Base — role-filtered streaming RAG; <code>match_kb_embeddings</code> (migration 0002).</td></tr>
+        <tr><td class="code">#3</td><td>fix</td><td>Auth hotfix — post-sign-in redirect uses the public base URL (was bouncing to <code>localhost:3000</code> behind the proxy).</td></tr>
+        <tr><td class="code">#4</td><td>P6B</td><td>Assistant module — general AI chat (ChatGPT-seat replacement); per-user privacy, shared chat components.</td></tr>
+        <tr><td class="code">#5</td><td>P2 (docs)</td><td>Documents area → a real drive: upload, folders, filing, global view.</td></tr>
+        <tr><td class="code">#6</td><td>P2 (docs)</td><td>Documents — upload into the current folder + collapsible folder tree.</td></tr>
+        <tr><td class="code">#7</td><td>P4</td><td>Calendar Integration — auto meeting pipeline (Graph scan → match → dedup → Recall bot); per-user opt-out (migration 0003).</td></tr>
+        <tr><td class="code">#9</td><td>P4.1</td><td>Meetings-first redesign — ingest <em>every</em> meeting, domain-matched multi-client orgs, create-org-from-meeting, GA internal workspace (migration 0004).</td></tr>
+        <tr><td class="code">#10</td><td>P4.1</td><td>Calendar reconcile (drop cancelled/orphaned) + 62-day look-ahead, per-member filter, admin <strong>Sync now</strong>.</td></tr>
+        <tr><td class="code">#11</td><td>P9</td><td>In-app user &amp; role management (Settings → Users) — the DB owns the app role, anti-lockout on the last admin.</td></tr>
+        <tr><td class="code">#12</td><td>P4.1</td><td>Multi-domain clients (IBM = ibm.com + us.ibm.com) + GA onmicrosoft treated as internal (migration 0005).</td></tr>
+        <tr><td class="code">#13</td><td>P6B.1</td><td>Company-aware Assistant — read-only, role-mirrored company brain; native tool-calling (migration 0006).</td></tr>
+        <tr><td class="code">#14</td><td>P6B.2</td><td>On-demand web access — self-hosted SearXNG + <code>fetch_url</code> behind a per-chat Web toggle (SSRF-guarded).</td></tr>
+        <tr><td class="code">#15</td><td>P2.1</td><td>Client editing — per-tab edit, add task/note, finance inputs, algorithmic relationship health (migration 0007).</td></tr>
+        <tr><td class="code">#16</td><td>P6B.2</td><td>Web toggle defaults ON for every chat.</td></tr>
+        <tr><td class="code">#17</td><td>P7</td><td>Briefs · Daily Sync · Notifications — internal team email via Resend behind a hard <code>graceandassociates.com</code> allowlist; notification bell.</td></tr>
+        <tr><td class="code">#18</td><td>/roadmap</td><td>Serve this build roadmap in-app at <code>/roadmap</code> (staff-gated).</td></tr>
+        <tr><td class="code">#19</td><td>CO</td><td>Contacts &amp; Org Charts — offices/org-chart (vacant-capable), affiliation history, suggestions inbox (migration 0008).</td></tr>
+        <tr><td class="code">#20</td><td>P4.2</td><td>On-demand meeting join — paste a link → Gracie joins &amp; records now (impromptu meetings).</td></tr>
+        <tr><td class="code">#21</td><td>Settings</td><td>Meeting-bot config — name / avatar tile / auto-leave / locked observe-only + collapsible Settings sections.</td></tr>
+        <tr><td class="code">#22</td><td>Settings</td><td>Notification &amp; communication controls — per-type admin email toggles; read-only allowlist.</td></tr>
+        <tr><td class="code">#25</td><td>P8</td><td>Gracie Automations — native agentic scheduled tasks (propose → confirm → gated execute), admin advanced-requests inbox, audited customer-contact exception (migration 0009).</td></tr>
+        <tr><td class="code">#27</td><td>fix</td><td>Auth resilience — a stale/expired Logto refresh token no longer 500s the whole app; <code>safeGetLogtoContext</code> degrades to a clean re-login (and session-less APIs now return <strong>401</strong>, not 500).</td></tr>
+        <tr><td class="code">#28</td><td>P8.1</td><td>Automations follow-on — configurable interval floor lowered daily→<strong>hourly</strong> (<code>automations_min_interval_minutes</code>) plus a <code>before_meeting</code> event trigger delivering the P7 pre-meeting brief <strong>internally</strong> (migration 0010; exactly-once per meeting).</td></tr>
+        <tr><td class="code">#31</td><td>P9</td><td>Settings / Admin / Scoring — <strong>scoring-weight editor</strong> (+ recompute sweep, new <code>scoring.configure</code> perm), Company / Automations / Notifications / <strong>AI-Model</strong> config panels, <strong>pipeline error-log + per-row re-run</strong>, <code>calendar.configure</code> wired. No migration.</td></tr>
+        <tr><td class="code">#32</td><td>fix</td><td>Settings writes now stamp <code>updated_by_user_id</code> with the internal <code>users.id</code> (via <code>getUserIdByLogtoId</code>), not the Logto id — fixes a 500 <em>(invalid uuid)</em> on every admin config save across all P9 panels + the pre-existing automations setter.</td></tr>
+        <tr><td class="code">#33</td><td>fix</td><td>Recall transcription hardening — every bot requests <code>recording_config.transcript</code> (tunable provider) + modern <code>media_shortcuts</code> transcript fetch; webhook gates on <code>transcript.done</code>. Go-live blocker; proven end-to-end in prod.</td></tr>
+        <tr><td class="code">#35</td><td>fix</td><td>Documents UI reachable for internal/partner orgs — data-driven <code>/api/documents/orgs</code> owner lookup sources the global tree + name map, so GA's generated docs show &amp; are correctly named.</td></tr>
+        <tr><td class="code">#37</td><td>RL</td><td>Responsive foundation <em>(pass 1)</em> — collapsible/sticky nav (3 states + localStorage), single-scroll app shell, overflow-x guard, new UI primitives (<code>PageContainer</code>, <code>useMediaQuery</code>, nav-collapse, <code>MobileNavToggle</code>) + additive <code>Table</code> scroll props.</td></tr>
+        <tr><td class="code">#38–#41</td><td>RL</td><td>Responsive page sweep <em>(pass 2)</em> — every page reflows on mobile/tablet: <strong>#38</strong> lists &amp; overviews (+ assistant mobile drawer), <strong>#39</strong> client-detail (scrollable sub-tab bar), <strong>#40</strong> settings (Users grid → cards), <strong>#41</strong> calendar. Presentational-only, one PR per group.</td></tr>
+        <tr><td class="code">#47</td><td>P2.2</td><td>Documents management — <strong>Rename · Permissions · Delete</strong> on both folders and files, delete routed through a <strong>60-day recycle bin</strong> (restore, purge countdown, no view/download while binned). <code>folders.allowed_roles</code> made real (true per-role folder ACLs, previously collapsed to admin-only) + per-file permission overrides, with the folder as a ceiling. Migration <code>0012</code> applied; nightly purge sweep ships behind a kill-switch that is <strong>OFF</strong>. Also fixed: folder-path prefix collision in <code>canAccessKey</code>, unpopulated upload attribution.</td></tr>
+        <tr><td class="code">#52–#53</td><td>fix</td><td>Meeting-bot reliability — <strong>one bot per real call</strong> (dispatch dedupes on video-link + start time; duplicate invites marked, never silently skipped) and <strong>async transcription</strong>: bots record-only, the <code>recording.done</code> webhook requests Recall&rsquo;s post-meeting ASR (create-bot rejected <code>recallai_async</code>; streaming was the provider that cost GA/Leap Metrics its notes — meeting recovered, 6 docs).</td></tr>
+        <tr><td class="code">#54</td><td>fix</td><td>Timestamps render in the <strong>viewer&rsquo;s timezone</strong> (was pinned to Eastern app-wide) — no per-user setting needed; Daily Sync stays deliberately ET to mirror the 6&nbsp;AM email.</td></tr>
+        <tr><td class="code">#55</td><td>fix</td><td>A <strong>client</strong>-type org now always wins a meeting&rsquo;s primary slot over partners/leads — the Grace&nbsp;&amp;&nbsp;Philips series had filed its documents under the partner (Ble-Llc); series repointed and the occurrence regenerated under <code>clients/philips/</code>.</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:13px;color:var(--color-text-secondary);margin:12px 0 0;">The complete record of every merged PR from foundation to RL. Revisions <strong>P2.1 / P4.1 / P4.2 / P6B.1 / P6B.2 / P8.1</strong> also appear as their own nodes on the timeline above. (Roadmap-tooling chores #23/#24/#34/#36 omitted.)</p>
+  </div>
+
+  <div class="card">
+    <h2>New add-ons (before P10)</h2>
+    <p style="margin:0 0 6px;"><strong style="color:var(--addon)">GF · Gracie Files</strong> — a self-hosted <strong>Dropbox/OneDrive replacement</strong>: <strong>Seafile</strong> on a <strong>dedicated MinIO bucket</strong>, branded "Gracie Files", Mac + Windows desktop sync, <strong>SSO via the existing Logto</strong> (same Microsoft login). Separate bucket from gracie's — gracie's permission model stays intact.</p>
+    <p style="margin:0 0 6px;"><strong style="color:var(--addon)">GS · Gracie SMS</strong> — a <strong>two-way SMS channel</strong> via your self-hosted <strong>SMS gateway (SMSgate)</strong>. Staff can <strong>text Gracie</strong> (query the assistant / client status / a task) and get a reply, and Gracie can <strong>push alerts/daily-sync via text</strong>. Inbound gateway webhook → route to the AI / handlers → reply through the gateway's send API.</p>
+    <p style="margin:0;font-size:13.5px;color:var(--color-text-secondary);"><strong>Why here:</strong> SMS is both an outbound notification channel (built by <strong>P7</strong>) and an inbound AI interface (uses the <strong>P6/P6B</strong> stack) — so it slots naturally after those land, alongside Gracie Files, right before P10. Both are best de-risked with a small <strong>spike</strong> first. Verify the sender's number maps to a known user (auth) on inbound.</p>
+  </div>
+
+  <div class="card">
+    <h2>Critical path from here</h2>
+    <p class="path"><b class="addon">Gracie SMS</b> → <b>P10 hardening</b></p>
+    <p style="font-size:13.5px;color:var(--color-text-secondary);margin:6px 0 0;"><strong>Gracie SMS</strong> (two-way text channel, reuses the P7 notification stack + your SMS gateway) is next, then <strong>P10</strong> hardening/launch. <strong>Gracie Files</strong> (in-app drive) was deferred to v2.0 — file management stays in Documents; the desktop-sync-agent endgame is a later infra phase. n8n also deferred to v2.0.</p>
+  </div>
+
+  <div class="card">
+    <h2>Deferred to Gracie v2.0</h2>
+    <ul>
+      <li><strong>n8n</strong> — n8n &amp; Custom Automations — external multi-service integrations (Slack / Jira / Sheets…) via a secure automation API</li>
+      <li><strong>GF</strong> — Gracie Files — desktop sync agent (self-hosted Dropbox/OneDrive replacement: Nextcloud-external over the Documents MinIO + Logto SSO). In-app file/folder management stays in Documents.</li>
+    </ul>
+    <p style="margin:12px 0 0;font-size:13.5px;color:var(--color-text-secondary);">Moved to <strong>v2.0</strong>. <strong>n8n</strong> — external-SaaS connectors (Slack / Jira / Sheets…); the native Gracie Automations engine (P8) covers the recurring-task need, revived when real external-integration demand shows up. <strong>Gracie Files</strong> — deferred 2026-07-16; the in-app drive attempt was abandoned (file management stays in Documents). Its real endgame is a <strong>desktop sync agent</strong> (Nextcloud-external over the existing MinIO + Logto SSO), an infra phase for a later spec.</p>
+  </div>
+
+  <div class="card">
+    <h2>Open follow-ups (non-blocking)</h2>
+    <ul>
+      <li>⚠️ Firewall or remove the public SearXNG <code>…sslip.io</code> domain (keyless + limiter-off on the box's public IP).</li>
+      <li>Rotate the temp Resend API key at hardening; move it into encrypted credentials.</li>
+      <li>Calendar page (<code>page.tsx</code>, ~1.5k lines) — structural cleanup into components/hooks.</li>
+      <li>Chat retrieval: embeddings for documents in <strong>restricted folders</strong> still bypass the folder gate <em>(deletion now clears them — #47 — but visibility does not)</em>.</li>
+      <li>Document-move endpoint isn't transaction-safe; session-less API returns 500 instead of 401.</li>
+      <li>NPM <code>proxy_buffering off</code> for live chat streaming; back up <code>docs/SECRETS.md</code> + track the MS Graph secret's 24-month expiry.</li>
+      <li>Deleting a file revokes <strong>new</strong> access only — an already-issued presigned URL keeps serving the object for the rest of its 15-min window (MinIO validates the signature, not our DB). Closing it means proxying downloads instead of presigning.</li>
+    </ul>
+  </div>
+
+  <p class="note">Generated by the roadmap skill · source of truth: <code>docs/09-build-phases.md</code> + <code>docs/plan/</code> + auto-memory</p>
+</div>
+<script type="application/json" id="roadmap-model">
+{
+  "meta": {
+    "title": "GA App — Build Roadmap",
+    "svgTitle": "GA App — build roadmap",
+    "snapshot": "2026-07-22",
+    "progress": 91,
+    "subtitle": "Codename <code>gracie<\/code> · snapshot 2026-07-22 · 13 phases shipped &amp; live <em>(+ revisions P2.1, P2.2, P4.1, P4.2, P6B.1, P6B.2)<\/em> · <span style=\"color:var(--now)\">Gracie SMS up next<\/span> · then <span style=\"color:var(--ahead)\">P10<\/span> · Gracie Files + n8n deferred to v2.0",
+    "svgSubtitle": "13 shipped & live · full build log below · Gracie SMS up next",
+    "desc": "Thirteen build packages shipped and live, plus six in-place revisions shown as their own nodes: P1 Foundation, P2 Clients and Files (revision P2.1), P3 Tasks, P4 Calendar (revisions P4.1 meetings-first and P4.2 on-demand join), P5a Ingest, P5b Generation, P6 Intelligence, P6B Assistant (revisions P6B.1 company-aware and P6B.2 web access), P7 Briefs Daily Sync and Notifications, CO Contacts and Org Charts, P8 Gracie Automations (revision P8.1 shorter intervals and meeting triggers), P9 Settings and Admin and Scoring, and RL Responsive and Mobile (a full responsive sweep across every page plus a collapsible sticky nav). A complete build log of every merged PR is below. Up next: two add-ons — Gracie Files (self-hosted drive) and Gracie SMS (two-way text) — then P10 Launch prep. Deferred to version 2.0: n8n. Live in production with Microsoft SSO.",
+    "chips": [
+      "● Live in production — gracie.graceandassociates.com",
+      "✓ Microsoft SSO",
+      "✓ Auto meeting pipeline (Calendar)",
+      "✓ Company-aware Assistant",
+      "✓ Briefs · Daily Sync · Notifications",
+      "✓ Contacts &amp; Org Charts",
+      "✓ Gracie Automations",
+      "✓ Settings · Admin · Scoring",
+      "✓ Responsive &amp; mobile"
+    ],
+    "footer": "Generated by the roadmap skill · source of truth: <code>docs/09-build-phases.md<\/code> + <code>docs/plan/<\/code> + auto-memory"
+  },
+  "phases": [
+    {
+      "code": "P1",
+      "short": "Foundation",
+      "label": "Foundation",
+      "status": "shipped",
+      "statusLabel": "Shipped",
+      "revisions": []
+    },
+    {
+      "code": "P2",
+      "short": "Clients",
+      "label": "Client Profiles &amp; Files <em>(+ Documents drive v0.2.1)<\/em>",
+      "status": "shipped",
+      "statusLabel": "Shipped",
+      "revisions": [
+        {
+          "code": "P2.1",
+          "label": "Editable client tabs · add task/note · finance inputs · algorithmic relationship health"
+        },
+        {
+          "code": "P2.2",
+          "label": "Documents management — rename · permissions · delete, with a 60-day recycle bin"
+        }
+      ]
+    },
+    {
+      "code": "P3",
+      "short": "Tasks",
+      "label": "Task Board &amp; Notes",
+      "status": "shipped",
+      "statusLabel": "Shipped",
+      "revisions": []
+    },
+    {
+      "code": "P4",
+      "short": "Calendar",
+      "label": "Calendar Integration <em>(auto meeting pipeline)<\/em>",
+      "status": "shipped",
+      "statusLabel": "Shipped &amp; live",
+      "revisions": [
+        {
+          "code": "P4.1",
+          "label": "Meetings-first orgs · multi-domain clients · reconcile · Sync now"
+        },
+        {
+          "code": "P4.2",
+          "label": "On-demand meeting join — paste a link → Gracie joins &amp; records now"
+        }
+      ]
+    },
+    {
+      "code": "P5a",
+      "short": "Ingest",
+      "label": "AI Pipeline — Ingest",
+      "status": "shipped",
+      "statusLabel": "Shipped",
+      "revisions": []
+    },
+    {
+      "code": "P5b",
+      "short": "Gen",
+      "label": "AI Pipeline — Generation",
+      "status": "shipped",
+      "statusLabel": "Shipped",
+      "revisions": []
+    },
+    {
+      "code": "P6",
+      "short": "Intel",
+      "label": "Intelligence &amp; Knowledge Base",
+      "status": "shipped",
+      "statusLabel": "Shipped",
+      "revisions": []
+    },
+    {
+      "code": "P6B",
+      "short": "Assistant",
+      "label": "Assistant Module",
+      "status": "shipped",
+      "statusLabel": "Shipped",
+      "revisions": [
+        {
+          "code": "P6B.1",
+          "label": "Company-aware Assistant — read-only, role-mirrored company brain"
+        },
+        {
+          "code": "P6B.2",
+          "label": "On-demand web access — SearXNG search + fetch behind a per-chat Web toggle"
+        }
+      ]
+    },
+    {
+      "code": "P7",
+      "short": "Briefs",
+      "label": "Briefs · Daily Sync · Notifications <em>(internal team email via Resend)<\/em>",
+      "status": "shipped",
+      "statusLabel": "Shipped &amp; live",
+      "revisions": []
+    },
+    {
+      "code": "CO",
+      "short": "Contacts",
+      "label": "Contacts &amp; Org Charts <em>(contacts directory · per-org office hierarchy / org chart · affiliation history)<\/em>",
+      "status": "shipped",
+      "statusLabel": "Shipped &amp; live",
+      "revisions": []
+    },
+    {
+      "code": "P8",
+      "short": "Automations",
+      "label": "Gracie Automations <em>(native scheduled tasks · agentic Assistant · confirm-before-acting)<\/em>",
+      "status": "shipped",
+      "statusLabel": "Shipped &amp; live",
+      "revisions": [
+        {
+          "code": "P8.1",
+          "label": "Shorter intervals (hourly floor) &amp; before-meeting brief triggers"
+        }
+      ]
+    },
+    {
+      "code": "P9",
+      "short": "Settings",
+      "label": "Settings / Admin / Scoring <em>(in-app user &amp; role management shipped)<\/em>",
+      "status": "shipped",
+      "statusLabel": "Shipped &amp; live",
+      "revisions": []
+    },
+    {
+      "code": "RL",
+      "short": "Responsive",
+      "label": "Responsive &amp; Mobile <em>(full responsive · tables · mobile · collapsible sticky nav)<\/em>",
+      "status": "shipped",
+      "statusLabel": "Shipped &amp; live",
+      "revisions": []
+    },
+    {
+      "code": "GS",
+      "short": "SMS",
+      "label": "Gracie SMS — two-way text channel (SMS gateway)",
+      "status": "next",
+      "statusLabel": "Up next",
+      "revisions": []
+    },
+    {
+      "code": "P10",
+      "short": "Launch",
+      "label": "Testing · Security · Launch",
+      "status": "ahead",
+      "statusLabel": "Not started",
+      "revisions": []
+    }
+  ],
+  "tableNote": "Already <strong>live in production<\/strong> at <code>gracie.graceandassociates.com<\/code> with Microsoft SSO — remaining phases add to a running product. Bot auto-join kill-switch is deliberately <strong>OFF<\/strong> (taking bots live is a separate explicit decision).",
+  "buildLog": {
+    "title": "Build log — every shipped increment (P1 → RL · Jun–Jul 2026)",
+    "rows": [
+      {
+        "pr": "init",
+        "step": "P1–P3, P5a",
+        "what": "Foundation (monorepo · app shell · Logto/Microsoft SSO), Client Profiles &amp; Files, Task Board &amp; Notes, and the Ingest pipeline (upload → extract → chunk → embed → pgvector) — the pre-PR foundation."
+      },
+      {
+        "pr": "#1",
+        "step": "P5b",
+        "what": "Generation pipeline — Recall webhook → 6 docs → task extraction → master record → per-attendee notify."
+      },
+      {
+        "pr": "#2",
+        "step": "P6",
+        "what": "Intelligence Chat &amp; Knowledge Base — role-filtered streaming RAG; <code>match_kb_embeddings<\/code> (migration 0002)."
+      },
+      {
+        "pr": "#3",
+        "step": "fix",
+        "what": "Auth hotfix — post-sign-in redirect uses the public base URL (was bouncing to <code>localhost:3000<\/code> behind the proxy)."
+      },
+      {
+        "pr": "#4",
+        "step": "P6B",
+        "what": "Assistant module — general AI chat (ChatGPT-seat replacement); per-user privacy, shared chat components."
+      },
+      {
+        "pr": "#5",
+        "step": "P2 (docs)",
+        "what": "Documents area → a real drive: upload, folders, filing, global view."
+      },
+      {
+        "pr": "#6",
+        "step": "P2 (docs)",
+        "what": "Documents — upload into the current folder + collapsible folder tree."
+      },
+      {
+        "pr": "#7",
+        "step": "P4",
+        "what": "Calendar Integration — auto meeting pipeline (Graph scan → match → dedup → Recall bot); per-user opt-out (migration 0003)."
+      },
+      {
+        "pr": "#9",
+        "step": "P4.1",
+        "what": "Meetings-first redesign — ingest <em>every<\/em> meeting, domain-matched multi-client orgs, create-org-from-meeting, GA internal workspace (migration 0004)."
+      },
+      {
+        "pr": "#10",
+        "step": "P4.1",
+        "what": "Calendar reconcile (drop cancelled/orphaned) + 62-day look-ahead, per-member filter, admin <strong>Sync now<\/strong>."
+      },
+      {
+        "pr": "#11",
+        "step": "P9",
+        "what": "In-app user &amp; role management (Settings → Users) — the DB owns the app role, anti-lockout on the last admin."
+      },
+      {
+        "pr": "#12",
+        "step": "P4.1",
+        "what": "Multi-domain clients (IBM = ibm.com + us.ibm.com) + GA onmicrosoft treated as internal (migration 0005)."
+      },
+      {
+        "pr": "#13",
+        "step": "P6B.1",
+        "what": "Company-aware Assistant — read-only, role-mirrored company brain; native tool-calling (migration 0006)."
+      },
+      {
+        "pr": "#14",
+        "step": "P6B.2",
+        "what": "On-demand web access — self-hosted SearXNG + <code>fetch_url<\/code> behind a per-chat Web toggle (SSRF-guarded)."
+      },
+      {
+        "pr": "#15",
+        "step": "P2.1",
+        "what": "Client editing — per-tab edit, add task/note, finance inputs, algorithmic relationship health (migration 0007)."
+      },
+      {
+        "pr": "#16",
+        "step": "P6B.2",
+        "what": "Web toggle defaults ON for every chat."
+      },
+      {
+        "pr": "#17",
+        "step": "P7",
+        "what": "Briefs · Daily Sync · Notifications — internal team email via Resend behind a hard <code>graceandassociates.com<\/code> allowlist; notification bell."
+      },
+      {
+        "pr": "#18",
+        "step": "/roadmap",
+        "what": "Serve this build roadmap in-app at <code>/roadmap<\/code> (staff-gated)."
+      },
+      {
+        "pr": "#19",
+        "step": "CO",
+        "what": "Contacts &amp; Org Charts — offices/org-chart (vacant-capable), affiliation history, suggestions inbox (migration 0008)."
+      },
+      {
+        "pr": "#20",
+        "step": "P4.2",
+        "what": "On-demand meeting join — paste a link → Gracie joins &amp; records now (impromptu meetings)."
+      },
+      {
+        "pr": "#21",
+        "step": "Settings",
+        "what": "Meeting-bot config — name / avatar tile / auto-leave / locked observe-only + collapsible Settings sections."
+      },
+      {
+        "pr": "#22",
+        "step": "Settings",
+        "what": "Notification &amp; communication controls — per-type admin email toggles; read-only allowlist."
+      },
+      {
+        "pr": "#25",
+        "step": "P8",
+        "what": "Gracie Automations — native agentic scheduled tasks (propose → confirm → gated execute), admin advanced-requests inbox, audited customer-contact exception (migration 0009)."
+      },
+      {
+        "pr": "#27",
+        "step": "fix",
+        "what": "Auth resilience — a stale/expired Logto refresh token no longer 500s the whole app; <code>safeGetLogtoContext<\/code> degrades to a clean re-login (and session-less APIs now return <strong>401<\/strong>, not 500)."
+      },
+      {
+        "pr": "#28",
+        "step": "P8.1",
+        "what": "Automations follow-on — configurable interval floor lowered daily→<strong>hourly<\/strong> (<code>automations_min_interval_minutes<\/code>) plus a <code>before_meeting<\/code> event trigger delivering the P7 pre-meeting brief <strong>internally<\/strong> (migration 0010; exactly-once per meeting)."
+      },
+      {
+        "pr": "#31",
+        "step": "P9",
+        "what": "Settings / Admin / Scoring — <strong>scoring-weight editor<\/strong> (+ recompute sweep, new <code>scoring.configure<\/code> perm), Company / Automations / Notifications / <strong>AI-Model<\/strong> config panels, <strong>pipeline error-log + per-row re-run<\/strong>, <code>calendar.configure<\/code> wired. No migration."
+      },
+      {
+        "pr": "#32",
+        "step": "fix",
+        "what": "Settings writes now stamp <code>updated_by_user_id<\/code> with the internal <code>users.id<\/code> (via <code>getUserIdByLogtoId<\/code>), not the Logto id — fixes a 500 <em>(invalid uuid)<\/em> on every admin config save across all P9 panels + the pre-existing automations setter."
+      },
+      {
+        "pr": "#33",
+        "step": "fix",
+        "what": "Recall transcription hardening — every bot requests <code>recording_config.transcript<\/code> (tunable provider) + modern <code>media_shortcuts<\/code> transcript fetch; webhook gates on <code>transcript.done<\/code>. Go-live blocker; proven end-to-end in prod."
+      },
+      {
+        "pr": "#35",
+        "step": "fix",
+        "what": "Documents UI reachable for internal/partner orgs — data-driven <code>/api/documents/orgs<\/code> owner lookup sources the global tree + name map, so GA's generated docs show &amp; are correctly named."
+      },
+      {
+        "pr": "#37",
+        "step": "RL",
+        "what": "Responsive foundation <em>(pass 1)<\/em> — collapsible/sticky nav (3 states + localStorage), single-scroll app shell, overflow-x guard, new UI primitives (<code>PageContainer<\/code>, <code>useMediaQuery<\/code>, nav-collapse, <code>MobileNavToggle<\/code>) + additive <code>Table<\/code> scroll props."
+      },
+      {
+        "pr": "#38–#41",
+        "step": "RL",
+        "what": "Responsive page sweep <em>(pass 2)<\/em> — every page reflows on mobile/tablet: <strong>#38<\/strong> lists &amp; overviews (+ assistant mobile drawer), <strong>#39<\/strong> client-detail (scrollable sub-tab bar), <strong>#40<\/strong> settings (Users grid → cards), <strong>#41<\/strong> calendar. Presentational-only, one PR per group."
+      },
+      {
+        "pr": "#47",
+        "step": "P2.2",
+        "what": "Documents management — <strong>Rename · Permissions · Delete<\/strong> on both folders and files, delete routed through a <strong>60-day recycle bin<\/strong> (restore, purge countdown, no view/download while binned). <code>folders.allowed_roles<\/code> made real (true per-role folder ACLs, previously collapsed to admin-only) + per-file permission overrides, with the folder as a ceiling. Migration <code>0012<\/code> applied; nightly purge sweep ships behind a kill-switch that is <strong>OFF<\/strong>. Also fixed: folder-path prefix collision in <code>canAccessKey<\/code>, unpopulated upload attribution."
+      },
+      {
+        "pr": "#52–#53",
+        "step": "fix",
+        "what": "Meeting-bot reliability — <strong>one bot per real call<\/strong> (dispatch dedupes on video-link + start time; duplicate invites marked, never silently skipped) and <strong>async transcription<\/strong>: bots record-only, the <code>recording.done<\/code> webhook requests Recall&rsquo;s post-meeting ASR (create-bot rejected <code>recallai_async<\/code>; streaming was the provider that cost GA/Leap Metrics its notes — meeting recovered, 6 docs)."
+      },
+      {
+        "pr": "#54",
+        "step": "fix",
+        "what": "Timestamps render in the <strong>viewer&rsquo;s timezone<\/strong> (was pinned to Eastern app-wide) — no per-user setting needed; Daily Sync stays deliberately ET to mirror the 6&nbsp;AM email."
+      },
+      {
+        "pr": "#55",
+        "step": "fix",
+        "what": "A <strong>client<\/strong>-type org now always wins a meeting&rsquo;s primary slot over partners/leads — the Grace&nbsp;&amp;&nbsp;Philips series had filed its documents under the partner (Ble-Llc); series repointed and the occurrence regenerated under <code>clients/philips/<\/code>."
+      }
+    ],
+    "note": "The complete record of every merged PR from foundation to RL. Revisions <strong>P2.1 / P4.1 / P4.2 / P6B.1 / P6B.2 / P8.1<\/strong> also appear as their own nodes on the timeline above. (Roadmap-tooling chores #23/#24/#34/#36 omitted.)"
+  },
+  "addons": {
+    "title": "New add-ons (before P10)",
+    "items": [
+      {
+        "html": "<strong style=\"color:var(--addon)\">GF · Gracie Files<\/strong> — a self-hosted <strong>Dropbox/OneDrive replacement<\/strong>: <strong>Seafile<\/strong> on a <strong>dedicated MinIO bucket<\/strong>, branded \"Gracie Files\", Mac + Windows desktop sync, <strong>SSO via the existing Logto<\/strong> (same Microsoft login). Separate bucket from gracie's — gracie's permission model stays intact."
+      },
+      {
+        "html": "<strong style=\"color:var(--addon)\">GS · Gracie SMS<\/strong> — a <strong>two-way SMS channel<\/strong> via your self-hosted <strong>SMS gateway (SMSgate)<\/strong>. Staff can <strong>text Gracie<\/strong> (query the assistant / client status / a task) and get a reply, and Gracie can <strong>push alerts/daily-sync via text<\/strong>. Inbound gateway webhook → route to the AI / handlers → reply through the gateway's send API."
+      }
+    ],
+    "note": "<strong>Why here:<\/strong> SMS is both an outbound notification channel (built by <strong>P7<\/strong>) and an inbound AI interface (uses the <strong>P6/P6B<\/strong> stack) — so it slots naturally after those land, alongside Gracie Files, right before P10. Both are best de-risked with a small <strong>spike<\/strong> first. Verify the sender's number maps to a known user (auth) on inbound."
+  },
+  "criticalPath": {
+    "title": "Critical path from here",
+    "steps": [
+      {
+        "label": "Gracie SMS",
+        "addon": true
+      },
+      {
+        "label": "P10 hardening"
+      }
+    ],
+    "note": "<strong>Gracie SMS<\/strong> (two-way text channel, reuses the P7 notification stack + your SMS gateway) is next, then <strong>P10<\/strong> hardening/launch. <strong>Gracie Files<\/strong> (in-app drive) was deferred to v2.0 — file management stays in Documents; the desktop-sync-agent endgame is a later infra phase. n8n also deferred to v2.0."
+  },
+  "followUps": {
+    "title": "Open follow-ups (non-blocking)",
+    "items": [
+      "⚠️ Firewall or remove the public SearXNG <code>…sslip.io<\/code> domain (keyless + limiter-off on the box's public IP).",
+      "Rotate the temp Resend API key at hardening; move it into encrypted credentials.",
+      "Calendar page (<code>page.tsx<\/code>, ~1.5k lines) — structural cleanup into components/hooks.",
+      "Chat retrieval: embeddings for documents in <strong>restricted folders<\/strong> still bypass the folder gate <em>(deletion now clears them — #47 — but visibility does not)<\/em>.",
+      "Document-move endpoint isn't transaction-safe; session-less API returns 500 instead of 401.",
+      "NPM <code>proxy_buffering off<\/code> for live chat streaming; back up <code>docs/SECRETS.md<\/code> + track the MS Graph secret's 24-month expiry.",
+      "Deleting a file revokes <strong>new<\/strong> access only — an already-issued presigned URL keeps serving the object for the rest of its 15-min window (MinIO validates the signature, not our DB). Closing it means proxying downloads instead of presigning."
+    ]
+  },
+  "palette": {
+    "done": "#2f9e6b",
+    "now": "#e08a2b",
+    "addon": "#6b6fe0",
+    "defer": "#9aa0a6"
+  },
+  "deferred": {
+    "title": "Deferred to Gracie v2.0",
+    "items": [
+      {
+        "code": "n8n",
+        "short": "Integrations",
+        "label": "n8n &amp; Custom Automations — external multi-service integrations (Slack / Jira / Sheets…) via a secure automation API"
+      },
+      {
+        "code": "GF",
+        "short": "Files",
+        "label": "Gracie Files — desktop sync agent (self-hosted Dropbox/OneDrive replacement: Nextcloud-external over the Documents MinIO + Logto SSO). In-app file/folder management stays in Documents."
+      }
+    ],
+    "note": "Moved to <strong>v2.0<\/strong>. <strong>n8n<\/strong> — external-SaaS connectors (Slack / Jira / Sheets…); the native Gracie Automations engine (P8) covers the recurring-task need, revived when real external-integration demand shows up. <strong>Gracie Files<\/strong> — deferred 2026-07-16; the in-app drive attempt was abandoned (file management stays in Documents). Its real endgame is a <strong>desktop sync agent<\/strong> (Nextcloud-external over the existing MinIO + Logto SSO), an infra phase for a later spec."
+  }
+}
+</script>
+</body>
+</html>
