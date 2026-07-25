@@ -35,3 +35,9 @@ Standing constraint ([[operability-built-to-outlive-us]]): a non-technical admin
 - Preview-verify as admin (edit a prompt → save → reset) and confirm a **viewer/standard cannot** see/patch it.
 - Prove the worker path: an override actually changes the instruction sent to the provider (a small unit check on the `override ?? default` resolution is enough — no live LLM call needed).
 - No secrets; no migration; scope commits to explicit paths. Worker + web deploy separately — the worker must tolerate the settings key being absent (falls back to defaults) so ship order doesn't matter.
+
+## 5. Fold-in (minor, presentational): Settings page → tabbed nav
+The Settings page (`apps/web/app/(app)/settings/page.tsx`) is a stack of `CollapsibleSection`s and gets long when sections are open. Convert it to a **horizontal tabbed nav**, one tab per section.
+- **Reuse `components/ui/Tabs`** (its `TabItem`/`TabsProps` API — already used by `clients/[clientId]/operations` + `daily-sync`, and responsive from the RL sweep). One tab per current section (Users, Company, Meeting Bot, Notifications, Automations, Scoring, AI Model, API Settings) **plus the new Generation Prompts tab from this brief** — the panels are unchanged, just moved from collapsibles into tabs.
+- Remove the `CollapsibleSection` wrappers **here only** (keep the component — other pages use it). Default to the first tab; optionally persist the active tab in localStorage (nice-to-have, not required).
+- No new component, no new deps. Mobile scroll is already handled by `Tabs`. Verify each tab renders its panel and switching works at desktop + mobile.
