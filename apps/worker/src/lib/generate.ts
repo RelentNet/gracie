@@ -64,59 +64,14 @@ export interface GenerateDocumentsInput {
   readonly provider: AIProvider;
   readonly model: string;
   readonly context: GenerationContext;
+  /**
+   * Effective per-doc instruction (layer 3 — "Your Task") for all six doc types,
+   * already resolved override-else-default by the caller (PE). Build it with
+   * `resolveGenerationPrompts(...)` from @gracie/shared so every type is present.
+   */
+  readonly prompts: Record<GeneratedDocType, string>;
   readonly logger: FastifyBaseLogger;
 }
-
-/**
- * Per-document instruction (layer 3 — "Your Task"). Each describes what to
- * produce from the meeting transcript in a polished federal healthcare-consulting
- * voice; the global [VERIFY]/tone/JSON rules are appended by `assemblePrompt`.
- */
-const DOC_INSTRUCTIONS: Record<GeneratedDocType, string> = {
-  post_meeting_analysis: [
-    'Produce a thorough INTERNAL Post-Meeting Analysis of this client meeting.',
-    'Cover: the decisions reached, the key discussion points and any disagreement,',
-    'risks or blockers surfaced, commitments made by either side, and notable',
-    'changes in client sentiment or relationship health. Be candid and analytical —',
-    'this is for the internal consulting team, not the client. Use clear Markdown',
-    'headings and bullet points.',
-  ].join(' '),
-  internal_memo: [
-    'Write a concise INTERNAL Memo summarizing this meeting for the wider team.',
-    'Lead with a one-line TL;DR, then cover what happened, what was decided, and the',
-    'immediate next steps with owners where stated. Keep it skimmable — short',
-    'paragraphs and bullets. Internal audience.',
-  ].join(' '),
-  client_summary: [
-    'Draft a polished CLIENT-FACING Summary of this meeting suitable for sending to',
-    'the client. Recap the purpose, what was discussed and agreed, and the agreed',
-    'next steps and owners. Professional, reassuring, and precise; omit any internal-',
-    'only commentary, candor about relationship health, or speculation. This is a',
-    'DRAFT staged for human review — it is never auto-sent.',
-  ].join(' '),
-  task_checklist: [
-    'Extract every actionable follow-up task from this meeting as STRUCTURED JSON.',
-    'Respond with ONLY a single JSON object of this exact shape:',
-    '{"tasks":[{"description":string,"owner_hint":string|null,"due_hint":string|null,"priority":boolean}]}.',
-    'Rules: "description" is an imperative, specific action; "owner_hint" is the name',
-    'or role named as responsible (else null); "due_hint" is any natural-language due',
-    'date mentioned (else null); "priority" is true only when the meeting marked it',
-    'urgent/high-priority. If there are no tasks, return {"tasks":[]}. No prose, no',
-    'Markdown fences — JSON only.',
-  ].join(' '),
-  internal_email: [
-    'Write an INTERNAL Email Draft the team can send to colleagues to circulate the',
-    'meeting outcomes. Include a subject line, a brief greeting, the key outcomes and',
-    'action items, and a sign-off. Internal tone — direct and informative. Stored for',
-    'the team to retrieve and send manually.',
-  ].join(' '),
-  client_email: [
-    'Draft a CLIENT-FACING Email the consultant could send to the client to follow up',
-    'on this meeting. Include a subject line, a professional greeting, a short recap,',
-    'the agreed next steps, and a courteous sign-off. Warm but precise federal-',
-    'consulting tone. This is a DRAFT staged for review — it is NEVER auto-sent.',
-  ].join(' '),
-};
 
 /**
  * Stricter re-ask instruction for the Task Checklist when the first response did
@@ -163,7 +118,7 @@ export async function generateDocuments(
   // Sequential — one provider call at a time, in the fixed order (D7).
   for (const spec of GENERATED_DOC_SPECS) {
     input.logger.info({ docType: spec.type, order: spec.order }, 'generate: document');
-    const content = await generateOne(input, spec, DOC_INSTRUCTIONS[spec.type]);
+    const content = await generateOne(input, spec, input.prompts[spec.type]);
     documents.push({ type: spec.type, spec, content });
 
     if (spec.type === 'task_checklist') {

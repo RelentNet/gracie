@@ -31,6 +31,7 @@ import {
 import type { Database, ServerClient } from '@gracie/db';
 import {
   EMBEDDING_DIMENSIONS,
+  resolveGenerationPrompts,
   type GeneratedDocType,
   type GenerationJobPayload,
 } from '@gracie/shared';
@@ -183,6 +184,13 @@ async function getSettingString(db: ServerClient, key: string): Promise<string |
   const { data, error } = await db.from('settings').select('value').eq('key', key).maybeSingle();
   if (error !== null) throw new Error(`generate: getSetting(${key}): ${error.message}`);
   return typeof data?.value === 'string' ? data.value : null;
+}
+
+/** Read a global setting's raw jsonb value (any shape), or null if unset. */
+async function getSettingJson(db: ServerClient, key: string): Promise<unknown> {
+  const { data, error } = await db.from('settings').select('value').eq('key', key).maybeSingle();
+  if (error !== null) throw new Error(`generate: getSetting(${key}): ${error.message}`);
+  return data?.value ?? null;
 }
 
 /** Embed chunks through the pinned provider interface, in bounded batches. */
@@ -523,10 +531,16 @@ export function createGenerateProcessor(
       const gaCompanyDescription =
         (await getSettingString(db, 'ga_company_description')) ??
         'Grace & Associates — a federal healthcare consulting firm.';
+      // Editable generation prompts (PE): admin overrides from Settings, else the
+      // shared defaults. Tolerates the key being absent/malformed → all defaults.
+      const prompts = resolveGenerationPrompts(
+        await getSettingJson(db, 'generation_prompt_overrides'),
+      );
       const { documents, tasks } = await generateDocuments({
         provider,
         model,
         logger: log,
+        prompts,
         context: {
           gaCompanyDescription,
           clientDescription: typedClient.description ?? '',

@@ -1,8 +1,8 @@
 'use client';
 
-import { CollapsibleSection } from '@/components/ui/CollapsibleSection';
 import { PageContainer } from '@/components/ui/PageContainer';
 import { ErrorState } from '@/components/ui/StateViews';
+import { Tabs } from '@/components/ui/Tabs';
 import { TYPE } from '@/lib/typography';
 import { useAuth } from '@/lib/auth';
 
@@ -11,6 +11,7 @@ import { ApiSettingsPanel } from './ApiSettingsPanel';
 import { AutomationsSettingsPanel } from './AutomationsSettingsPanel';
 import { BotSettingsPanel } from './BotSettingsPanel';
 import { CompanySettingsPanel } from './CompanySettingsPanel';
+import { GenerationPromptsPanel } from './GenerationPromptsPanel';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel';
 import { ScoringSettingsPanel } from './ScoringSettingsPanel';
 import { UsersPanel } from './UsersPanel';
@@ -51,71 +52,20 @@ export default function SettingsPage(): React.JSX.Element {
         </p>
       </header>
 
-      <div className="flex flex-col gap-4">
-        <CollapsibleSection
-          title="Users"
-          description="Manage who is an admin, standard, or viewer, and offboard accounts."
-          storageKey="settings-users"
-        >
-          <UsersPanel />
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="Company"
-          description="Your firm description (used by the Assistant) and your internal email domains."
-          storageKey="settings-company"
-        >
-          <CompanySettingsPanel />
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="Meeting Bot"
-          description="How Gracie appears and behaves when she joins a call — name, image tile, and auto-leave."
-          storageKey="settings-bot"
-        >
-          <BotSettingsPanel />
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="Notifications"
-          description="Which internal emails Gracie sends. She only ever emails your own team."
-          storageKey="settings-notifications"
-        >
-          <NotificationSettingsPanel />
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="Automations"
-          description="The customer-contact master switch for Gracie's automations (off by default)."
-          storageKey="settings-automations"
-        >
-          <AutomationsSettingsPanel />
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="Scoring"
-          description="Tune the relationship-health algorithm — signal weights and thresholds. Saving recomputes every client."
-          storageKey="settings-scoring"
-        >
-          <ScoringSettingsPanel />
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="AI Model"
-          description="Choose the generation & chat model. The embedding model is pinned."
-          storageKey="settings-ai"
-        >
-          <AiSettingsPanel />
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="API Settings"
-          description="Third-party integration keys. Encrypted at rest and never displayed."
-          storageKey="settings-api"
-        >
-          <ApiSettingsPanel />
-        </CollapsibleSection>
-      </div>
+      <Tabs
+        ariaLabel="Settings sections"
+        items={[
+          { id: 'users', label: 'Users', content: <UsersPanel /> },
+          { id: 'company', label: 'Company', content: <CompanySettingsPanel /> },
+          { id: 'bot', label: 'Meeting Bot', content: <BotSettingsPanel /> },
+          { id: 'notifications', label: 'Notifications', content: <NotificationSettingsPanel /> },
+          { id: 'automations', label: 'Automations', content: <AutomationsSettingsPanel /> },
+          { id: 'scoring', label: 'Scoring', content: <ScoringSettingsPanel /> },
+          { id: 'prompts', label: 'Generation Prompts', content: <GenerationPromptsPanel /> },
+          { id: 'ai', label: 'AI Model', content: <AiSettingsPanel /> },
+          { id: 'api', label: 'API Settings', content: <ApiSettingsPanel /> },
+        ]}
+      />
     </PageContainer>
   );
 }
