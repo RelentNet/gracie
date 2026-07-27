@@ -42,6 +42,8 @@ interface PatchBody {
 }
 
 type TimingField = keyof NotificationTiming;
+// Daily-sync send hour + at-risk threshold moved to the Daily Sync tab (DS); only the
+// KB-expiry warning stays here (it drives the "KB doc expiring" admin alert below).
 const TIMING_FIELDS: ReadonlyArray<{
   readonly key: TimingField;
   readonly label: string;
@@ -49,9 +51,7 @@ const TIMING_FIELDS: ReadonlyArray<{
   readonly max: number;
   readonly help: string;
 }> = [
-  { key: 'dailySyncHourEt', label: 'Daily-sync send hour (ET)', min: 0, max: 23, help: 'The hour (0–23, Eastern) the morning digest email goes out.' },
   { key: 'kbExpiryWarningDays', label: 'KB expiry warning (days)', min: 1, max: 365, help: 'Warn this many days before a knowledge-base document expires.' },
-  { key: 'atRiskHealthThreshold', label: 'At-risk health threshold', min: 0, max: 100, help: 'Clients at or below this score (0–100) are flagged “at risk” in the daily sync.' },
 ];
 
 const inputClass = 'w-32 rounded-lg border bg-white px-3 py-2';
@@ -149,28 +149,9 @@ export function NotificationSettingsPanel(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Team digests */}
-      <fieldset className="flex flex-col gap-3">
-        <legend style={TYPE.bodyStrong}>Team digests</legend>
-        <Row
-          label="Daily sync email"
-          description="The morning digest emailed to the team."
-          checked={settings.dailySyncEnabled}
-          disabled={busy}
-          onChange={(v): void =>
-            save('dailySyncEnabled', { ...settings, dailySyncEnabled: v }, { dailySyncEnabled: v })
-          }
-        />
-        <Row
-          label="Pre-meeting briefs"
-          description="Per-meeting briefs bundled into the daily sync email."
-          checked={settings.briefsEnabled}
-          disabled={busy || !settings.dailySyncEnabled}
-          onChange={(v): void =>
-            save('briefsEnabled', { ...settings, briefsEnabled: v }, { briefsEnabled: v })
-          }
-        />
-      </fieldset>
+      <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+        The daily sync email, its schedule, and pre-meeting briefs are configured in the Daily Sync tab.
+      </span>
 
       {/* Admin alert emails */}
       <fieldset className="flex flex-col gap-3">

@@ -11,6 +11,7 @@
  */
 import { getServerClient } from '@gracie/db';
 import type { ServerClient } from '@gracie/db';
+import { resolveAiBriefPrompt, resolveDailySyncTemplate } from '@gracie/shared';
 
 /** GA-domain fallback From. Live sends need a Resend-VERIFIED address (operator). */
 const DEFAULT_RESEND_FROM = 'Gracie <gracie@graceandassociates.com>';
@@ -64,6 +65,30 @@ export async function getDailySyncConfig(db: ServerClient): Promise<DailySyncCon
     enabled: parseBool(enabledRaw, true),
     hourEt: hour >= 0 && hour <= 23 ? hour : DEFAULT_DAILY_SYNC_HOUR_ET,
     briefsEnabled: parseBool(briefsRaw, true),
+  };
+}
+
+/** Editable daily-sync email template + optional AI-brief config (DS). */
+export interface DailySyncTemplateConfig {
+  /** Effective body template (override else the shared default). */
+  readonly template: string;
+  /** Effective AI-brief prompt (override else the shared default). */
+  readonly aiBriefPrompt: string;
+  /** Whether the `{ai_brief}` AI compose runs (default OFF — opt-in). */
+  readonly aiBriefEnabled: boolean;
+}
+
+/** Resolve the editable template + AI-brief settings (all default when unset). */
+export async function getDailySyncTemplateConfig(db: ServerClient): Promise<DailySyncTemplateConfig> {
+  const [templateRaw, promptRaw, aiEnabledRaw] = await Promise.all([
+    readStringSetting(db, 'daily_sync_email_template'),
+    readStringSetting(db, 'daily_sync_ai_brief_prompt'),
+    readStringSetting(db, 'daily_sync_ai_brief_enabled'),
+  ]);
+  return {
+    template: resolveDailySyncTemplate(templateRaw),
+    aiBriefPrompt: resolveAiBriefPrompt(promptRaw),
+    aiBriefEnabled: parseBool(aiEnabledRaw, false),
   };
 }
 

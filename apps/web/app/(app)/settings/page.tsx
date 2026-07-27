@@ -11,6 +11,7 @@ import { ApiSettingsPanel } from './ApiSettingsPanel';
 import { AutomationsSettingsPanel } from './AutomationsSettingsPanel';
 import { BotSettingsPanel } from './BotSettingsPanel';
 import { CompanySettingsPanel } from './CompanySettingsPanel';
+import { DailySyncSettingsPanel } from './DailySyncSettingsPanel';
 import { GenerationPromptsPanel } from './GenerationPromptsPanel';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel';
 import { ScoringSettingsPanel } from './ScoringSettingsPanel';
@@ -58,6 +59,7 @@ export default function SettingsPage(): React.JSX.Element {
           { id: 'users', label: 'Users', content: <UsersPanel /> },
           { id: 'company', label: 'Company', content: <CompanySettingsPanel /> },
           { id: 'bot', label: 'Meeting Bot', content: <BotSettingsPanel /> },
+          { id: 'daily-sync', label: 'Daily Sync', content: <DailySyncSettingsPanel /> },
           { id: 'notifications', label: 'Notifications', content: <NotificationSettingsPanel /> },
           { id: 'automations', label: 'Automations', content: <AutomationsSettingsPanel /> },
           { id: 'scoring', label: 'Scoring', content: <ScoringSettingsPanel /> },

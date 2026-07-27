@@ -131,6 +131,12 @@ export interface DailySyncJobPayload {
    * which bypasses the gate and runs immediately.
    */
   readonly source: string;
+  /**
+   * Preview ("send test to me", DS): when set to an internal user id, the run emails
+   * ONLY that user and SKIPS the delivered/brief-delivered stamps, so a preview never
+   * suppresses the real scheduled send. Absent for normal scheduled/manual runs.
+   */
+  readonly previewRecipientUserId?: string;
 }
 
 /**
