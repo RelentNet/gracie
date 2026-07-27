@@ -46,7 +46,19 @@ export interface DailySyncBrief {
   readonly content: string;
 }
 
-/** The structured payload stored in `daily_syncs.content` (jsonb). */
+/** An open to-do carried over from the last 7 days (the `{last_week_todos}` shortcode). */
+export interface DailySyncTodo {
+  readonly description: string;
+  readonly clientName: string | null;
+  readonly dueDate: string | null;
+  readonly priority: boolean;
+}
+
+/**
+ * The structured payload stored in `daily_syncs.content` (jsonb). `aiBrief` and
+ * `lastWeekTodos` are OPTIONAL (added by DS) so older stored rows read back fine —
+ * absent → the shortcode renders empty / the list is treated as none.
+ */
 export interface DailySyncContent {
   /** Schema version — bump if the shape changes so the reader can adapt. */
   readonly version: 1;
@@ -55,4 +67,8 @@ export interface DailySyncContent {
   readonly todayMeetings: readonly DailySyncMeeting[];
   readonly atRiskClients: readonly DailySyncAtRiskClient[];
   readonly briefs: readonly DailySyncBrief[];
+  /** Open to-dos from the last 7 days (deterministic; the `{last_week_todos}` shortcode). */
+  readonly lastWeekTodos?: readonly DailySyncTodo[];
+  /** The optional AI-composed narrative (`{ai_brief}`); null/absent when disabled or the compose failed. */
+  readonly aiBrief?: string | null;
 }

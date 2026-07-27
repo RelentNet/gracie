@@ -19,7 +19,7 @@
 import type { Job, Processor } from 'bullmq';
 import type { FastifyBaseLogger } from 'fastify';
 
-import { getServerClient } from '@gracie/db';
+import { getActiveProvider, getServerClient } from '@gracie/db';
 import type { Database, Json, ServerClient } from '@gracie/db';
 import type {
   DailySyncAtRiskClient,
@@ -27,16 +27,19 @@ import type {
   DailySyncContent,
   DailySyncJobPayload,
   DailySyncMeeting,
+  DailySyncTodo,
   DailySyncYesterday,
 } from '@gracie/shared';
 
 import { buildBriefContent, type BriefMeeting } from '../lib/brief.js';
+import { buildAiBriefSource, composeAiBrief } from '../lib/daily-sync-ai.js';
 import { renderDailySyncEmail } from '../lib/email-templates/daily-sync.js';
 import { emailAdminsForAlert, sendTeamEmail } from '../lib/email.js';
 import {
   getAppBaseUrl,
   getAtRiskHealthThreshold,
   getDailySyncConfig,
+  getDailySyncTemplateConfig,
   getKbExpiryWarningDays,
 } from '../lib/notify-config.js';
 
@@ -263,6 +266,42 @@ async function loadClientHealth(db: ServerClient, ids: readonly string[]): Promi
   return new Map((data ?? []).map((c) => [c.id, c.relationship_health]));
 }
 
+/**
+ * Firm-wide open to-dos carried over from the last 7 days (the `{last_week_todos}`
+ * shortcode + AI-brief source). Open (not complete), not archived, created within the
+ * window; priority-first, bounded. Client names resolved for display.
+ */
+export async function gatherLastWeekTodos(db: ServerClient, sinceIso: string): Promise<DailySyncTodo[]> {
+  const { data, error } = await db
+    .from('tasks')
+    .select('description, due_date, priority_flag, client_id')
+    .neq('status', 'complete')
+    .eq('archived', false)
+    .gte('created_at', sinceIso)
+    .order('priority_flag', { ascending: false })
+    .limit(25);
+  if (error !== null) throw new Error(`daily-sync: last-week todos: ${error.message}`);
+  const rows = data ?? [];
+  const names = await loadClientNames(
+    db,
+    rows.map((r) => r.client_id).filter((id): id is string => id !== null),
+  );
+  return rows.map((r) => ({
+    description: r.description,
+    clientName: r.client_id !== null ? names.get(r.client_id) ?? null : null,
+    dueDate: r.due_date,
+    priority: r.priority_flag,
+  }));
+}
+
+/** The firm description (layer 1) for the AI brief — our own data, with a safe default. */
+async function getGaCompanyDescription(db: ServerClient): Promise<string> {
+  const { data } = await db.from('settings').select('value').eq('key', 'ga_company_description').maybeSingle();
+  return typeof data?.value === 'string' && data.value.trim() !== ''
+    ? data.value
+    : 'Grace & Associates — a federal healthcare consulting firm.';
+}
+
 // --- Briefs -------------------------------------------------------------------
 
 /** Insert or refresh the `pre_meeting_briefs` row for a meeting (idempotent per meeting). */
@@ -462,6 +501,10 @@ export function createDailySyncProcessor(logger: FastifyBaseLogger): Processor<D
     const todayRows = await gatherTodayMeetings(db, todayStart, tomorrowStart);
     const threshold = await getAtRiskHealthThreshold(db);
     const atRiskClients = await gatherAtRisk(db, threshold);
+    const weekAgoStart = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+    const lastWeekTodos = await gatherLastWeekTodos(db, weekAgoStart);
+    const templateCfg = await getDailySyncTemplateConfig(db);
+    const syncDateLabel = easternDateLabel(todayEt);
 
     const clientIds = todayRows.map((m) => m.client_id).filter((id): id is string => id !== null);
     const clientNames = await loadClientNames(db, clientIds);
@@ -510,14 +553,37 @@ export function createDailySyncProcessor(logger: FastifyBaseLogger): Processor<D
       hasBrief: briefMeetingIds.has(m.id),
     }));
 
-    const content: DailySyncContent = {
+    const baseContent: DailySyncContent = {
       version: 1,
       generatedAtIso: nowIso,
       yesterday,
       todayMeetings,
       atRiskClients,
       briefs,
+      lastWeekTodos,
     };
+
+    // Optional {ai_brief}: composed ONLY from the facts above (no web/tools). Off by
+    // default; any failure logs and falls back to the deterministic email.
+    let aiBrief: string | null = null;
+    if (templateCfg.aiBriefEnabled) {
+      try {
+        const { provider, model } = await getActiveProvider();
+        const gaCompanyDescription = await getGaCompanyDescription(db);
+        const source = buildAiBriefSource(baseContent, syncDateLabel);
+        aiBrief = await composeAiBrief(
+          { provider, model, gaCompanyDescription },
+          { prompt: templateCfg.aiBriefPrompt, source },
+        );
+      } catch (err) {
+        log.warn(
+          { err: err instanceof Error ? err.message : String(err) },
+          'daily-sync: AI brief compose failed — deterministic email still sends',
+        );
+      }
+    }
+
+    const content: DailySyncContent = { ...baseContent, aiBrief };
     const { alreadyDeliveredAt } = await upsertDailySync(
       db,
       todayEt,
@@ -532,18 +598,29 @@ export function createDailySyncProcessor(logger: FastifyBaseLogger): Processor<D
     // 7. Deliver — one bundled email per active staffer (allowlist-gated inside
     //    sendTeamEmail). Best-effort per recipient: a transient failure is logged,
     //    not thrown, so BullMQ never retries into a duplicate-email storm.
+    //
+    //    Preview ("send test to me"): a `previewRecipientUserId` scopes delivery to
+    //    that one admin and SKIPS the delivered/brief stamps, so a preview never
+    //    suppresses the real 6 AM send.
+    const previewUserId =
+      typeof job.data.previewRecipientUserId === 'string' && job.data.previewRecipientUserId !== ''
+        ? job.data.previewRecipientUserId
+        : null;
+    const isPreview = previewUserId !== null;
+    const recipients = isPreview ? activeStaff.filter((u) => u.id === previewUserId) : activeStaff;
+
     const shouldDeliver = isManual || alreadyDeliveredAt === null;
     let delivered = 0;
-    if (shouldDeliver && activeStaff.length > 0) {
-      const syncDateLabel = easternDateLabel(todayEt);
+    if (shouldDeliver && recipients.length > 0) {
       const appUrl = getAppBaseUrl();
-      for (const staff of activeStaff) {
+      for (const staff of recipients) {
         try {
           const email = renderDailySyncEmail({
             recipientName: staff.name,
             syncDateLabel,
             content,
             appUrl,
+            template: templateCfg.template,
           });
           const res = await sendTeamEmail(
             { to: [staff.email], subject: email.subject, html: email.html, text: email.text },
@@ -557,8 +634,10 @@ export function createDailySyncProcessor(logger: FastifyBaseLogger): Processor<D
           );
         }
       }
-      await db.from('daily_syncs').update({ delivered_at: nowIso }).eq('sync_date', todayEt);
-      await markBriefsDelivered(db, [...briefMeetingIds], activeStaff.map((u) => u.id), nowIso);
+      if (!isPreview) {
+        await db.from('daily_syncs').update({ delivered_at: nowIso }).eq('sync_date', todayEt);
+        await markBriefsDelivered(db, [...briefMeetingIds], activeStaff.map((u) => u.id), nowIso);
+      }
     }
 
     const result: DailySyncResult = {
@@ -566,7 +645,7 @@ export function createDailySyncProcessor(logger: FastifyBaseLogger): Processor<D
       syncDate: todayEt,
       meetings: todayMeetings.length,
       briefs: briefs.length,
-      recipients: activeStaff.length,
+      recipients: recipients.length,
       delivered,
       kbExpiringAlerts,
     };
