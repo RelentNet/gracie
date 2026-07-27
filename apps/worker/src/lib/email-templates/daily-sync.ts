@@ -81,12 +81,15 @@ interface ShortcodeRenderer {
 
 /** Section renderers, keyed by shortcode. Kept in sync with `DAILY_SYNC_SHORTCODES` (shared). */
 const RENDERERS: Record<DailySyncShortcode, ShortcodeRenderer> = {
+  // Inline codes return RAW text: they're only ever substituted into a text line,
+  // which `renderDailySyncBody` then escapes once via `p()` — escaping here too would
+  // double-escape names like "O'Brien" in the greeting.
   recipient_name: {
-    html: (_c, i) => escapeHtml(i.recipientName),
+    html: (_c, i) => i.recipientName,
     text: (_c, i) => i.recipientName,
   },
   sync_date: {
-    html: (_c, i) => escapeHtml(i.syncDateLabel),
+    html: (_c, i) => i.syncDateLabel,
     text: (_c, i) => i.syncDateLabel,
   },
   yesterday_activity: {
@@ -250,5 +253,14 @@ export function renderDailySyncEmail(input: DailySyncEmailInput): RenderedEmail 
     bodyHtml: renderDailySyncBody(input.template ?? '', content, input, 'html'),
     footnote: 'Internal briefing — Grace & Associates only. Do not forward outside the firm.',
   });
-  return { subject, html, text: renderDailySyncBody(input.template ?? '', content, input, 'text') };
+  // Plain-text alternative: title line + rendered body + the confidentiality footnote
+  // (parity with the HTML subject + layout footnote).
+  const text = [
+    subject,
+    '',
+    renderDailySyncBody(input.template ?? '', content, input, 'text'),
+    '',
+    'Internal briefing — Grace & Associates only.',
+  ].join('\n');
+  return { subject, html, text };
 }

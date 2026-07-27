@@ -83,6 +83,12 @@ test('lone block shortcode expands; unknown token renders literally; inline toke
   assert.ok(html.includes('{not_a_real_code}'), 'unknown token stays literal');
 });
 
+test('inline shortcode is escaped exactly once (no double-escape of names)', () => {
+  const html = renderDailySyncBody('Good morning, {recipient_name}.', CONTENT, { ...INPUT, recipientName: "O'Brien & Co" }, 'html');
+  assert.ok(html.includes('Good morning, O&#39;Brien &amp; Co.'), 'single-escaped');
+  assert.ok(!html.includes('&amp;#39;'), 'must NOT be double-escaped');
+});
+
 test('blank template falls back to the default (never a blank email)', () => {
   const blank = renderDailySyncBody('   \n  ', CONTENT, INPUT, 'html');
   const dflt = renderDailySyncBody(DEFAULT_DAILY_SYNC_TEMPLATE, CONTENT, INPUT, 'html');
