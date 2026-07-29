@@ -39,10 +39,9 @@ export interface FolderNodeActions {
  * the generic `TreeNode` model (see `tree.ts`) for BOTH the client-scoped and the
  * global browser, with per-node expand/collapse.
  *
- * EXPANSION: every branch with children is expanded by default EXCEPT global
- * client nodes (`icon === 'client'`), which start collapsed so the All Clients
- * tree isn't overwhelming. Selecting a node auto-expands the path down to it so
- * the selection stays visible; users can still collapse any branch via its chevron.
+ * EXPANSION: every branch starts COLLAPSED so the tree opens tidy and the user
+ * expands only what they want. Selecting a node auto-expands the path down to it
+ * so the selection stays visible; users toggle any branch via its chevron.
  *
  * CRITICAL role rule (docs/08 §1/§7, D14): restricted folders (e.g. Transcripts)
  * are OMITTED entirely for roles not in `allowedRoles` — the caller filters them
@@ -60,9 +59,13 @@ export interface FolderTreeProps {
   readonly actions?: FolderNodeActions;
 }
 
-/** Branches start open unless they're a global client node (kept tidy by default). */
-function defaultOpen(node: TreeNode): boolean {
-  return node.icon !== 'client';
+/**
+ * Every branch starts CLOSED — the user opens what they want. The selection path is
+ * still auto-expanded (the effect below), so the initial selection (the tree root)
+ * stays visible without expanding the whole tree.
+ */
+function defaultOpen(_node: TreeNode): boolean {
+  return false;
 }
 
 export function FolderTree({
@@ -212,17 +215,21 @@ function FolderRow({
 }): React.JSX.Element {
   const Icon = node.icon === 'folder' && (isSelected || open) ? FolderOpen : ICONS[node.icon];
   const iconColor = node.isRestricted ? 'var(--color-red-600)' : 'var(--text-secondary)';
-  const rowClass = 'flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left';
+  // `min-w-0` lets the flex row shrink below its content so the label can truncate
+  // instead of overflowing the fixed-width tree column into the file area.
+  const rowClass = 'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left';
 
   const label = (
     <>
-      <Icon aria-hidden="true" size={16} style={{ color: iconColor }} />
-      <span className="truncate">{node.label}</span>
+      <Icon aria-hidden="true" size={16} style={{ color: iconColor, flexShrink: 0 }} />
+      <span className="min-w-0 flex-1 truncate" title={node.label}>
+        {node.label}
+      </span>
       {node.showLock ? (
         <Lock
           aria-label="Restricted folder"
           size={12}
-          style={{ color: 'var(--color-red-600)', marginLeft: 'auto' }}
+          style={{ color: 'var(--color-red-600)', flexShrink: 0 }}
         />
       ) : null}
     </>

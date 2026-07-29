@@ -30,6 +30,10 @@ export interface FileListProps {
   /** Global view adds a Client column; `clientName` resolves ids to names. */
   readonly showClient?: boolean;
   readonly clientName?: (clientId: string | null) => string;
+  /** Select a file → open it in the preview pane (shared by list & grid views). */
+  readonly onSelect?: (doc: Document) => void;
+  /** The currently-previewed file id, for the selected-row highlight. */
+  readonly selectedId?: string | null;
   /** Editor-only: open the move/refile flow for a document. */
   readonly onMove?: (doc: Document) => void;
   readonly onRename?: (doc: Document) => void;
@@ -43,7 +47,8 @@ interface PresignResponse {
   readonly url: string;
 }
 
-async function downloadDocument(doc: Document): Promise<void> {
+/** Presign + open a document for download (shared by the list, grid and preview). */
+export async function downloadDocument(doc: Document): Promise<void> {
   const { url } = await apiClient.get<PresignResponse>(
     `/api/files/url?key=${encodeURIComponent(doc.r2Key)}&action=get`,
   );
@@ -55,6 +60,8 @@ export function FileList({
   canEdit,
   showClient = false,
   clientName,
+  onSelect,
+  selectedId,
   onMove,
   onRename,
   onPermissions,
@@ -92,7 +99,24 @@ export function FileList({
             <TRow key={doc.id}>
               <TCell>
                 <span className="flex items-center gap-1.5">
-                  <span style={TYPE.bodyStrong}>{doc.fileName}</span>
+                  {onSelect !== undefined ? (
+                    <button
+                      type="button"
+                      onClick={(): void => onSelect(doc)}
+                      className="truncate rounded text-left hover:underline"
+                      title={doc.fileName}
+                      style={{
+                        ...TYPE.bodyStrong,
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        color: selectedId === doc.id ? 'var(--color-blue-700)' : 'var(--text-primary)',
+                      }}
+                    >
+                      {doc.fileName}
+                    </button>
+                  ) : (
+                    <span style={TYPE.bodyStrong}>{doc.fileName}</span>
+                  )}
                   {doc.visibility === 'restricted' ? (
                     <Shield
                       aria-label="Custom permissions"
@@ -175,7 +199,7 @@ export function FileList({
   );
 }
 
-function FileAction({
+export function FileAction({
   label,
   icon,
   onClick,
