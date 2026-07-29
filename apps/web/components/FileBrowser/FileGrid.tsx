@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, File, FileText, MoveRight, Pencil, Shield, Trash2 } from 'lucide-react';
+import { Download, File, FileText, Folder, MoveRight, Pencil, Shield, Trash2 } from 'lucide-react';
 import type { Document } from '@gracie/shared';
 
 import { apiClient } from '@/lib/api-client';
@@ -12,11 +12,28 @@ import { EmptyState } from '@/components/ui/StateViews';
 import { fileKind } from '@/components/FileBrowser/file-kind';
 import { downloadDocument, FileAction, type FileListProps } from '@/components/FileBrowser/FileList';
 
+/** A drill-in folder/org tile shown in grid view (Explorer-style, folders first). */
+export interface GridFolder {
+  readonly key: string;
+  readonly label: string;
+}
+
+export interface FileGridProps extends FileListProps {
+  /** Child folders/orgs of the current node, rendered before the files. */
+  readonly folders?: readonly GridFolder[];
+  /** Navigate INTO a folder card (single click). */
+  readonly onOpenFolder?: (key: string) => void;
+}
+
 /**
  * FileGrid — the card/grid alternate of {@link FileList} (Dropbox/Drive-style). Same
  * data, same actions, same select-to-preview; only the layout differs. Images show a
  * thumbnail from a presigned URL; other types show a type icon. The list ⇄ grid choice
  * (and its localStorage persistence) live in the parent DriveBrowser.
+ *
+ * Grid view is tree-less (Windows Explorer): the current folder's child folders are
+ * rendered as drill-in cards before the files, so the user navigates by clicking cards
+ * and walks back up via the breadcrumb.
  */
 export function FileGrid({
   documents,
@@ -30,12 +47,14 @@ export function FileGrid({
   onPermissions,
   canDelete,
   onDelete,
-}: FileListProps): React.JSX.Element {
-  if (documents.length === 0) {
+  folders = [],
+  onOpenFolder,
+}: FileGridProps): React.JSX.Element {
+  if (folders.length === 0 && documents.length === 0) {
     return (
       <EmptyState
-        title="No files here"
-        description="This folder has no documents yet. Generated and uploaded files will appear here."
+        title="Nothing here"
+        description="This folder is empty. Generated and uploaded files will appear here."
       />
     );
   }
@@ -45,6 +64,29 @@ export function FileGrid({
   return (
     <div className="@container">
       <div className="grid grid-cols-2 gap-3 @md:grid-cols-3 @2xl:grid-cols-4">
+        {folders.map((folder) => (
+          <button
+            key={folder.key}
+            type="button"
+            onClick={onOpenFolder !== undefined ? (): void => onOpenFolder(folder.key) : undefined}
+            title={folder.label}
+            className="flex flex-col items-stretch gap-2 rounded-lg border bg-white p-3 text-left"
+            style={{
+              borderColor: 'var(--border-subtle)',
+              cursor: onOpenFolder !== undefined ? 'pointer' : 'default',
+            }}
+          >
+            <span
+              className="flex h-24 items-center justify-center rounded-md"
+              style={{ backgroundColor: 'var(--color-slate-100)' }}
+            >
+              <Folder aria-hidden="true" size={28} style={{ color: 'var(--color-blue-600)' }} />
+            </span>
+            <span className="min-w-0 truncate" style={TYPE.bodyStrong}>
+              {folder.label}
+            </span>
+          </button>
+        ))}
         {documents.map((doc) => {
         const source = sourceBadge(doc.sourceBadge);
         const selected = selectedId === doc.id;

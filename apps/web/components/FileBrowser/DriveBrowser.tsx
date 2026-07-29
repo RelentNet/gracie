@@ -346,6 +346,16 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
       .map((node) => ({ label: node.label, onClick: (): void => setSelectedKey(node.key) }));
   }, [nodes, selectedKey, isGlobal]);
 
+  // In GRID view the left tree is hidden, so the grid itself carries navigation:
+  // the current node's child folders/orgs become Explorer-style drill-in cards.
+  // Derived from the SAME tree the list view uses — no extra fetch. `href` nodes
+  // (Knowledge Base) are nav links, not drillable folders, so they're excluded.
+  const childFolderNodes = useMemo<readonly TreeNode[]>(() => {
+    const chain = findNodePath(nodes, selectedKey);
+    const current = chain[chain.length - 1];
+    return (current?.children ?? []).filter((node) => node.href === undefined);
+  }, [nodes, selectedKey]);
+
   // Client context for the header actions (the selected client, if any).
   const selectedFolder = foldersById.get(selectedKey) ?? null;
   const activeClientId = useMemo<string | null>(() => {
@@ -483,21 +493,29 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
         ) : null}
       </header>
 
-      <div className="grid grid-cols-1 gap-0 lg:min-h-0 lg:flex-1 lg:grid-rows-1 lg:grid-cols-[16rem_minmax(0,1fr)_minmax(0,1.5fr)]">
-        <aside
-          className="border-b p-3 lg:border-b-0 lg:border-r lg:min-h-0 lg:overflow-y-auto"
-          style={{ borderColor: 'var(--border-subtle)' }}
-        >
-          <p className="mb-2 px-2" style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-            Folders
-          </p>
-          <FolderTree
-            nodes={nodes}
-            selectedKey={selectedKey}
-            onSelect={setSelectedKey}
-            actions={folderActions}
-          />
-        </aside>
+      <div
+        className={`grid grid-cols-1 gap-0 lg:min-h-0 lg:flex-1 lg:grid-rows-1 ${
+          view === 'grid'
+            ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]'
+            : 'lg:grid-cols-[16rem_minmax(0,1fr)_minmax(0,1.5fr)]'
+        }`}
+      >
+        {view === 'grid' ? null : (
+          <aside
+            className="border-b p-3 lg:border-b-0 lg:border-r lg:min-h-0 lg:overflow-y-auto"
+            style={{ borderColor: 'var(--border-subtle)' }}
+          >
+            <p className="mb-2 px-2" style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+              Folders
+            </p>
+            <FolderTree
+              nodes={nodes}
+              selectedKey={selectedKey}
+              onSelect={setSelectedKey}
+              actions={folderActions}
+            />
+          </aside>
+        )}
         <div
           className="min-w-0 border-b p-4 lg:border-b-0 lg:border-r lg:min-h-0 lg:overflow-y-auto"
           style={{ borderColor: 'var(--border-subtle)' }}
@@ -521,7 +539,15 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
                 </span>
                 <ViewToggle value={view} onChange={changeView} />
               </div>
-              {view === 'grid' ? <FileGrid {...fileViewProps} /> : <FileList {...fileViewProps} />}
+              {view === 'grid' ? (
+                <FileGrid
+                  {...fileViewProps}
+                  folders={childFolderNodes}
+                  onOpenFolder={setSelectedKey}
+                />
+              ) : (
+                <FileList {...fileViewProps} />
+              )}
             </div>
           )}
         </div>
