@@ -18,6 +18,7 @@
  * wrapper) extracts the same text reliably under tsx, so it is used here in
  * pdf-parse's place. Swap back if D8 is ever revisited with a tsx-safe pdf-parse.
  */
+import ExcelJS, { type CellValue } from 'exceljs';
 import mammoth from 'mammoth';
 import Papa from 'papaparse';
 import { extractText as extractPdfText, getDocumentProxy } from 'unpdf';
@@ -80,4 +81,79 @@ export async function extractText(
   }
 
   return { text: '', unsupported: true };
+}
+
+// ---------------------------------------------------------------------------
+// Inline-preview converters (used by the WEB file-preview content route). These
+// return render-ready shapes (sanitized HTML / value rows) instead of the flat
+// text `extractText` produces, so the preview pane can show a formatted doc or a
+// real table. Backend-only, like the rest of this module — the heavy parsers
+// never reach the browser bundle.
+// ---------------------------------------------------------------------------
+
+/**
+ * Strip anything script-like from HTML so the result is safe to render with
+ * `dangerouslySetInnerHTML`: `<script>`/`<style>` blocks (incl. content), any
+ * `on*=` event-handler attribute, and `javascript:` URLs on `href`/`src`.
+ *
+ * ponytail: regex strip, tuned for mammoth's known-clean output (it already emits
+ * no scripts/handlers) as defense-in-depth. Swap for `sanitize-html`/DOMPurify if
+ * this is ever pointed at genuinely untrusted HTML.
+ */
+export function sanitizePreviewHtml(html: string): string {
+  return html
+    .replace(/<\s*(script|style)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+    .replace(/<\s*(script|style)\b[^>]*\/?>/gi, '')
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
+    .replace(/\b(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, '$1="#"');
+}
+
+/** DOCX bytes → sanitized HTML for inline preview (formatting preserved). */
+export async function docxToPreviewHtml(buffer: Buffer): Promise<string> {
+  const { value } = await mammoth.convertToHtml({ buffer });
+  return sanitizePreviewHtml(value);
+}
+
+/** Stringify one exceljs cell for a preview table (values only, no formatting). */
+function cellToString(value: CellValue): string {
+  if (value === null || value === undefined) return '';
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === 'object') {
+    if ('richText' in value) return value.richText.map((part) => part.text).join('');
+    if ('hyperlink' in value) return value.text;
+    if ('error' in value) return value.error;
+    if ('result' in value && value.result !== undefined) return cellToString(value.result);
+    if ('formula' in value || 'sharedFormula' in value) return '';
+    return '';
+  }
+  return String(value);
+}
+
+/**
+ * XLSX bytes → the first worksheet as value rows (same `string[][]` shape as CSV,
+ * so the client reuses one table renderer). Rows are padded to equal width; the
+ * lib's HTML output is never used.
+ */
+export async function xlsxToRows(buffer: Buffer): Promise<string[][]> {
+  const workbook = new ExcelJS.Workbook();
+  // exceljs bundles an older @types/node whose `Buffer` (Buffer<ArrayBuffer>) is
+  // narrower than Node 24's Buffer<ArrayBufferLike>; the bytes are identical.
+  await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+  const sheet = workbook.worksheets[0];
+  if (sheet === undefined) return [];
+
+  const rows: string[][] = [];
+  let width = 0;
+  sheet.eachRow({ includeEmpty: false }, (row) => {
+    const cells: string[] = [];
+    row.eachCell({ includeEmpty: true }, (cell) => {
+      cells.push(cellToString(cell.value));
+    });
+    width = Math.max(width, cells.length);
+    rows.push(cells);
+  });
+  for (const row of rows) while (row.length < width) row.push('');
+  return rows;
 }
