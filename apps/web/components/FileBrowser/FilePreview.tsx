@@ -15,15 +15,17 @@ import { downloadDocument } from '@/components/FileBrowser/FileList';
 /**
  * FilePreview — right-hand pane of the file browser. Selecting a file renders it
  * inline here instead of opening a new tab:
- *   - markdown (.md)  → the dependency-free {@link Markdown} renderer
- *   - text (.txt)     → wrapped <pre>
- *   - pdf             → native browser viewer in an <iframe> (presigned URL)
- *   - image           → <img> (presigned URL)
- *   - anything else   → "Preview not available" + Download
+ *   - markdown (.md)    → the dependency-free {@link Markdown} renderer
+ *   - text (.txt)       → wrapped <pre>
+ *   - csv / xlsx        → an HTML <table> (rows parsed/converted server-side)
+ *   - docx              → formatted HTML (converted + sanitized server-side)
+ *   - pdf               → native browser viewer in an <iframe> (presigned URL)
+ *   - image incl. svg   → <img> (presigned URL — SVGs can't run scripts via <img>)
+ *   - anything else     → "Preview not available" + Download
  *
- * CORS: `<iframe>`/`<img>` load the presigned URL cross-origin fine, but reading
- * .md/.txt TEXT needs a same-origin fetch — `/api/files/content` (same access
- * check as the presign route). Download is always available for every type.
+ * CORS: `<iframe>`/`<img>` load the presigned URL cross-origin fine, but text /
+ * table / docx content needs a same-origin fetch — `/api/files/content` (same
+ * access check as the presign route). Download is always available for every type.
  */
 export interface FilePreviewProps {
   readonly document: Document | null;
@@ -31,15 +33,25 @@ export interface FilePreviewProps {
   readonly onClose?: () => void;
 }
 
+/** Tagged union returned by `/api/files/content` (mirrors the route). */
+type PreviewPayload =
+  | { readonly kind: 'text'; readonly text: string }
+  | { readonly kind: 'table'; readonly rows: readonly (readonly string[])[] }
+  | { readonly kind: 'html'; readonly html: string };
+
 interface Loaded {
   readonly text: string | null;
+  readonly rows: readonly (readonly string[])[] | null;
+  readonly html: string | null;
   readonly url: string | null;
 }
+
+const EMPTY: Loaded = { text: null, rows: null, html: null, url: null };
 
 export function FilePreview({ document: doc, onClose }: FilePreviewProps): React.JSX.Element {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState<Loaded>({ text: null, url: null });
+  const [loaded, setLoaded] = useState<Loaded>(EMPTY);
 
   const key = doc?.r2Key ?? null;
   const kind = doc !== null ? fileKind(doc.r2Key) : 'other';
@@ -48,27 +60,33 @@ export function FilePreview({ document: doc, onClose }: FilePreviewProps): React
     if (doc === null || key === null) return;
     let active = true;
     setError(null);
-    setLoaded({ text: null, url: null });
+    setLoaded(EMPTY);
 
-    const needsText = kind === 'markdown' || kind === 'text';
+    // Text / table / docx read their content through the same-origin route;
+    // pdf & images (incl. svg) render straight from a presigned URL.
+    const needsContent =
+      kind === 'markdown' || kind === 'text' || kind === 'csv' || kind === 'docx' || kind === 'xlsx';
     const needsUrl = kind === 'pdf' || kind === 'image';
-    if (!needsText && !needsUrl) {
+    if (!needsContent && !needsUrl) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
     const load = async (): Promise<void> => {
-      if (needsText) {
-        const { text } = await apiClient.get<{ text: string }>(
+      if (needsContent) {
+        const payload = await apiClient.get<PreviewPayload>(
           `/api/files/content?key=${encodeURIComponent(key)}`,
         );
-        if (active) setLoaded({ text, url: null });
+        if (!active) return;
+        if (payload.kind === 'text') setLoaded({ ...EMPTY, text: payload.text });
+        else if (payload.kind === 'table') setLoaded({ ...EMPTY, rows: payload.rows });
+        else setLoaded({ ...EMPTY, html: payload.html });
       } else {
         const { url } = await apiClient.get<{ url: string }>(
           `/api/files/url?key=${encodeURIComponent(key)}&action=get`,
         );
-        if (active) setLoaded({ text: null, url });
+        if (active) setLoaded({ ...EMPTY, url });
       }
     };
     load()
@@ -140,6 +158,12 @@ export function FilePreview({ document: doc, onClose }: FilePreviewProps): React
           >
             {loaded.text}
           </pre>
+        ) : (kind === 'csv' || kind === 'xlsx') && loaded.rows !== null ? (
+          <PreviewTable rows={loaded.rows} />
+        ) : kind === 'docx' && loaded.html !== null ? (
+          // Sanitized server-side in `/api/files/content` (mammoth → strip
+          // scripts/handlers/js: urls), so it is safe to render as HTML here.
+          <div className="docx-preview" dangerouslySetInnerHTML={{ __html: loaded.html }} />
         ) : kind === 'pdf' && loaded.url !== null ? (
           <iframe
             src={loaded.url}
@@ -173,6 +197,60 @@ export function FilePreview({ document: doc, onClose }: FilePreviewProps): React
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+const CELL_STYLE = {
+  border: '1px solid var(--border-subtle)',
+  padding: '0.35rem 0.6rem',
+  textAlign: 'left',
+  verticalAlign: 'top',
+} as const;
+
+/**
+ * Render CSV / XLSX rows as an HTML table. The first row is treated as the header;
+ * body rows are padded to the header width so ragged spreadsheets stay aligned.
+ * Wrapped in an `overflow-x-auto` region so a wide sheet never widens the pane.
+ */
+function PreviewTable({ rows }: { readonly rows: readonly (readonly string[])[] }): React.JSX.Element {
+  if (rows.length === 0) {
+    return (
+      <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+        This file has no rows to preview.
+      </p>
+    );
+  }
+  const header = rows[0] ?? [];
+  const body = rows.slice(1);
+  return (
+    <div className="overflow-x-auto">
+      <table className="border-collapse" style={{ ...TYPE.body, borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            {header.map((cell, i) => (
+              <th
+                key={`h-${i}`}
+                scope="col"
+                style={{ ...CELL_STYLE, fontWeight: 600, whiteSpace: 'nowrap', background: 'var(--surface-muted)' }}
+              >
+                {cell}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {body.map((row, ri) => (
+            <tr key={`r-${ri}`}>
+              {header.map((_, ci) => (
+                <td key={`c-${ri}-${ci}`} style={CELL_STYLE}>
+                  {row[ci] ?? ''}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

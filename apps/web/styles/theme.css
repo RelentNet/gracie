@@ -104,3 +104,70 @@ pre,
   outline: 2px solid var(--color-blue-500);
   outline-offset: 2px;
 }
+
+/*
+ * Inline preview of converted .docx HTML (FilePreview). mammoth emits semantic
+ * HTML but Tailwind's preflight strips heading sizes, list markers and table
+ * borders, so re-assert readable defaults scoped to the preview container. The
+ * HTML is sanitized server-side (`@gracie/shared/extract`) before it reaches here.
+ */
+.docx-preview {
+  color: var(--text-primary);
+  line-height: 1.55;
+}
+.docx-preview > :first-child {
+  margin-top: 0;
+}
+.docx-preview p {
+  margin: 0 0 0.75rem;
+}
+.docx-preview h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.75rem;
+}
+.docx-preview h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 1.1rem 0 0.6rem;
+}
+.docx-preview h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+}
+.docx-preview ul,
+.docx-preview ol {
+  margin: 0 0 0.75rem;
+  padding-left: 1.5rem;
+}
+.docx-preview ul {
+  list-style: disc;
+}
+.docx-preview ol {
+  list-style: decimal;
+}
+.docx-preview li {
+  margin: 0.15rem 0;
+}
+.docx-preview strong {
+  font-weight: 600;
+}
+.docx-preview a {
+  color: var(--color-blue-700);
+  text-decoration: underline;
+}
+.docx-preview img {
+  max-width: 100%;
+  height: auto;
+}
+.docx-preview table {
+  border-collapse: collapse;
+  margin: 0 0 0.75rem;
+}
+.docx-preview th,
+.docx-preview td {
+  border: 1px solid var(--border-subtle);
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+}
