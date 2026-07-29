@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FolderPlus, LayoutGrid, List, Upload } from 'lucide-react';
 import { canRoleSee, isUnderPath, toVisibilityRule } from '@gracie/shared';
 import type { Client, Document, Folder } from '@gracie/shared';
@@ -89,6 +89,22 @@ type ManageTarget =
 /** Recent Documents virtual node size (docs/plan p2fix — last ~20–30 touched). */
 const RECENT_LIMIT = 25;
 
+// Resizable preview-pane bounds (px). The default roughly matches the old 1.5fr share
+// at a typical desktop width; the clamp keeps the preview readable and the file area
+// from collapsing (the tree column is only reserved in list view).
+const DEFAULT_PREVIEW_WIDTH = 480;
+const MIN_PREVIEW_WIDTH = 280;
+const MIN_FILE_AREA_WIDTH = 300;
+const TREE_COLUMN_WIDTH = 256; // 16rem
+const HANDLE_WIDTH = 6;
+
+/** Clamp a requested preview width so neither side collapses (docs/plan resize brief). */
+function clampPreviewWidth(raw: number, containerWidth: number, listView: boolean): number {
+  const reserved = (listView ? TREE_COLUMN_WIDTH : 0) + HANDLE_WIDTH + MIN_FILE_AREA_WIDTH;
+  const max = Math.max(MIN_PREVIEW_WIDTH, Math.min(containerWidth * 0.7, containerWidth - reserved));
+  return Math.round(Math.min(Math.max(raw, MIN_PREVIEW_WIDTH), max));
+}
+
 export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
   const { user, hasRole, canEdit, can } = useAuth();
   const isAdmin = hasRole('admin');
@@ -118,6 +134,13 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
   // List ⇄ grid view for the file panel, persisted in localStorage (SSR-safe: render
   // starts from the 'list' default; the saved choice is applied after mount).
   const [view, setView] = useState<'list' | 'grid'>('list');
+  // Draggable preview-pane width (px), fed to the grid's last column via a CSS var
+  // and persisted like the view pref. SSR-safe: starts from the default, saved value
+  // applied after mount. Both list and grid views share this (same preview column).
+  const [previewWidth, setPreviewWidth] = useState(DEFAULT_PREVIEW_WIDTH);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const widthRef = useRef(DEFAULT_PREVIEW_WIDTH);
 
   const refresh = useCallback((): void => setRefreshNonce((n) => n + 1), []);
 
@@ -125,6 +148,11 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
     try {
       const saved = window.localStorage.getItem('documents:view');
       if (saved === 'grid' || saved === 'list') setView(saved);
+      const savedWidth = Number(window.localStorage.getItem('documents:previewWidth'));
+      if (Number.isFinite(savedWidth) && savedWidth > 0) {
+        widthRef.current = savedWidth;
+        setPreviewWidth(savedWidth);
+      }
     } catch {
       // localStorage unavailable (private mode) — keep the default.
     }
@@ -138,6 +166,67 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
       // best-effort persistence only.
     }
   }, []);
+
+  // Apply + remember the preview width. Clamps against the live grid width so neither
+  // the preview nor the file area can collapse; persists on drag-end / key press only.
+  const applyPreviewWidth = useCallback(
+    (raw: number, persist: boolean): void => {
+      const containerWidth = gridRef.current?.getBoundingClientRect().width ?? raw;
+      const next = clampPreviewWidth(raw, containerWidth, view === 'list');
+      widthRef.current = next;
+      setPreviewWidth(next);
+      if (persist) {
+        try {
+          window.localStorage.setItem('documents:previewWidth', String(next));
+        } catch {
+          // best-effort persistence only.
+        }
+      }
+    },
+    [view],
+  );
+
+  // Pointer-events drag (with pointer capture) so the divider keeps tracking even if
+  // the cursor leaves the thin handle mid-drag. Desktop-only: the handle isn't rendered
+  // below lg, where the preview is a full-screen drawer instead of a side column.
+  const onHandlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>): void => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    draggingRef.current = true;
+  }, []);
+
+  const onHandlePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>): void => {
+      if (!draggingRef.current || gridRef.current === null) return;
+      // Preview width = distance from the pointer to the grid's right edge.
+      applyPreviewWidth(gridRef.current.getBoundingClientRect().right - e.clientX, false);
+    },
+    [applyPreviewWidth],
+  );
+
+  const onHandlePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>): void => {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      applyPreviewWidth(widthRef.current, true);
+    },
+    [applyPreviewWidth],
+  );
+
+  // Keyboard resize (nice-to-have for the separator role): arrows nudge, Home/End jump.
+  const onHandleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>): void => {
+      const step = e.shiftKey ? 64 : 16;
+      if (e.key === 'ArrowLeft') applyPreviewWidth(widthRef.current + step, true);
+      else if (e.key === 'ArrowRight') applyPreviewWidth(widthRef.current - step, true);
+      else if (e.key === 'Home') applyPreviewWidth(Number.MAX_SAFE_INTEGER, true);
+      else if (e.key === 'End') applyPreviewWidth(0, true);
+      else return;
+      e.preventDefault();
+    },
+    [applyPreviewWidth],
+  );
 
   // Changing the folder selection closes the preview (the file may not exist there).
   useEffect(() => {
@@ -493,11 +582,15 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
         ) : null}
       </header>
 
+      {/* `--preview-w` drives the last (preview) column; the 6px column before it is
+          the drag handle. Below lg the whole thing collapses to a single column. */}
       <div
+        ref={gridRef}
+        style={{ '--preview-w': `${previewWidth}px` } as React.CSSProperties}
         className={`grid grid-cols-1 gap-0 lg:min-h-0 lg:flex-1 lg:grid-rows-1 ${
           view === 'grid'
-            ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]'
-            : 'lg:grid-cols-[16rem_minmax(0,1fr)_minmax(0,1.5fr)]'
+            ? 'lg:grid-cols-[minmax(0,1fr)_6px_var(--preview-w)]'
+            : 'lg:grid-cols-[16rem_minmax(0,1fr)_6px_var(--preview-w)]'
         }`}
       >
         {view === 'grid' ? null : (
@@ -550,6 +643,25 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
               )}
             </div>
           )}
+        </div>
+        {/* Drag handle between the file area and the preview (lg only — below lg the
+            preview is a drawer, so there's no divider to drag). Pointer capture keeps
+            the drag alive off the 6px hit-area; keyboard arrows resize too. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize preview pane"
+          aria-valuemin={MIN_PREVIEW_WIDTH}
+          aria-valuenow={Math.round(previewWidth)}
+          tabIndex={0}
+          onPointerDown={onHandlePointerDown}
+          onPointerMove={onHandlePointerMove}
+          onPointerUp={onHandlePointerUp}
+          onKeyDown={onHandleKeyDown}
+          className="group hidden touch-none select-none lg:block lg:min-h-0 lg:cursor-col-resize"
+          style={{ backgroundColor: 'var(--border-subtle)' }}
+        >
+          <div className="h-full w-full transition-colors group-hover:bg-[var(--color-blue-400)] group-focus-visible:bg-[var(--color-blue-500)] group-active:bg-[var(--color-blue-500)]" />
         </div>
         {/* Preview: inline third column on lg; a full-screen drawer on mobile when a
             file is selected, and hidden on mobile otherwise. */}
