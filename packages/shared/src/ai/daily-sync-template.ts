@@ -17,6 +17,8 @@ export type DailySyncShortcode =
   | 'sync_date'
   | 'yesterday_activity'
   | 'todays_meetings'
+  | 'tomorrows_meetings'
+  | 'team_out'
   | 'at_risk_clients'
   | 'pre_meeting_briefs'
   | 'last_week_todos'
@@ -42,6 +44,8 @@ export const DAILY_SYNC_SHORTCODES: readonly DailySyncShortcodeSpec[] = [
   { code: 'sync_date', label: 'Date', description: 'Long date, e.g. "Friday, July 10, 2026".', kind: 'inline' },
   { code: 'yesterday_activity', label: "Yesterday's activity", description: 'Meetings/documents/tasks rollup.', kind: 'block' },
   { code: 'todays_meetings', label: "Today's meetings", description: "The day's schedule.", kind: 'block' },
+  { code: 'tomorrows_meetings', label: "Tomorrow's meetings", description: "The next day's schedule (so nothing's a surprise).", kind: 'block' },
+  { code: 'team_out', label: 'Who is out today', description: 'Team members out / traveling (from calendar out-of-office). Needs the OOO feed.', kind: 'block' },
   { code: 'at_risk_clients', label: 'Clients to watch', description: 'At-risk clients by health score.', kind: 'block' },
   { code: 'pre_meeting_briefs', label: 'Pre-meeting briefs', description: 'The deterministic per-meeting briefs.', kind: 'block' },
   { code: 'last_week_todos', label: "Last week's to-dos", description: 'Open tasks from the last 7 days.', kind: 'block' },
