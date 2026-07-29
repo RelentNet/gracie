@@ -25,7 +25,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { buildMeetingStorageKeys } from './generate.processor.js';
+import { stripReproducedScaffold } from '../lib/generate.js';
+import { buildDigest, buildMeetingStorageKeys } from './generate.processor.js';
 
 const SLUG = 'grace-associates';
 // Two distinct "clean GOID" series keys (shape mirrors migration 0011 output).
@@ -206,4 +207,65 @@ test('title fallbacks: null title + null series → `untitled` group slug + `Mee
   assert.equal(k.groupFolderPath, `clients/${SLUG}/generated/untitled`);
   assert.equal(k.groupDisplayName, 'Meeting');
   assert.equal(k.occurrenceFolderPath, `clients/${SLUG}/generated/untitled/20260716-1030-dddddddd`);
+});
+
+/*
+ * Reproduced-scaffold stripping (fix/master-record-summary). Editable prompts (#60)
+ * lead with a `# ... Prompt Template` heading + a fenced YAML metadata block; the
+ * model copied that verbatim to the top of the generated doc, so the doc AND the
+ * master-record digest derived from it began with a raw YAML dump. These pin that a
+ * reproduced leading scaffold is removed while genuine content is left untouched.
+ */
+
+// Mirrors the real bad output: reproduced template front-matter, then the real body.
+const REPRODUCED_ANALYSIS = [
+  '# GA Prompt Template: Post-Meeting Analysis & Action Plan',
+  '',
+  '```yaml',
+  'template_id: post_meeting_analysis',
+  'output_filename: post_meeting_analysis.md',
+  'audience: internal (GA team)',
+  'run_order: 1',
+  '```',
+  '',
+  '# Meeting Analysis & Action Plan',
+  '',
+  '## BLUF',
+  'The team agreed to pursue the Leap Metrics pilot; Joe to schedule the intro by 8/4.',
+].join('\n');
+
+test('stripReproducedScaffold: removes a reproduced heading + YAML front-matter block', () => {
+  const out = stripReproducedScaffold(REPRODUCED_ANALYSIS);
+  assert.ok(out.startsWith('# Meeting Analysis & Action Plan'), 'body must start at real content');
+  assert.ok(!out.includes('```yaml'), 'the fenced yaml block must be gone');
+  assert.ok(!out.includes('template_id:'), 'the metadata must be gone');
+});
+
+test('buildDigest on a scaffold-stripped analysis is readable prose, not a YAML dump', () => {
+  const digest = buildDigest(stripReproducedScaffold(REPRODUCED_ANALYSIS));
+  assert.ok(digest.startsWith('Meeting Analysis & Action Plan'), 'digest reads as prose');
+  assert.ok(!digest.includes('```yaml') && !digest.includes('template_id:'), 'no scaffold leaked');
+  // Regression: the shipped bug stored exactly this raw-YAML head.
+  assert.ok(!digest.startsWith('```yaml template_id'), 'must not be the raw template dump');
+});
+
+test('stripReproducedScaffold: strips a metadata fence even with no leading heading', () => {
+  const raw = ['```yaml', 'template_id: internal_memo', '```', '', 'Real memo body here.'].join('\n');
+  assert.equal(stripReproducedScaffold(raw), 'Real memo body here.');
+});
+
+test('stripReproducedScaffold: leaves genuine content untouched (no scaffold)', () => {
+  const clean = '# Internal Post-Meeting Analysis\n\n## BLUF\nWe agreed to ship on Friday.';
+  assert.equal(stripReproducedScaffold(clean), clean);
+});
+
+test('stripReproducedScaffold: preserves a YAML block that follows real prose', () => {
+  const doc = '# Analysis\n\nThe config discussed was:\n\n```yaml\nkey: value\n```\n';
+  assert.equal(stripReproducedScaffold(doc), doc);
+});
+
+test('stripReproducedScaffold: leaves a JSON checklist and a non-metadata leading fence alone', () => {
+  assert.equal(stripReproducedScaffold('{"tasks":[]}'), '{"tasks":[]}');
+  const jsonFence = '```json\n{"a":1}\n```\n\nrest';
+  assert.equal(stripReproducedScaffold(jsonFence), jsonFence);
 });

@@ -441,7 +441,7 @@ function parseDueDate(hint: string | null): string | null {
 }
 
 /** Short master-record digest from a generated doc (strip [VERIFY] wrappers, clamp). */
-function buildDigest(content: string): string {
+export function buildDigest(content: string): string {
   const cleaned = content
     .replace(/\[VERIFY:\s*([^\]]*)\]/g, '$1')
     .replace(/^#+\s*/gm, '')
