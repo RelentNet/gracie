@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FolderPlus, Upload } from 'lucide-react';
+import { FolderPlus, LayoutGrid, List, Upload } from 'lucide-react';
 import { canRoleSee, isUnderPath, toVisibilityRule } from '@gracie/shared';
 import type { Client, Document, Folder } from '@gracie/shared';
 
@@ -15,7 +15,9 @@ import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import type { Crumb } from '@/components/ui/Breadcrumb';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { FolderTree } from '@/components/FileBrowser/FolderTree';
-import { FileList } from '@/components/FileBrowser/FileList';
+import { FileList, type FileListProps } from '@/components/FileBrowser/FileList';
+import { FileGrid } from '@/components/FileBrowser/FileGrid';
+import { FilePreview } from '@/components/FileBrowser/FilePreview';
 import { UploadModal } from '@/components/FileBrowser/UploadModal';
 import { NewFolderModal } from '@/components/FileBrowser/NewFolderModal';
 import { MoveModal } from '@/components/FileBrowser/MoveModal';
@@ -111,8 +113,36 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
   const [permissionsTarget, setPermissionsTarget] = useState<ManageTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ManageTarget | null>(null);
   const [trash, setTrash] = useState<TrashResponse | null>(null);
+  // The file open in the right-hand preview pane (null = placeholder / closed drawer).
+  const [selectedFile, setSelectedFile] = useState<Document | null>(null);
+  // List ⇄ grid view for the file panel, persisted in localStorage (SSR-safe: render
+  // starts from the 'list' default; the saved choice is applied after mount).
+  const [view, setView] = useState<'list' | 'grid'>('list');
 
   const refresh = useCallback((): void => setRefreshNonce((n) => n + 1), []);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('documents:view');
+      if (saved === 'grid' || saved === 'list') setView(saved);
+    } catch {
+      // localStorage unavailable (private mode) — keep the default.
+    }
+  }, []);
+
+  const changeView = useCallback((next: 'list' | 'grid'): void => {
+    setView(next);
+    try {
+      window.localStorage.setItem('documents:view', next);
+    } catch {
+      // best-effort persistence only.
+    }
+  }, []);
+
+  // Changing the folder selection closes the preview (the file may not exist there).
+  useEffect(() => {
+    setSelectedFile(null);
+  }, [selectedKey]);
 
   useEffect(() => {
     let active = true;
@@ -299,6 +329,13 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
     return visibleDocuments.filter((doc) => doc.folderId === selectedKey);
   }, [visibleDocuments, selectedKey]);
 
+  // Close the preview if its file is gone (deleted, moved away, or filtered out).
+  useEffect(() => {
+    if (selectedFile !== null && !documents.some((doc) => doc.id === selectedFile.id)) {
+      setSelectedFile(null);
+    }
+  }, [documents, selectedFile]);
+
   const breadcrumbItems = useMemo<readonly Crumb[]>(() => {
     const chain = findNodePath(nodes, selectedKey);
     if (chain.length === 0) {
@@ -395,8 +432,28 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
 
   const clientOptions = clients.map((c) => ({ id: c.id, name: c.name }));
 
+  // One set of props for BOTH the list and grid renderers — same data, same actions,
+  // same select-to-preview. The two views are just alternate layouts of this.
+  const fileViewProps: FileListProps = {
+    documents,
+    canEdit: editable,
+    showClient: isGlobal,
+    clientName,
+    onSelect: setSelectedFile,
+    selectedId: selectedFile?.id ?? null,
+    onMove: editable ? (doc): void => setMoveDoc(doc) : undefined,
+    onRename: editable ? (doc): void => setRenameTarget({ kind: 'file', document: doc }) : undefined,
+    onPermissions: editable
+      ? (doc): void => setPermissionsTarget({ kind: 'file', document: doc })
+      : undefined,
+    canDelete: editable ? canDeleteDocument : undefined,
+    onDelete: editable ? (doc): void => setDeleteTarget({ kind: 'file', document: doc }) : undefined,
+  };
+
   return (
-    <Card className="p-0">
+    // Fills the page (width + height). On lg the three panes each scroll
+    // independently; on mobile it falls back to natural flow (the app shell scrolls).
+    <Card className="flex flex-col p-0 lg:h-full lg:min-h-0">
       <header
         className="flex flex-wrap items-center justify-between gap-3 border-b p-4"
         style={{ borderColor: 'var(--border-subtle)' }}
@@ -426,9 +483,9 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
         ) : null}
       </header>
 
-      <div className="grid grid-cols-1 gap-0 lg:grid-cols-[16rem_1fr]">
+      <div className="grid grid-cols-1 gap-0 lg:min-h-0 lg:flex-1 lg:grid-rows-1 lg:grid-cols-[16rem_minmax(0,1fr)_minmax(0,1.5fr)]">
         <aside
-          className="border-b p-3 lg:border-b-0 lg:border-r"
+          className="border-b p-3 lg:border-b-0 lg:border-r lg:min-h-0 lg:overflow-y-auto"
           style={{ borderColor: 'var(--border-subtle)' }}
         >
           <p className="mb-2 px-2" style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
@@ -441,7 +498,10 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
             actions={folderActions}
           />
         </aside>
-        <div className="min-w-0 p-4">
+        <div
+          className="min-w-0 border-b p-4 lg:border-b-0 lg:border-r lg:min-h-0 lg:overflow-y-auto"
+          style={{ borderColor: 'var(--border-subtle)' }}
+        >
           {selectedKey === TRASH_KEY ? (
             trash === null ? (
               <LoadingState label="Loading recycle bin…" />
@@ -454,27 +514,26 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
               />
             )
           ) : (
-            <FileList
-              documents={documents}
-              canEdit={editable}
-              showClient={isGlobal}
-              clientName={clientName}
-              onMove={editable ? (doc): void => setMoveDoc(doc) : undefined}
-              onRename={
-                editable ? (doc): void => setRenameTarget({ kind: 'file', document: doc }) : undefined
-              }
-              onPermissions={
-                editable
-                  ? (doc): void => setPermissionsTarget({ kind: 'file', document: doc })
-                  : undefined
-              }
-              canDelete={editable ? canDeleteDocument : undefined}
-              onDelete={
-                editable ? (doc): void => setDeleteTarget({ kind: 'file', document: doc }) : undefined
-              }
-            />
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-2">
+                <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+                  {documents.length} {documents.length === 1 ? 'file' : 'files'}
+                </span>
+                <ViewToggle value={view} onChange={changeView} />
+              </div>
+              {view === 'grid' ? <FileGrid {...fileViewProps} /> : <FileList {...fileViewProps} />}
+            </div>
           )}
         </div>
+        {/* Preview: inline third column on lg; a full-screen drawer on mobile when a
+            file is selected, and hidden on mobile otherwise. */}
+        <section
+          className={`bg-white lg:static lg:z-auto lg:block lg:min-h-0 lg:overflow-hidden ${
+            selectedFile !== null ? 'fixed inset-0 z-40 overflow-hidden' : 'hidden'
+          }`}
+        >
+          <FilePreview document={selectedFile} onClose={(): void => setSelectedFile(null)} />
+        </section>
       </div>
 
       {/* Modals are mounted only while open so each opening re-initializes its
@@ -610,6 +669,50 @@ function inheritedAccess(
     name: folder.displayName,
     summary: describeAccess(folder.visibility, folder.allowedRoles),
   };
+}
+
+/** Segmented list ⇄ grid toggle for the file panel (Dropbox/Drive-style). */
+function ViewToggle({
+  value,
+  onChange,
+}: {
+  readonly value: 'list' | 'grid';
+  readonly onChange: (next: 'list' | 'grid') => void;
+}): React.JSX.Element {
+  return (
+    <div
+      className="inline-flex overflow-hidden rounded-md border"
+      style={{ borderColor: 'var(--border-subtle)' }}
+      role="group"
+      aria-label="File view"
+    >
+      {(
+        [
+          { key: 'list', label: 'List view', Icon: List },
+          { key: 'grid', label: 'Grid view', Icon: LayoutGrid },
+        ] as const
+      ).map(({ key, label, Icon }) => {
+        const active = value === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            aria-label={label}
+            aria-pressed={active}
+            onClick={(): void => onChange(key)}
+            className="flex h-7 w-8 items-center justify-center"
+            style={{
+              backgroundColor: active ? 'var(--color-blue-100)' : 'transparent',
+              color: active ? 'var(--color-blue-700)' : 'var(--text-secondary)',
+              cursor: 'pointer',
+            }}
+          >
+            <Icon size={15} />
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 /** Pre-select the Upload modal's subtype from the currently selected folder. */

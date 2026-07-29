@@ -1,7 +1,6 @@
 'use client';
 
 import { TYPE } from '@/lib/typography';
-import { PageContainer } from '@/components/ui/PageContainer';
 import { DriveBrowser } from '@/components/FileBrowser/DriveBrowser';
 
 /**
@@ -19,14 +18,18 @@ import { DriveBrowser } from '@/components/FileBrowser/DriveBrowser';
  */
 export default function DocumentsPage(): React.JSX.Element {
   return (
-    <PageContainer className="flex flex-col gap-6">
+    // Full width + full height on desktop so the three-pane browser fills the page
+    // instead of sitting in a small centred card; natural flow on mobile.
+    <div className="flex w-full flex-col gap-4 lg:h-full lg:min-h-0">
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Documents</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
           Browse every client’s documents, recent activity, and the knowledge base.
         </p>
       </header>
-      <DriveBrowser scope={{ kind: 'global' }} />
-    </PageContainer>
+      <div className="min-w-0 lg:min-h-0 lg:flex-1">
+        <DriveBrowser scope={{ kind: 'global' }} />
+      </div>
+    </div>
   );
 }
