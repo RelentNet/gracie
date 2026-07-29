@@ -85,6 +85,45 @@ const TASK_CHECKLIST_STRICT_INSTRUCTION = [
   'Markdown code fences. If there are no tasks, return {"tasks":[]}.',
 ].join(' ');
 
+/**
+ * Editable generation prompts (PE, #60) may open with a documentation preamble — a
+ * title heading plus a fenced YAML metadata block (`template_id:`, `output_filename:`,
+ * …) that documents the template rather than instructing the model. The model
+ * sometimes copies that preamble verbatim to the TOP of its output, so the stored
+ * document — and the `master_record_entries` digest derived from it (which briefs +
+ * the occurrence page surface) — begins with a raw YAML dump instead of prose.
+ *
+ * Strip a reproduced leading scaffold: leading blank/heading/`---` lines followed by
+ * a fenced YAML (or `template_id:`-bearing) block, back to the real body. Deliberately
+ * conservative — only a fenced block at the very START, before any prose, and only
+ * when it looks like metadata — so a document that legitimately quotes YAML further
+ * down, or a JSON checklist, is never touched. No-op when there is no such scaffold.
+ */
+export function stripReproducedScaffold(content: string): string {
+  const lines = content.split('\n');
+  let i = 0;
+  // Skip leading blanks, markdown headings, and horizontal rules.
+  while (i < lines.length && /^\s*(#{1,6}\s.*|-{3,}\s*)?$/.test(lines[i] ?? '')) i++;
+  // A scaffold only exists if a fenced block opens here; otherwise leave content as-is.
+  const fenceOpen = /^\s*```\s*([\w-]*)\s*$/.exec(lines[i] ?? '');
+  if (fenceOpen === null) return content;
+  // Collect the fenced block body up to its closing fence.
+  let j = i + 1;
+  const body: string[] = [];
+  while (j < lines.length && !/^\s*```\s*$/.test(lines[j] ?? '')) body.push(lines[j++] ?? '');
+  if (j >= lines.length) return content; // unterminated fence — don't touch it
+  const lang = (fenceOpen[1] ?? '').toLowerCase();
+  const looksLikeMetadata =
+    lang === 'yaml' ||
+    lang === 'yml' ||
+    /^\s*(template_id|output_filename|run_order|audience|review_status)\s*:/m.test(body.join('\n'));
+  if (!looksLikeMetadata) return content;
+  // Drop everything through the closing fence, plus any leading blanks/`---` after it.
+  let k = j + 1;
+  while (k < lines.length && /^\s*(-{3,}\s*)?$/.test(lines[k] ?? '')) k++;
+  return lines.slice(k).join('\n');
+}
+
 /** Generate one document via the provider interface, returning the raw content. */
 async function generateOne(
   input: GenerateDocumentsInput,
@@ -101,7 +140,7 @@ async function generateOne(
     messages,
     responseFormat: spec.responseFormat,
   });
-  return result.content;
+  return stripReproducedScaffold(result.content);
 }
 
 /**
