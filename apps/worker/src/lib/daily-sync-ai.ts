@@ -20,6 +20,7 @@ const FACTS_TEMPLATE = [
   '',
   '{yesterday_activity}',
   '{todays_meetings}',
+  '{tomorrows_meetings}',
   '{at_risk_clients}',
   '{pre_meeting_briefs}',
   '{last_week_todos}',

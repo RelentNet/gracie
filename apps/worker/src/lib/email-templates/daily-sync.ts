@@ -7,9 +7,10 @@
  * The BODY is rendered from an editable template of literal text + `{shortcode}`
  * tokens (`DAILY_SYNC_SHORTCODES`); the fixed HTML shell (`renderEmailLayout`) stays
  * locked here so the email chrome can't be broken from a Settings textarea. Each
- * shortcode maps to an HTML + plain-text renderer below; unknown tokens render
- * literally, a blank template falls back to the default. Deterministic except the
- * optional `{ai_brief}`, which the caller composes (grounded) and passes on `content`.
+ * shortcode maps to an HTML + plain-text renderer below; a lone unknown/not-yet-built
+ * token renders EMPTY (never a literal `{token}`), and a blank template falls back to
+ * the default. Deterministic except the optional `{ai_brief}`, which the caller
+ * composes (grounded) and passes on `content`.
  */
 import {
   DAILY_SYNC_SHORTCODE_CODES,
@@ -73,6 +74,40 @@ function todoLine(t: NonNullable<DailySyncContent['lastWeekTodos']>[number]): st
   return `${t.description}${client}${due}${flag}`;
 }
 
+/**
+ * The link cluster ending each pre-meeting brief card — the "cockpit links out"
+ * principle. History artifacts (Summary / notes / transcript) resolve to the
+ * meeting-occurrence page `/meetings/[id]` (a route contract owned by a parallel
+ * session); the client page is `/clients/[id]`. Absolute URLs off the same app base
+ * the CTA button uses.
+ *
+ * ponytail: the three history labels all point at the meeting page — per-document
+ * deep-links don't exist yet; swap in #summary/#notes/#transcript once the occurrence
+ * page exposes section anchors.
+ */
+function meetingUrl(appUrl: string, meetingId: string): string {
+  return `${appUrl}/meetings/${encodeURIComponent(meetingId)}`;
+}
+
+function briefLinksHtml(appUrl: string, brief: DailySyncContent['briefs'][number]): string {
+  const mtg = meetingUrl(appUrl, brief.meetingId);
+  const link = (label: string, href: string): string =>
+    `<a href="${escapeHtml(href)}" style="color:#2563eb;text-decoration:none;">${escapeHtml(label)}</a>`;
+  const parts = [link('Summary', mtg), link('Last meeting notes', mtg), link('Transcript', mtg)];
+  if (typeof brief.clientId === 'string' && brief.clientId !== '') {
+    parts.push(link('Client page', `${appUrl}/clients/${encodeURIComponent(brief.clientId)}`));
+  }
+  return `<div style="margin:8px 0 0;font-size:12px;color:#6b7280;">${parts.join(' &middot; ')}</div>`;
+}
+
+function briefLinksText(appUrl: string, brief: DailySyncContent['briefs'][number]): string {
+  const lines = [`    Summary / notes / transcript: ${meetingUrl(appUrl, brief.meetingId)}`];
+  if (typeof brief.clientId === 'string' && brief.clientId !== '') {
+    lines.push(`    Client page: ${appUrl}/clients/${encodeURIComponent(brief.clientId)}`);
+  }
+  return lines.join('\n');
+}
+
 /** One shortcode's renderers. `html` returns trusted HTML; `text` returns plain text. */
 interface ShortcodeRenderer {
   readonly html: (content: DailySyncContent, input: DailySyncEmailInput) => string;
@@ -130,35 +165,52 @@ const RENDERERS: Record<DailySyncShortcode, ShortcodeRenderer> = {
         '\n',
       ),
   },
+  tomorrows_meetings: {
+    // Same shape as today's, over the next-day window — so nothing tomorrow is a surprise.
+    html: (c) => {
+      const rows = c.tomorrowMeetings ?? [];
+      return h2("Tomorrow's meetings") + (rows.length > 0 ? ul(rows.map(meetingLine)) : muted('No meetings scheduled tomorrow.'));
+    },
+    text: (c) => {
+      const rows = c.tomorrowMeetings ?? [];
+      return ["Tomorrow's meetings:", ...(rows.length > 0 ? rows.map((m) => `  - ${meetingLine(m)}`) : ['  (none)'])].join('\n');
+    },
+  },
+  team_out: {
+    // Who is out/traveling today, from calendar out-of-office. RENDERS EMPTY: the OOO
+    // feed is not ingested yet (calendar-scan fetches no showAs/type and skips solo OOO
+    // blocks). Registered so a template can reference {team_out} today and light up when
+    // the feed lands — never fabricated. See docs/plan/daily-sync-email-v2.md HONESTY RULE.
+    html: () => '',
+    text: () => '',
+  },
   at_risk_clients: {
-    html: (c) =>
-      h2('Clients to watch') +
-      (c.atRiskClients.length > 0 ? ul(c.atRiskClients.map(atRiskLine)) : muted('No at-risk clients right now.')),
-    text: (c) =>
-      ['Clients to watch:', ...(c.atRiskClients.length > 0 ? c.atRiskClients.map((x) => `  - ${atRiskLine(x)}`) : ['  (none)'])].join(
-        '\n',
-      ),
+    // Empty → render NOTHING (no header, no "(none)"): health scores aren't calibrated
+    // yet, so an empty section is noise. The whole block drops out via the render loop.
+    html: (c) => (c.atRiskClients.length > 0 ? h2('Clients to watch') + ul(c.atRiskClients.map(atRiskLine)) : ''),
+    text: (c) => (c.atRiskClients.length > 0 ? ['Clients to watch:', ...c.atRiskClients.map((x) => `  - ${atRiskLine(x)}`)].join('\n') : ''),
   },
   pre_meeting_briefs: {
-    html: (c) => {
+    html: (c, i) => {
       if (c.briefs.length === 0) return h2('Pre-meeting briefs') + muted('No briefs for today’s meetings.');
       const boxes = c.briefs
         .map((b) => {
           const heading =
             `<div style="font-size:14px;font-weight:700;color:#10233f;margin:0 0 6px;">` +
             `${escapeHtml(b.title)}${b.clientName !== null ? ` · ${escapeHtml(b.clientName)}` : ''}</div>`;
-          return box(heading + preText(b.content));
+          return box(heading + preText(b.content) + briefLinksHtml(i.appUrl, b));
         })
         .join('');
       return h2('Pre-meeting briefs') + boxes;
     },
-    text: (c) =>
+    text: (c, i) =>
       [
         'Pre-meeting briefs:',
         ...(c.briefs.length > 0
           ? c.briefs.flatMap((b) => [
               `  # ${b.title}${b.clientName !== null ? ` · ${b.clientName}` : ''}`,
               ...b.content.split('\n').map((l) => `    ${l}`),
+              briefLinksText(i.appUrl, b),
               '',
             ])
           : ['  (none)']),
@@ -228,10 +280,20 @@ export function renderDailySyncBody(
     const trimmed = rawLine.trim();
     const loneMatch = LONE_TOKEN.exec(trimmed);
     const loneCode = loneMatch?.[1];
-    if (loneCode !== undefined && isShortcode(loneCode) && BLOCK_CODES.has(loneCode)) {
-      const rendered = RENDERERS[loneCode][mode](content, input);
-      if (rendered !== '') out.push(rendered); // an empty block (e.g. AI off) drops out cleanly
-      continue;
+    if (loneCode !== undefined) {
+      // A line that is exactly one `{token}`. A known BLOCK code expands to its
+      // section; a known INLINE code falls through to substitution below. An unknown
+      // or not-yet-built code renders EMPTY (never a literal `{token}`) — so a template
+      // can safely reference a shortcode before its data feed exists.
+      if (isShortcode(loneCode) && BLOCK_CODES.has(loneCode)) {
+        const rendered = RENDERERS[loneCode][mode](content, input);
+        if (rendered !== '') out.push(rendered); // an empty block (AI off, no at-risk) drops out cleanly
+        continue;
+      }
+      if (!(isShortcode(loneCode) && INLINE_CODES.has(loneCode))) {
+        continue; // unknown lone token → render nothing
+      }
+      // known inline lone token → fall through to inline substitution
     }
     if (trimmed === '') {
       if (mode === 'text') out.push(''); // preserve paragraph spacing in plain text

@@ -489,6 +489,8 @@ export function createDailySyncProcessor(logger: FastifyBaseLogger): Processor<D
     const todayStart = easternDayStartUtc(todayEt).toISOString();
     const tomorrowEt = easternDateString(new Date(now.getTime() + 86_400_000));
     const tomorrowStart = easternDayStartUtc(tomorrowEt).toISOString();
+    const dayAfterTomorrowEt = easternDateString(new Date(now.getTime() + 2 * 86_400_000));
+    const dayAfterTomorrowStart = easternDayStartUtc(dayAfterTomorrowEt).toISOString();
     const yesterdayEt = easternDateString(new Date(now.getTime() - 86_400_000));
     const yesterdayStart = easternDayStartUtc(yesterdayEt).toISOString();
 
@@ -499,6 +501,8 @@ export function createDailySyncProcessor(logger: FastifyBaseLogger): Processor<D
 
     const yesterday = await gatherYesterday(db, yesterdayStart, todayStart);
     const todayRows = await gatherTodayMeetings(db, todayStart, tomorrowStart);
+    // Tomorrow's schedule reuses the same query over the next ET day ({tomorrows_meetings}).
+    const tomorrowRows = await gatherTodayMeetings(db, tomorrowStart, dayAfterTomorrowStart);
     const threshold = await getAtRiskHealthThreshold(db);
     const atRiskClients = await gatherAtRisk(db, threshold);
     const weekAgoStart = new Date(now.getTime() - 7 * 86_400_000).toISOString();
@@ -506,7 +510,9 @@ export function createDailySyncProcessor(logger: FastifyBaseLogger): Processor<D
     const templateCfg = await getDailySyncTemplateConfig(db);
     const syncDateLabel = easternDateLabel(todayEt);
 
-    const clientIds = todayRows.map((m) => m.client_id).filter((id): id is string => id !== null);
+    const clientIds = [...todayRows, ...tomorrowRows]
+      .map((m) => m.client_id)
+      .filter((id): id is string => id !== null);
     const clientNames = await loadClientNames(db, clientIds);
 
     // 4. Briefs (external client meetings only — the ones a brief is meaningful for).
@@ -536,13 +542,13 @@ export function createDailySyncProcessor(logger: FastifyBaseLogger): Processor<D
           usersById,
         });
         await upsertBrief(db, m.id, content, nowIso);
-        briefs.push({ meetingId: m.id, title: m.title ?? 'Untitled meeting', clientName, content });
+        briefs.push({ meetingId: m.id, title: m.title ?? 'Untitled meeting', clientName, content, clientId });
         briefMeetingIds.add(m.id);
       }
     }
 
     // 5. Build structured content + persist the daily_syncs row.
-    const todayMeetings: DailySyncMeeting[] = todayRows.map((m) => ({
+    const toMeeting = (m: TodayMeetingRow): DailySyncMeeting => ({
       meetingId: m.id,
       title: m.title ?? 'Untitled meeting',
       timeIso: m.date_time,
@@ -550,14 +556,17 @@ export function createDailySyncProcessor(logger: FastifyBaseLogger): Processor<D
       clientName: m.client_id !== null ? clientNames.get(m.client_id) ?? null : null,
       isInternal: m.is_internal,
       leadName: m.meeting_lead_user_id !== null ? usersById.get(m.meeting_lead_user_id) ?? null : null,
-      hasBrief: briefMeetingIds.has(m.id),
-    }));
+      hasBrief: briefMeetingIds.has(m.id), // tomorrow's meetings have no brief yet → false
+    });
+    const todayMeetings: DailySyncMeeting[] = todayRows.map(toMeeting);
+    const tomorrowMeetings: DailySyncMeeting[] = tomorrowRows.map(toMeeting);
 
     const baseContent: DailySyncContent = {
       version: 1,
       generatedAtIso: nowIso,
       yesterday,
       todayMeetings,
+      tomorrowMeetings,
       atRiskClients,
       briefs,
       lastWeekTodos,

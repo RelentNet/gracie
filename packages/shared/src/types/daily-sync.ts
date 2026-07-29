@@ -44,6 +44,8 @@ export interface DailySyncBrief {
   readonly title: string;
   readonly clientName: string | null;
   readonly content: string;
+  /** Owning client id — powers the email brief card's "Client page" link. Optional so older stored rows read back. */
+  readonly clientId?: string | null;
 }
 
 /** An open to-do carried over from the last 7 days (the `{last_week_todos}` shortcode). */
@@ -65,6 +67,8 @@ export interface DailySyncContent {
   readonly generatedAtIso: string;
   readonly yesterday: DailySyncYesterday;
   readonly todayMeetings: readonly DailySyncMeeting[];
+  /** Tomorrow's schedule (the `{tomorrows_meetings}` shortcode). Optional so older stored rows read back — absent → the section is empty. */
+  readonly tomorrowMeetings?: readonly DailySyncMeeting[];
   readonly atRiskClients: readonly DailySyncAtRiskClient[];
   readonly briefs: readonly DailySyncBrief[];
   /** Open to-dos from the last 7 days (deterministic; the `{last_week_todos}` shortcode). */
