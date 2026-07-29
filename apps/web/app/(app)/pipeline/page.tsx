@@ -34,7 +34,8 @@ export default function PipelinePage(): React.JSX.Element {
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Pipeline</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          Failed and partial generation runs, with a manual re-trigger. Admin-only.
+          Activity across meeting document generation — what worked, what’s running, and what needs
+          attention, with a manual re-run. Admin-only.
         </p>
       </header>
       <PipelineErrorsPanel />

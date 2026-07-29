@@ -1,9 +1,11 @@
 /**
- * Admin-only pipeline error log (P9). Lists failed/partial `pipeline_runs` for the
- * Pipeline admin section.
+ * Admin-only Pipeline activity feed (§3.1). Returns the full fleet view: every
+ * recent run (success / partial / failed / duplicate-skip) UNION the stuck or
+ * in-progress meetings that have no run row (watchdog-flagged `needs_attention`,
+ * bot-dispatched-but-no-transcript). Status filtering happens client-side on this
+ * bounded list.
  *
- *   GET /api/pipeline/runs?status=failed|partial → `{ runs }`
- *     - status omitted → both failed AND partial (the "needs attention" set)
+ *   GET /api/pipeline/runs → `{ runs }`
  *
  * Gated on `pipeline.viewErrors` (admin tier); a non-admin receives 403.
  */
@@ -12,12 +14,12 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { can } from '@gracie/shared';
 
 import { getRequestUser } from '@/lib/api-auth';
-import { listPipelineRunErrors, type PipelineErrorStatus } from '@/lib/data/pipeline';
+import { listPipelineFleet } from '@/lib/data/pipeline';
 
 // @gracie/db (service-role client) is Node-only.
 export const runtime = 'nodejs';
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
+export async function GET(_request: NextRequest): Promise<NextResponse> {
   let user;
   try {
     user = await getRequestUser();
@@ -28,12 +30,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: { code: 'forbidden', message: 'Admin only' } }, { status: 403 });
   }
 
-  const statusParam = request.nextUrl.searchParams.get('status');
-  const statuses: PipelineErrorStatus[] =
-    statusParam === 'failed' ? ['failed'] : statusParam === 'partial' ? ['partial'] : ['failed', 'partial'];
-
   try {
-    return NextResponse.json({ runs: await listPipelineRunErrors(statuses) });
+    return NextResponse.json({ runs: await listPipelineFleet() });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: { code: 'pipeline_runs_read_failed', message } }, { status: 500 });
