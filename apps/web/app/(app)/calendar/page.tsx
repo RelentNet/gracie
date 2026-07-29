@@ -698,7 +698,9 @@ function MeetingCard({
     <div className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-0.5">
-          <span style={TYPE.bodyStrong}>{m.title ?? 'Untitled meeting'}</span>
+          <Link href={`/meetings/${m.id}`} className="w-fit hover:underline" style={TYPE.bodyStrong}>
+            {m.title ?? 'Untitled meeting'}
+          </Link>
           <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>{localTime(m.dateTime)}</span>
         </div>
         <StatusBadge status={toBadgeStatus(m.pipelineStatus)} size="sm" />
