@@ -408,12 +408,16 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         .slice(0, RECENT_LIMIT);
     }
+    // Explorer behavior: a node shows only the files sitting directly at that level;
+    // its subfolders render separately (tree nodes / grid `childFolderNodes` cards).
+    // So the top-level and client roots list only unfiled docs (folderId === null),
+    // not every doc nested somewhere beneath them.
     if (selectedKey === ALL_FILES_KEY || selectedKey === ALL_CLIENTS_KEY) {
-      return visibleDocuments;
+      return visibleDocuments.filter((doc) => doc.folderId === null);
     }
     if (selectedKey.startsWith(CLIENT_KEY_PREFIX)) {
       const clientId = selectedKey.slice(CLIENT_KEY_PREFIX.length);
-      return visibleDocuments.filter((doc) => doc.clientId === clientId);
+      return visibleDocuments.filter((doc) => doc.clientId === clientId && doc.folderId === null);
     }
     return visibleDocuments.filter((doc) => doc.folderId === selectedKey);
   }, [visibleDocuments, selectedKey]);
