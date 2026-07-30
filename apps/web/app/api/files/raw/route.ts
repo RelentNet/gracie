@@ -69,10 +69,11 @@ export async function GET(req: NextRequest): Promise<Response> {
     const headers = new Headers({ 'Content-Type': type });
     if (searchParams.get('download') === '1') {
       const name = searchParams.get('name');
-      headers.set(
-        'Content-Disposition',
-        attachmentDisposition(name !== null && name !== '' ? name : (key.split('/').pop() ?? 'download')),
-      );
+      let filename = name !== null && name !== '' ? name : (key.split('/').pop() ?? 'download');
+      // A title-override fileName (e.g. "Receipt for Supplies") can lack the object's
+      // extension; keep it so the OS still associates the download with an app.
+      if (ext !== '' && !filename.toLowerCase().endsWith(`.${ext}`)) filename += `.${ext}`;
+      headers.set('Content-Disposition', attachmentDisposition(filename));
     }
     return new Response(body, { headers });
   } catch (error) {
