@@ -1,10 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Download, File, FileText, Folder, MoveRight, Pencil, Shield, Trash2 } from 'lucide-react';
 import type { Document } from '@gracie/shared';
 
-import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
 import { formatFileSize, sourceBadge } from '@/lib/client-display';
 import { Badge } from '@/components/ui/Badge';
@@ -181,29 +179,13 @@ export function FileGrid({
 }
 
 /**
- * Card thumbnail: a presigned <img> for images, else a type icon. Image cards each
- * fetch their own presigned URL — fine for typical folders (few/no images); a
- * folder of many images issues one presign per card.
+ * Card thumbnail: an <img> for images (served by the same-origin bytes proxy
+ * `/api/files/raw`, which re-authorizes per request), else a type icon. No presigned
+ * MinIO URL — the browser can't reach the internal endpoint. A broken/denied image
+ * simply shows nothing over the slate background; the icon path covers non-images.
  */
 function Thumbnail({ doc }: { readonly doc: Document }): React.JSX.Element {
   const kind = fileKind(doc.r2Key);
-  const [url, setUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (kind !== 'image') return;
-    let active = true;
-    apiClient
-      .get<{ url: string }>(`/api/files/url?key=${encodeURIComponent(doc.r2Key)}&action=get`)
-      .then(({ url: signed }) => {
-        if (active) setUrl(signed);
-      })
-      .catch(() => {
-        /* fall back to the icon on any error */
-      });
-    return (): void => {
-      active = false;
-    };
-  }, [doc.r2Key, kind]);
 
   const Icon = kind === 'other' ? File : FileText;
   return (
@@ -211,9 +193,13 @@ function Thumbnail({ doc }: { readonly doc: Document }): React.JSX.Element {
       className="flex h-24 items-center justify-center overflow-hidden rounded-md"
       style={{ backgroundColor: 'var(--color-slate-100)' }}
     >
-      {kind === 'image' && url !== null ? (
-        // Presigned MinIO URL, not a static asset — plain <img>, not next/image.
-        <img src={url} alt={doc.fileName} className="h-full w-full object-cover" />
+      {kind === 'image' ? (
+        // Same-origin proxy URL, not a static asset — plain <img>, not next/image.
+        <img
+          src={`/api/files/raw?key=${encodeURIComponent(doc.r2Key)}`}
+          alt={doc.fileName}
+          className="h-full w-full object-cover"
+        />
       ) : (
         <Icon aria-hidden="true" size={28} style={{ color: 'var(--text-secondary)' }} />
       )}

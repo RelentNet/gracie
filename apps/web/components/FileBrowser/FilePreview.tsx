@@ -19,13 +19,14 @@ import { downloadDocument } from '@/components/FileBrowser/FileList';
  *   - text (.txt)       → wrapped <pre>
  *   - csv / xlsx        → an HTML <table> (rows parsed/converted server-side)
  *   - docx              → formatted HTML (converted + sanitized server-side)
- *   - pdf               → native browser viewer in an <iframe> (presigned URL)
- *   - image incl. svg   → <img> (presigned URL — SVGs can't run scripts via <img>)
+ *   - pdf               → native browser viewer in an <iframe> (/api/files/raw)
+ *   - image incl. svg   → <img> (/api/files/raw — SVGs can't run scripts via <img>)
  *   - anything else     → "Preview not available" + Download
  *
- * CORS: `<iframe>`/`<img>` load the presigned URL cross-origin fine, but text /
- * table / docx content needs a same-origin fetch — `/api/files/content` (same
- * access check as the presign route). Download is always available for every type.
+ * Everything renders same-origin: pdf/image load bytes from `/api/files/raw`, and
+ * text / table / docx load converted content from `/api/files/content` (both reuse
+ * `canAccessKey`). The browser never gets an internal-MinIO presigned URL for a GET.
+ * Download is always available for every type.
  */
 export interface FilePreviewProps {
   readonly document: Document | null;
@@ -62,8 +63,9 @@ export function FilePreview({ document: doc, onClose }: FilePreviewProps): React
     setError(null);
     setLoaded(EMPTY);
 
-    // Text / table / docx read their content through the same-origin route;
-    // pdf & images (incl. svg) render straight from a presigned URL.
+    // Text / table / docx read their converted content through /api/files/content;
+    // pdf & images (incl. svg) render straight from the same-origin bytes proxy
+    // (/api/files/raw) — NOT a presigned MinIO URL, which the browser can't reach.
     const needsContent =
       kind === 'markdown' || kind === 'text' || kind === 'csv' || kind === 'docx' || kind === 'xlsx';
     const needsUrl = kind === 'pdf' || kind === 'image';
@@ -72,22 +74,23 @@ export function FilePreview({ document: doc, onClose }: FilePreviewProps): React
       return;
     }
 
+    if (needsUrl) {
+      // Same-origin URL — no fetch needed; the <iframe>/<img> loads it directly with
+      // the session cookie, and the route re-authorizes on every request.
+      setLoaded({ ...EMPTY, url: `/api/files/raw?key=${encodeURIComponent(key)}` });
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const load = async (): Promise<void> => {
-      if (needsContent) {
-        const payload = await apiClient.get<PreviewPayload>(
-          `/api/files/content?key=${encodeURIComponent(key)}`,
-        );
-        if (!active) return;
-        if (payload.kind === 'text') setLoaded({ ...EMPTY, text: payload.text });
-        else if (payload.kind === 'table') setLoaded({ ...EMPTY, rows: payload.rows });
-        else setLoaded({ ...EMPTY, html: payload.html });
-      } else {
-        const { url } = await apiClient.get<{ url: string }>(
-          `/api/files/url?key=${encodeURIComponent(key)}&action=get`,
-        );
-        if (active) setLoaded({ ...EMPTY, url });
-      }
+      const payload = await apiClient.get<PreviewPayload>(
+        `/api/files/content?key=${encodeURIComponent(key)}`,
+      );
+      if (!active) return;
+      if (payload.kind === 'text') setLoaded({ ...EMPTY, text: payload.text });
+      else if (payload.kind === 'table') setLoaded({ ...EMPTY, rows: payload.rows });
+      else setLoaded({ ...EMPTY, html: payload.html });
     };
     load()
       .catch((e: unknown) => {
@@ -172,7 +175,7 @@ export function FilePreview({ document: doc, onClose }: FilePreviewProps): React
             style={{ borderColor: 'var(--border-subtle)' }}
           />
         ) : kind === 'image' && loaded.url !== null ? (
-          // Presigned MinIO URL, not a static asset — plain <img>, not next/image.
+          // Same-origin proxy URL, not a static asset — plain <img>, not next/image.
           <img
             src={loaded.url}
             alt={doc.fileName}

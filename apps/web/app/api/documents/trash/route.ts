@@ -8,9 +8,9 @@
  * countdown without hardcoding the window — retention is an operator setting, and the
  * number the user sees must be the number the purge sweep actually uses.
  *
- * Items here are INERT: the payload deliberately carries no download URL, and
- * `/api/files/url` refuses keys belonging to deleted rows, so a bin item cannot be
- * fetched without restoring it first.
+ * Items here are INERT: the payload deliberately carries no download URL, and the
+ * object-fetch routes (`/api/files/raw`, `/api/files/content`) refuse keys belonging
+ * to deleted rows, so a bin item cannot be fetched without restoring it first.
  */
 import { NextResponse } from 'next/server';
 

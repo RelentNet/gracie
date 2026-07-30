@@ -18,8 +18,8 @@ import { EmptyState } from '@/components/ui/StateViews';
  * Restore is the ONLY action offered. There is deliberately no Download, no Move, no
  * Open — and they are absent from the DOM rather than rendered disabled, matching how
  * this codebase already handles content a role may not act on. The API enforces the
- * same thing (`/api/files/url` refuses keys belonging to deleted rows), so removing
- * the buttons is presentation, not the control.
+ * same thing (the object-fetch routes refuse keys belonging to deleted rows), so
+ * removing the buttons is presentation, not the control.
  */
 export type TrashDocument = Document & { readonly purgesAt: string | null };
 export type TrashFolder = Folder & { readonly purgesAt: string | null };
