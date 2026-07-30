@@ -3,9 +3,12 @@
  *
  * Backend-only — never import into a client component. Credentials come from
  * env (S3_ENDPOINT/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY/S3_BUCKET/S3_REGION/
- * S3_FORCE_PATH_STYLE). The frontend never touches storage directly; it gets
- * short-lived presigned URLs from the backend (docs/01 §2).
+ * S3_FORCE_PATH_STYLE). MinIO is internal-only; the frontend never touches storage
+ * directly and never receives a presigned URL — object bytes are streamed to it
+ * through same-origin app routes (`/api/files/raw`, `/api/files/content`), docs/01 §2.
  */
+import { Readable } from 'node:stream';
+
 import {
   S3Client,
   GetObjectCommand,
@@ -14,7 +17,6 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import type { GetObjectCommandOutput } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export interface S3Config {
   readonly endpoint: string;
@@ -58,26 +60,6 @@ export function getS3Client(): S3Client {
   return cached;
 }
 
-const PRESIGN_EXPIRY_SECONDS = 15 * 60; // 15 minutes (docs/01 §2)
-
-/** Presigned URL to DOWNLOAD an object. */
-export async function presignGet(key: string): Promise<string> {
-  const { bucket } = getS3Config();
-  return getSignedUrl(getS3Client(), new GetObjectCommand({ Bucket: bucket, Key: key }), {
-    expiresIn: PRESIGN_EXPIRY_SECONDS,
-  });
-}
-
-/** Presigned URL to UPLOAD an object. */
-export async function presignPut(key: string, contentType?: string): Promise<string> {
-  const { bucket } = getS3Config();
-  return getSignedUrl(
-    getS3Client(),
-    new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType }),
-    { expiresIn: PRESIGN_EXPIRY_SECONDS },
-  );
-}
-
 /**
  * Upload object bytes server-side (the `/api/upload` receipt path — the frontend
  * never holds S3 creds, docs/01 §2). `body` is the raw file content.
@@ -104,6 +86,35 @@ export async function getObjectBytes(key: string): Promise<Buffer> {
   }
   const bytes = await res.Body.transformToByteArray();
   return Buffer.from(bytes);
+}
+
+/** Raw object stream + the metadata a proxy route needs to set response headers. */
+export interface ObjectStream {
+  readonly body: ReadableStream<Uint8Array>;
+  readonly contentType: string | undefined;
+  readonly contentLength: number | undefined;
+}
+
+/**
+ * Stream an object's bytes (the same-origin download/preview proxy path). The
+ * frontend never receives an internal-MinIO presigned URL for a GET; it fetches
+ * this through the app instead. Node runtime only — `Body` is a Node `Readable`,
+ * converted to a web `ReadableStream` so a route handler can return it directly
+ * without buffering the whole file.
+ */
+export async function getObjectStream(key: string): Promise<ObjectStream> {
+  const { bucket } = getS3Config();
+  const res: GetObjectCommandOutput = await getS3Client().send(
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+  );
+  if (res.Body === undefined) {
+    throw new Error(`getObjectStream: empty body for key "${key}"`);
+  }
+  return {
+    body: Readable.toWeb(res.Body as Readable) as ReadableStream<Uint8Array>,
+    contentType: res.ContentType,
+    contentLength: res.ContentLength,
+  };
 }
 
 /** Delete an object by key (e.g. when a Knowledge Base document is removed). */

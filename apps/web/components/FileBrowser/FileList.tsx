@@ -4,7 +4,6 @@ import { Download, MoveRight, Pencil, Shield, Trash2 } from 'lucide-react';
 import type { Document } from '@gracie/shared';
 
 import { getUserName } from '@/lib/mock';
-import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
 import { formatDate } from '@/lib/format';
 import { docStatusBadge, formatFileSize, sourceBadge } from '@/lib/client-display';
@@ -43,15 +42,14 @@ export interface FileListProps {
   readonly onDelete?: (doc: Document) => void;
 }
 
-interface PresignResponse {
-  readonly url: string;
-}
-
-/** Presign + open a document for download (shared by the list, grid and preview). */
-export async function downloadDocument(doc: Document): Promise<void> {
-  const { url } = await apiClient.get<PresignResponse>(
-    `/api/files/url?key=${encodeURIComponent(doc.r2Key)}&action=get`,
-  );
+/**
+ * Open a document for download (shared by the list, grid and preview). Points at the
+ * same-origin bytes proxy in attachment mode — NOT a presigned MinIO URL, which the
+ * browser can't reach (MinIO is internal-only, docs/01 §2). The server re-checks
+ * `canAccessKey` on the fetch, so no durable link to a since-deleted file lingers.
+ */
+export function downloadDocument(doc: Document): void {
+  const url = `/api/files/raw?key=${encodeURIComponent(doc.r2Key)}&download=1&name=${encodeURIComponent(doc.fileName)}`;
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
