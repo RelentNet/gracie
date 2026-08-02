@@ -66,6 +66,21 @@ export default function SettingsPage(): React.JSX.Element {
           { id: 'prompts', label: 'Generation Prompts', content: <GenerationPromptsPanel /> },
           { id: 'ai', label: 'AI Model', content: <AiSettingsPanel /> },
           { id: 'api', label: 'API Settings', content: <ApiSettingsPanel /> },
+          {
+            id: 'roadmap',
+            label: 'Roadmap',
+            // /roadmap is a raw-HTML route handler (its own <head>/SVG); embed it
+            // verbatim in an iframe rather than inlining the markup. Same-origin,
+            // already-authed session loads it fine. Admin-only via settings.access.
+            content: (
+              <iframe
+                src="/roadmap"
+                title="Build roadmap"
+                className="w-full rounded-lg border"
+                style={{ height: '80vh', borderColor: 'var(--border-subtle)' }}
+              />
+            ),
+          },
         ]}
       />
     </PageContainer>
