@@ -8,9 +8,15 @@
  */
 import 'server-only';
 
-import { getServerClient } from '@gracie/db';
+import { getCredential, getServerClient } from '@gracie/db';
+import { classifyRecallRecoverability, type RecallRecoveryState } from '@gracie/shared/recall';
 
-import { describePipelineState, type FleetReason, type FleetState } from '../pipeline-reason';
+import {
+  describePipelineState,
+  describeRecovery,
+  type FleetReason,
+  type FleetState,
+} from '../pipeline-reason';
 
 /** A single row in the Pipeline activity feed (fleet view, §3.1). */
 export interface FleetRowView {
@@ -27,8 +33,21 @@ export interface FleetRowView {
   readonly botJobId: string | null;
   /** Mirrors the existing re-trigger pre-check: a bot recording exists to re-run from. */
   readonly canRetrigger: boolean;
+  /**
+   * Live Recall recoverability for a STUCK row (failed / needs_attention), when it
+   * could be classified — drives which recovery button the UI offers (brief §3.2):
+   * `regenerate` → "Re-run", `retranscribe` → "Re-transcribe", `unrecoverable` → none.
+   * `null` when the row isn't stuck or the pre-flight couldn't run (falls back to
+   * `canRetrigger`).
+   */
+  readonly recovery: RecallRecoveryState | null;
   readonly reason: FleetReason;
 }
+
+/** States whose rows warrant a live Recall pre-flight (they're stuck + may be recoverable). */
+const STUCK_STATES: ReadonlySet<FleetState> = new Set<FleetState>(['failed', 'needs_attention']);
+/** Cap on live Recall pre-flight calls per fleet load (bounds latency + API cost). */
+const MAX_PREFLIGHT = 25;
 
 /** Meeting pipeline_status values that mean "no run row yet, but not stuck" → in-progress. */
 const IN_PROGRESS_STATES = ['scheduled', 'in_progress', 'awaiting_transcript', 'processing'] as const;
@@ -113,6 +132,7 @@ export async function listPipelineFleet(limit = 100): Promise<FleetRowView[]> {
       durationS: r.duration_seconds,
       botJobId,
       canRetrigger: hasRecording,
+      recovery: null,
       reason: describePipelineState({ state, errorMessage: r.error_message, hasRecording }),
     };
   });
@@ -136,18 +156,69 @@ export async function listPipelineFleet(limit = 100): Promise<FleetRowView[]> {
       durationS: null,
       botJobId: m.bot_job_id,
       canRetrigger: hasRecording,
+      recovery: null,
       reason: describePipelineState({ state, hasRecording }),
     };
   });
 
+  // Live Recall pre-flight for the stuck rows → offer only the recovery that can
+  // actually work (brief §3.2/§6). Best-effort + bounded: on any failure the row
+  // keeps `recovery: null` and falls back to the `canRetrigger` proxy.
+  const allRows = [...runRows, ...stuckRows];
+  const recoveryByBot = await classifyStuckRows(allRows).catch(
+    () => new Map<string, { state: RecallRecoveryState; detail: string | null }>(),
+  );
+  const withRecovery = allRows.map((r): FleetRowView => {
+    const rec = r.botJobId !== null ? recoveryByBot.get(r.botJobId) : undefined;
+    if (rec === undefined) return r;
+    return { ...r, recovery: rec.state, reason: describeRecovery(rec.state, rec.detail) };
+  });
+
   // Pin needs_attention on top; everything else newest-first by `when`.
   const whenMs = (r: FleetRowView): number => (r.when !== null ? new Date(r.when).getTime() : 0);
-  return [...runRows, ...stuckRows].sort((a, b) => {
+  return withRecovery.sort((a, b) => {
     const aAttn = a.state === 'needs_attention' ? 1 : 0;
     const bAttn = b.state === 'needs_attention' ? 1 : 0;
     if (aAttn !== bAttn) return bAttn - aAttn;
     return whenMs(b) - whenMs(a);
   });
+}
+
+/**
+ * Live Recall recoverability for the stuck rows (failed / needs_attention). Bounded
+ * to {@link MAX_PREFLIGHT} distinct bots and fully best-effort — no Recall key or a
+ * rejected classification simply omits the row (it falls back to `canRetrigger`), so
+ * the Pipeline page never breaks on a Recall outage.
+ */
+async function classifyStuckRows(
+  rows: readonly FleetRowView[],
+): Promise<Map<string, { state: RecallRecoveryState; detail: string | null }>> {
+  const out = new Map<string, { state: RecallRecoveryState; detail: string | null }>();
+  const bots = [
+    ...new Set(
+      rows
+        .filter((r) => STUCK_STATES.has(r.state) && r.botJobId !== null && r.botJobId !== '')
+        .map((r) => r.botJobId as string),
+    ),
+  ].slice(0, MAX_PREFLIGHT);
+  if (bots.length === 0) return out;
+
+  const apiKey = await getCredential('recall');
+  if (apiKey === null || apiKey === '') return out;
+  const region = process.env.RECALL_REGION;
+
+  const results = await Promise.allSettled(
+    bots.map(async (botJobId) => ({
+      botJobId,
+      rec: await classifyRecallRecoverability(botJobId, { apiKey, region }),
+    })),
+  );
+  for (const res of results) {
+    if (res.status === 'fulfilled') {
+      out.set(res.value.botJobId, { state: res.value.rec.state, detail: res.value.rec.detail });
+    }
+  }
+  return out;
 }
 
 /** Fetch the id + bot job id for a meeting (re-trigger pre-check); null if not found. */
@@ -156,6 +227,21 @@ export async function getMeetingForRetrigger(meetingId: string): Promise<{ id: s
   const { data, error } = await db.from('meetings').select('id, bot_job_id').eq('id', meetingId).maybeSingle();
   if (error !== null) throw new Error(`getMeetingForRetrigger: ${error.message}`);
   return data === null ? null : { id: data.id, botJobId: data.bot_job_id };
+}
+
+/**
+ * Reset a meeting for a fresh transcription attempt (manual "Re-transcribe"): back to
+ * `awaiting_transcript` and clear the auto re-transcribe counter, so the webhook path
+ * resumes and the self-heal watchdog gets a fresh budget. A human made the call, so the
+ * automatic cap starts over.
+ */
+export async function markMeetingRetranscribing(meetingId: string): Promise<void> {
+  const db = getServerClient();
+  const { error } = await db
+    .from('meetings')
+    .update({ pipeline_status: 'awaiting_transcript', retranscribe_attempts: 0 })
+    .eq('id', meetingId);
+  if (error !== null) throw new Error(`markMeetingRetranscribing: ${error.message}`);
 }
 
 /** Mark a meeting as re-processing before a manual generation re-trigger (mirrors the webhook). */

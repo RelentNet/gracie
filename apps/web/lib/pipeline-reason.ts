@@ -7,10 +7,12 @@
  * raw provider/error code lives in `detail` (tooltip/details), never as the
  * headline. Never a raw enum or provider code up front.
  *
- * NOTE: true recoverability classification (regenerate / retranscribe /
- * unrecoverable via a Recall pre-flight) is brief §3.2 — DEFERRED to a follow-on
- * session. `hasRecording` here is the cheap proxy the app already uses (a bot job
- * exists), not a Recall check.
+ * Recoverability classification (regenerate / retranscribe / unrecoverable via a
+ * live Recall pre-flight, brief §3.2) is implemented in `@gracie/shared/recall`
+ * (`classifyRecallRecoverability`) and surfaced per row by the fleet-view data
+ * layer; `describeRecovery` below turns that state into a plain-language headline
+ * and the UI picks the matching button. `hasRecording` here stays the cheap proxy
+ * (a bot job exists) used when a live classification isn't available.
  */
 
 /** Unified fleet state shown in the Pipeline activity feed. */
@@ -84,5 +86,30 @@ export function describePipelineState(input: DescribeInput): FleetReason {
 
     default:
       return { headline: 'Status unknown — open the meeting for details.', detail };
+  }
+}
+
+/** The three recoverability states from the shared Recall pre-flight (brief §3.2). */
+export type RecoveryState = 'regenerate' | 'retranscribe' | 'unrecoverable';
+
+/**
+ * Plain-language reason for a stuck meeting once its live Recall recoverability is
+ * known — honest about which action can actually work (brief §6: never a headline
+ * that implies a button guaranteed to fail). `detail` carries the raw provider code
+ * for a support tooltip.
+ */
+export function describeRecovery(state: RecoveryState, detail?: string | null): FleetReason {
+  const raw = detail?.trim() ?? '';
+  const detailOut = raw === '' ? null : raw;
+  switch (state) {
+    case 'regenerate':
+      return { headline: 'This meeting was recorded and transcribed. Re-run to create the notes.', detail: detailOut };
+    case 'retranscribe':
+      return {
+        headline: 'The recording is fine, but the notes couldn’t be created. Re-transcribe to try again.',
+        detail: detailOut,
+      };
+    case 'unrecoverable':
+      return { headline: 'No recording was captured — there’s nothing to recover.', detail: detailOut };
   }
 }

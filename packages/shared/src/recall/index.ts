@@ -261,11 +261,25 @@ interface RecallBotRecordings {
     readonly id?: string | null;
     readonly media_shortcuts?: {
       readonly transcript?: {
-        readonly status?: { readonly code?: string | null } | null;
+        readonly status?: { readonly code?: string | null; readonly sub_code?: string | null } | null;
         readonly data?: { readonly download_url?: string | null } | null;
       } | null;
     } | null;
   }> | null;
+}
+
+/** GET `/bot/{id}/` and parse it into the recordings subset we read (shared by fetch/ensure/classify). */
+async function retrieveBot(botJobId: string, options: RecallFetchOptions): Promise<RecallBotRecordings> {
+  const botRes = await fetch(`${baseUrl(options.region)}/bot/${botJobId}/`, {
+    headers: { Authorization: `Token ${options.apiKey}`, Accept: 'application/json' },
+  });
+  if (!botRes.ok) {
+    const body = await botRes.text().catch(() => '');
+    throw new Error(
+      `Recall bot fetch failed for bot ${botJobId} (HTTP ${botRes.status}): ${body.slice(0, 300)}`,
+    );
+  }
+  return (await botRes.json()) as RecallBotRecordings;
 }
 
 /** Pull the first ready transcript download URL out of a bot-retrieve payload. */
@@ -295,16 +309,7 @@ export async function fetchRecallTranscript(
   botJobId: string,
   options: RecallFetchOptions,
 ): Promise<string> {
-  const botRes = await fetch(`${baseUrl(options.region)}/bot/${botJobId}/`, {
-    headers: { Authorization: `Token ${options.apiKey}`, Accept: 'application/json' },
-  });
-  if (!botRes.ok) {
-    const body = await botRes.text().catch(() => '');
-    throw new Error(
-      `Recall bot fetch failed for bot ${botJobId} (HTTP ${botRes.status}): ${body.slice(0, 300)}`,
-    );
-  }
-  const bot = (await botRes.json()) as RecallBotRecordings;
+  const bot = await retrieveBot(botJobId, options);
   const downloadUrl = findTranscriptDownloadUrl(bot);
   if (downloadUrl === null) {
     throw new Error(
@@ -376,20 +381,87 @@ export async function ensureAsyncTranscript(
   botJobId: string,
   options: RecallFetchOptions,
 ): Promise<EnsureAsyncTranscriptResult> {
-  const botRes = await fetch(`${baseUrl(options.region)}/bot/${botJobId}/`, {
-    headers: { Authorization: `Token ${options.apiKey}`, Accept: 'application/json' },
-  });
-  if (!botRes.ok) {
-    const body = await botRes.text().catch(() => '');
-    throw new Error(
-      `Recall bot fetch failed for bot ${botJobId} (HTTP ${botRes.status}): ${body.slice(0, 300)}`,
-    );
-  }
-  const bot = (await botRes.json()) as RecallBotRecordings;
+  const bot = await retrieveBot(botJobId, options);
   const recordings = bot.recordings ?? [];
   if (recordings.some((r) => r?.media_shortcuts?.transcript != null)) return 'already_requested';
   const recordingId = recordings.map((r) => r?.id).find((id) => typeof id === 'string' && id !== '');
   if (recordingId == null) return 'no_recording';
   await createRecallAsyncTranscript(recordingId as string, options);
   return 'created';
+}
+
+/**
+ * Three-way recoverability of a stuck meeting (brief §3.2). Drives BOTH the
+ * self-heal watchdog (which action to take unattended) AND the Pipeline
+ * fleet-view row action (which button, if any, to offer a non-technical staffer):
+ *   - `regenerate`    — a completed transcript exists on Recall; just re-run generation.
+ *   - `retranscribe`  — no usable transcript (missing or `status=failed`) but a
+ *                       recording DOES exist → request async transcription, then generate.
+ *                       This is the GA/Leap Metrics `provider_connection_failed` case.
+ *   - `unrecoverable` — no recording at all (silent / never-admitted bot) → nothing to recover.
+ */
+export type RecallRecoveryState = 'regenerate' | 'retranscribe' | 'unrecoverable';
+
+export interface RecallRecoverability {
+  readonly state: RecallRecoveryState;
+  /** Recording id to re-transcribe from — present iff `state === 'retranscribe'`. */
+  readonly recordingId: string | null;
+  /**
+   * True when an async transcript is already in flight (`status=processing`), so a
+   * caller should WAIT rather than request another one. Only meaningful for `retranscribe`.
+   */
+  readonly transcriptPending: boolean;
+  /** Raw provider/status code (e.g. `provider_connection_failed`) for a support tooltip — never a UI headline. */
+  readonly detail: string | null;
+}
+
+/** Transcript status codes that mean "still working" — a request is in flight, don't re-issue. */
+function isPendingTranscriptCode(code: string | null | undefined): boolean {
+  return code === 'processing' || code === 'in_progress';
+}
+
+/**
+ * Classify a bot-retrieve payload into {@link RecallRecoverability}. PURE and
+ * exported for unit tests — the async {@link classifyRecallRecoverability} just
+ * fetches the bot and calls this.
+ */
+export function classifyRecordings(bot: RecallBotRecordings): RecallRecoverability {
+  const recordings = bot.recordings ?? [];
+  let recordingId: string | null = null;
+  let pending = false;
+  let detail: string | null = null;
+
+  for (const recording of recordings) {
+    const transcript = recording?.media_shortcuts?.transcript;
+    const code = transcript?.status?.code ?? null;
+    const url = transcript?.data?.download_url;
+    // A completed, downloadable transcript → the transcript is fine; re-run generation.
+    if (code === 'done' && typeof url === 'string' && url !== '') {
+      return { state: 'regenerate', recordingId: recording?.id ?? null, transcriptPending: false, detail: null };
+    }
+    if (isPendingTranscriptCode(code)) pending = true;
+    // Surface the failure sub_code (e.g. provider_connection_failed) for support.
+    if (code === 'failed') detail = transcript?.status?.sub_code ?? code;
+    const id = recording?.id;
+    if (recordingId === null && typeof id === 'string' && id !== '') recordingId = id;
+  }
+
+  // A recording exists but no usable transcript → re-transcribe the recording.
+  if (recordingId !== null) {
+    return { state: 'retranscribe', recordingId, transcriptPending: pending, detail };
+  }
+  // No recording at all → nothing to recover from.
+  return { state: 'unrecoverable', recordingId: null, transcriptPending: false, detail };
+}
+
+/**
+ * Recall pre-flight: fetch the bot and classify its recoverability
+ * ({@link classifyRecordings}). Used by the self-heal watchdog and the Pipeline
+ * fleet view so neither offers a recovery action guaranteed to fail (brief §6).
+ */
+export async function classifyRecallRecoverability(
+  botJobId: string,
+  options: RecallFetchOptions,
+): Promise<RecallRecoverability> {
+  return classifyRecordings(await retrieveBot(botJobId, options));
 }

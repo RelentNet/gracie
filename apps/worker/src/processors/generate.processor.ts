@@ -57,8 +57,50 @@ export interface GenerateResult {
   readonly meetingId: string;
   readonly documents: number;
   readonly tasks: number;
-  readonly status: 'success' | 'partial';
+  /** `skipped` = benign terminal state (no client to file under — nothing to generate). */
+  readonly status: 'success' | 'partial' | 'skipped';
 }
+
+/**
+ * How to handle a meeting's client at generation time (root cause #2). `generate`
+ * used to HARD-THROW when `client_id` was null, turning ad-hoc/test meetings AND
+ * internal GA meetings (inconsistently assigned) into red pipeline failures:
+ *   - `proceed`  — a client is set; generate under it.
+ *   - `assign`   — no client but the meeting is internal AND a GA internal org exists →
+ *                  reliably home it to GA so internal meetings DO generate (fixes the
+ *                  "Allie & Daniel" inconsistency).
+ *   - `skip`     — genuinely client-less (unassigned external / ad-hoc / test, or internal
+ *                  with no GA org) → skip generation GRACEFULLY (benign terminal state,
+ *                  not a failed run, not a red fleet-view error).
+ * Pure + exported for unit tests.
+ */
+export type ClientResolution =
+  | { readonly kind: 'proceed'; readonly clientId: string }
+  | { readonly kind: 'assign'; readonly clientId: string }
+  | { readonly kind: 'skip' };
+
+export function resolveMeetingClientId(
+  meeting: { readonly client_id: string | null; readonly is_internal: boolean },
+  internalOrgId: string | null,
+): ClientResolution {
+  if (meeting.client_id !== null && meeting.client_id !== '') {
+    return { kind: 'proceed', clientId: meeting.client_id };
+  }
+  if (meeting.is_internal && internalOrgId !== null && internalOrgId !== '') {
+    return { kind: 'assign', clientId: internalOrgId };
+  }
+  return { kind: 'skip' };
+}
+
+/**
+ * Plain-language reason recorded when a client-less meeting skips generation — written
+ * to `pipeline_runs.error_message` with status left null (an explanation, not a failure,
+ * so the Pipeline view shows it as a benign "Skipped" row, never a red error). Mirrors
+ * the duplicate-invite skip pattern (bot-dispatch).
+ */
+const NO_CLIENT_SKIP_REASON =
+  'No notes were generated — this meeting isn’t linked to a client. ' +
+  'Assign it to a client from the meeting page and re-run if notes are needed.';
 
 /** `GeneratedDocType` → the `document_type` enum (emails differ — see docs/06 §5 mapping). */
 const DOC_TYPE_TO_ENUM: Record<GeneratedDocType, DocumentTypeEnum> = {
@@ -177,6 +219,43 @@ async function patchMeeting(
 ): Promise<void> {
   const { error } = await db.from('meetings').update(patch).eq('id', meetingId);
   if (error !== null) throw new Error(`generate: patch meeting: ${error.message}`);
+}
+
+/** The GA `internal` org id (earliest-created), home for internal meetings; null if none. */
+async function getInternalOrgId(db: ServerClient): Promise<string | null> {
+  const { data, error } = await db
+    .from('clients')
+    .select('id')
+    .eq('type', 'internal')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error !== null) throw new Error(`generate: load GA internal org: ${error.message}`);
+  return data?.id ?? null;
+}
+
+/**
+ * Skip generation for a client-less meeting GRACEFULLY (root cause #2): mark the
+ * meeting terminal (`cancelled` — the watchdog won't flag it, no re-dispatch) and
+ * record a status-null `pipeline_runs` explanation so the Pipeline view shows a
+ * benign "Skipped" row, not a red failure. Never overwrites a completed meeting.
+ */
+async function skipNoClient(db: ServerClient, meetingId: string, log: FastifyBaseLogger): Promise<void> {
+  const cancelled = await db
+    .from('meetings')
+    .update({ pipeline_status: 'cancelled' })
+    .eq('id', meetingId)
+    .neq('pipeline_status', 'complete');
+  if (cancelled.error !== null) throw new Error(`generate: mark no-client cancelled: ${cancelled.error.message}`);
+  const recorded = await db.from('pipeline_runs').insert({
+    meeting_id: meetingId,
+    source: 'recall',
+    completed_at: new Date().toISOString(),
+    documents_generated: 0,
+    error_message: NO_CLIENT_SKIP_REASON,
+  });
+  if (recorded.error !== null) throw new Error(`generate: record no-client skip: ${recorded.error.message}`);
+  log.info({ meetingId }, 'generate: meeting has no client — skipped (nothing to generate)');
 }
 
 /** Read a global setting string (e.g. ga_company_description), or null if unset. */
@@ -478,8 +557,22 @@ export function createGenerateProcessor(
         .maybeSingle();
       if (meetingError !== null) throw new Error(`generate: load meeting: ${meetingError.message}`);
       if (meeting === null) throw new Error(`generate: meeting ${meetingId} not found`);
-      if (meeting.client_id === null) throw new Error(`generate: meeting ${meetingId} has no client`);
-      const clientId = meeting.client_id;
+
+      // No-client handling (root cause #2): self-heal internal meetings → the GA org,
+      // and skip genuinely client-less meetings gracefully instead of hard-failing.
+      const resolution = resolveMeetingClientId(
+        meeting,
+        meeting.client_id === null ? await getInternalOrgId(db) : null,
+      );
+      if (resolution.kind === 'skip') {
+        await skipNoClient(db, meetingId, log);
+        return { meetingId, documents: 0, tasks: 0, status: 'skipped' };
+      }
+      const clientId = resolution.clientId;
+      if (resolution.kind === 'assign') {
+        await patchMeeting(db, meetingId, { client_id: clientId });
+        log.info({ meetingId, clientId }, 'generate: internal meeting had no client — homed to the GA org');
+      }
 
       const { data: client, error: clientError } = await db
         .from('clients')

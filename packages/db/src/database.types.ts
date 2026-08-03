@@ -1190,6 +1190,7 @@ export type Database = {
           pipeline_completed_at: string | null
           pipeline_started_at: string | null
           pipeline_status: Database["public"]["Enums"]["pipeline_status"]
+          retranscribe_attempts: number
           series_id: string | null
           source: Database["public"]["Enums"]["meeting_source"]
           title: string | null
@@ -1215,6 +1216,7 @@ export type Database = {
           pipeline_completed_at?: string | null
           pipeline_started_at?: string | null
           pipeline_status?: Database["public"]["Enums"]["pipeline_status"]
+          retranscribe_attempts?: number
           series_id?: never
           source?: Database["public"]["Enums"]["meeting_source"]
           title?: string | null
@@ -1240,6 +1242,7 @@ export type Database = {
           pipeline_completed_at?: string | null
           pipeline_started_at?: string | null
           pipeline_status?: Database["public"]["Enums"]["pipeline_status"]
+          retranscribe_attempts?: number
           series_id?: never
           source?: Database["public"]["Enums"]["meeting_source"]
           title?: string | null

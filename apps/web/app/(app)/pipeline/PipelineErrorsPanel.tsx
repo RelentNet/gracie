@@ -31,6 +31,7 @@ interface FleetRowView {
   readonly durationS: number | null;
   readonly botJobId: string | null;
   readonly canRetrigger: boolean;
+  readonly recovery: 'regenerate' | 'retranscribe' | 'unrecoverable' | null;
   readonly reason: FleetReason;
 }
 interface RunsResponse {
@@ -98,6 +99,7 @@ export function PipelineErrorsPanel(): React.JSX.Element {
   const [filter, setFilter] = useState<Filter>('needs_attention');
   const [inFlight, setInFlight] = useState<Record<string, boolean>>({});
   const [requeued, setRequeued] = useState<Record<string, boolean>>({});
+  const [retranscribed, setRetranscribed] = useState<Record<string, boolean>>({});
   const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
 
   const load = useCallback((): void => {
@@ -126,6 +128,21 @@ export function PipelineErrorsPanel(): React.JSX.Element {
         setNote({ text: 'Re-queued. Generation is running again for that meeting.', ok: true });
       })
       .catch((e: unknown) => setNote({ text: e instanceof Error ? e.message : 'Could not re-run.', ok: false }))
+      .finally(() => setInFlight((p) => ({ ...p, [meetingId]: false })));
+  }, []);
+
+  const retranscribe = useCallback((meetingId: string): void => {
+    setInFlight((p) => ({ ...p, [meetingId]: true }));
+    setNote(null);
+    apiClient
+      .post<{ action: 'regenerate' | 'retranscribe'; message: string }>(`/api/pipeline/${meetingId}/retranscribe`)
+      .then((d) => {
+        // 'regenerate' means the transcript was already ready and generation was re-queued.
+        if (d.action === 'regenerate') setRequeued((p) => ({ ...p, [meetingId]: true }));
+        else setRetranscribed((p) => ({ ...p, [meetingId]: true }));
+        setNote({ text: d.message, ok: true });
+      })
+      .catch((e: unknown) => setNote({ text: e instanceof Error ? e.message : 'Could not re-transcribe.', ok: false }))
       .finally(() => setInFlight((p) => ({ ...p, [meetingId]: false })));
   }, []);
 
@@ -234,6 +251,7 @@ export function PipelineErrorsPanel(): React.JSX.Element {
               {visible.map((r) => {
                 const busy = r.meetingId !== null && inFlight[r.meetingId] === true;
                 const done = r.meetingId !== null && requeued[r.meetingId] === true;
+                const reTranscribed = r.meetingId !== null && retranscribed[r.meetingId] === true;
                 return (
                   <tr key={r.id} style={{ borderTop: '1px solid var(--border-subtle)', verticalAlign: 'top' }}>
                     <Td>
@@ -267,25 +285,7 @@ export function PipelineErrorsPanel(): React.JSX.Element {
                     <Td>{fmt(r.when)}</Td>
                     <Td>{r.docsCount > 0 ? r.docsCount : '—'}</Td>
                     <Td>{fmtDuration(r.durationS)}</Td>
-                    <Td>
-                      {done ? (
-                        <span style={{ ...TYPE.label, color: 'var(--color-emerald-600)' }}>Re-queued</span>
-                      ) : r.state === 'in_progress' ? (
-                        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Running…</span>
-                      ) : r.canRetrigger && r.meetingId !== null ? (
-                        <Button
-                          variant="secondary"
-                          onClick={(): void => {
-                            if (r.meetingId !== null) retrigger(r.meetingId);
-                          }}
-                          disabled={busy}
-                        >
-                          <RotateCw size={14} aria-hidden="true" /> {busy ? 'Re-running…' : 'Re-run'}
-                        </Button>
-                      ) : (
-                        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Nothing to re-run</span>
-                      )}
-                    </Td>
+                    <Td>{renderAction(r, { busy, done, reTranscribed }, retrigger, retranscribe)}</Td>
                   </tr>
                 );
               })}
@@ -301,6 +301,47 @@ export function PipelineErrorsPanel(): React.JSX.Element {
       ) : null}
     </section>
   );
+}
+
+/**
+ * The recovery control for one row — the crux of "never a button guaranteed to fail"
+ * (brief §6). The live Recall pre-flight (`recovery`) decides which single action can
+ * actually work; `canRetrigger` is the fallback when no live classification ran.
+ *   - retranscribe → "Re-transcribe"  (recording survived, transcript failed)
+ *   - regenerate / canRetrigger → "Re-run"
+ *   - unrecoverable → no button, just why
+ */
+function renderAction(
+  r: FleetRowView,
+  flags: { readonly busy: boolean; readonly done: boolean; readonly reTranscribed: boolean },
+  retrigger: (meetingId: string) => void,
+  retranscribe: (meetingId: string) => void,
+): React.JSX.Element {
+  const { busy, done, reTranscribed } = flags;
+  if (reTranscribed) return <span style={{ ...TYPE.label, color: 'var(--color-emerald-600)' }}>Re-transcribing…</span>;
+  if (done) return <span style={{ ...TYPE.label, color: 'var(--color-emerald-600)' }}>Re-queued</span>;
+  if (r.state === 'in_progress') return <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Running…</span>;
+  if (r.meetingId === null) return <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>—</span>;
+  const meetingId = r.meetingId;
+
+  if (r.recovery === 'unrecoverable') {
+    return <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Nothing to recover</span>;
+  }
+  if (r.recovery === 'retranscribe') {
+    return (
+      <Button variant="secondary" onClick={(): void => retranscribe(meetingId)} disabled={busy}>
+        <RefreshCw size={14} aria-hidden="true" /> {busy ? 'Re-transcribing…' : 'Re-transcribe'}
+      </Button>
+    );
+  }
+  if (r.recovery === 'regenerate' || r.canRetrigger) {
+    return (
+      <Button variant="secondary" onClick={(): void => retrigger(meetingId)} disabled={busy}>
+        <RotateCw size={14} aria-hidden="true" /> {busy ? 'Re-running…' : 'Re-run'}
+      </Button>
+    );
+  }
+  return <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Nothing to re-run</span>;
 }
 
 function Th({ children }: { readonly children: React.ReactNode }): React.JSX.Element {
