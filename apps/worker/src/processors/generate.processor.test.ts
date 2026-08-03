@@ -26,7 +26,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { stripReproducedScaffold } from '../lib/generate.js';
-import { buildDigest, buildMeetingStorageKeys } from './generate.processor.js';
+import { buildDigest, buildMeetingStorageKeys, resolveMeetingClientId } from './generate.processor.js';
 
 const SLUG = 'grace-associates';
 // Two distinct "clean GOID" series keys (shape mirrors migration 0011 output).
@@ -268,4 +268,36 @@ test('stripReproducedScaffold: leaves a JSON checklist and a non-metadata leadin
   assert.equal(stripReproducedScaffold('{"tasks":[]}'), '{"tasks":[]}');
   const jsonFence = '```json\n{"a":1}\n```\n\nrest';
   assert.equal(stripReproducedScaffold(jsonFence), jsonFence);
+});
+
+/*
+ * No-client handling (root cause #2). `generate` used to hard-throw on a null client_id,
+ * turning ad-hoc/test AND internal GA meetings into red failures. resolveMeetingClientId
+ * decides: proceed (client set), assign (internal → GA org), or skip (genuinely client-less).
+ */
+
+test('resolveMeetingClientId: a meeting WITH a client proceeds under it', () => {
+  const r = resolveMeetingClientId({ client_id: 'client-1', is_internal: false }, 'ga-org');
+  assert.deepEqual(r, { kind: 'proceed', clientId: 'client-1' });
+});
+
+test('resolveMeetingClientId: an internal meeting with no client is homed to the GA org (Allie & Daniel fix)', () => {
+  const r = resolveMeetingClientId({ client_id: null, is_internal: true }, 'ga-org');
+  assert.deepEqual(r, { kind: 'assign', clientId: 'ga-org' });
+});
+
+test('resolveMeetingClientId: a genuinely client-less (external / ad-hoc) meeting skips generation', () => {
+  assert.deepEqual(resolveMeetingClientId({ client_id: null, is_internal: false }, 'ga-org'), { kind: 'skip' });
+  // Even client-less + external with no GA org configured → skip, never assign.
+  assert.deepEqual(resolveMeetingClientId({ client_id: null, is_internal: false }, null), { kind: 'skip' });
+});
+
+test('resolveMeetingClientId: internal but NO GA org exists → skip (can’t assign a null org)', () => {
+  assert.deepEqual(resolveMeetingClientId({ client_id: null, is_internal: true }, null), { kind: 'skip' });
+});
+
+test('resolveMeetingClientId: an existing client always wins, even on an internal meeting', () => {
+  // Never overwrite an already-assigned client with the GA org.
+  const r = resolveMeetingClientId({ client_id: 'client-7', is_internal: true }, 'ga-org');
+  assert.deepEqual(r, { kind: 'proceed', clientId: 'client-7' });
 });

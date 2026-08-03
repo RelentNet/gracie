@@ -18,6 +18,7 @@ import { test } from 'node:test';
 import {
   DEFAULT_TRANSCRIPT_PROVIDER,
   buildTranscriptProviderConfig,
+  classifyRecordings,
   dispatchRecallBot,
   ensureAsyncTranscript,
   fetchRecallTranscript,
@@ -199,4 +200,60 @@ test('ensureAsyncTranscript reports no_recording when the bot never recorded', a
       assert.equal(await ensureAsyncTranscript('bot_a', { apiKey: 'k' }), 'no_recording');
     },
   );
+});
+
+// --- classifyRecordings: the 3-way recoverability pre-flight (brief §3.2) ----------
+
+test('classifyRecordings: a completed downloadable transcript → regenerate', () => {
+  const rec = classifyRecordings({
+    recordings: [
+      { id: 'rec_1', media_shortcuts: { transcript: { status: { code: 'done' }, data: { download_url: 'https://dl/t' } } } },
+    ],
+  });
+  assert.equal(rec.state, 'regenerate');
+});
+
+test('classifyRecordings: recording present but transcript FAILED → retranscribe (the Leap Metrics case)', () => {
+  const rec = classifyRecordings({
+    recordings: [
+      {
+        id: 'rec_9',
+        media_shortcuts: { transcript: { status: { code: 'failed', sub_code: 'provider_connection_failed' } } },
+      },
+    ],
+  });
+  assert.equal(rec.state, 'retranscribe');
+  assert.equal(rec.recordingId, 'rec_9');
+  assert.equal(rec.transcriptPending, false);
+  // The raw provider code is available for support, never as a headline.
+  assert.equal(rec.detail, 'provider_connection_failed');
+});
+
+test('classifyRecordings: recording present, NO transcript object yet → retranscribe', () => {
+  const rec = classifyRecordings({ recordings: [{ id: 'rec_2', media_shortcuts: {} }] });
+  assert.equal(rec.state, 'retranscribe');
+  assert.equal(rec.recordingId, 'rec_2');
+});
+
+test('classifyRecordings: an in-flight transcript flags transcriptPending (caller waits)', () => {
+  const rec = classifyRecordings({
+    recordings: [{ id: 'rec_3', media_shortcuts: { transcript: { status: { code: 'processing' } } } }],
+  });
+  assert.equal(rec.state, 'retranscribe');
+  assert.equal(rec.transcriptPending, true);
+});
+
+test('classifyRecordings: no recording at all → unrecoverable', () => {
+  assert.equal(classifyRecordings({ recordings: [] }).state, 'unrecoverable');
+  assert.equal(classifyRecordings({}).state, 'unrecoverable');
+});
+
+test('classifyRecordings: a done transcript on ANY recording wins over an earlier failed one', () => {
+  const rec = classifyRecordings({
+    recordings: [
+      { id: 'rec_a', media_shortcuts: { transcript: { status: { code: 'failed' } } } },
+      { id: 'rec_b', media_shortcuts: { transcript: { status: { code: 'done' }, data: { download_url: 'https://dl/t' } } } },
+    ],
+  });
+  assert.equal(rec.state, 'regenerate');
 });

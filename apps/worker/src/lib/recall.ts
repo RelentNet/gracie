@@ -7,9 +7,16 @@
  * bot-dispatch cron and the generation processor keep importing `../lib/recall.js`
  * unchanged — the P5b webhook → generation contract is untouched.
  */
-export { dispatchRecallBot, fetchRecallTranscript } from '@gracie/shared/recall';
+export {
+  classifyRecallRecoverability,
+  createRecallAsyncTranscript,
+  dispatchRecallBot,
+  fetchRecallTranscript,
+} from '@gracie/shared/recall';
 export type {
   RecallDispatchOptions,
   RecallFetchOptions,
+  RecallRecoverability,
+  RecallRecoveryState,
   RecallTranscriptProvider,
 } from '@gracie/shared/recall';

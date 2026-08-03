@@ -12,7 +12,7 @@
 import type { Queue, Worker } from 'bullmq';
 import type { FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
-import { JOB_NAMES, QUEUE_NAMES } from '@gracie/shared';
+import { JOB_NAMES, QUEUE_NAMES, type GenerationJobPayload } from '@gracie/shared';
 
 import { loadEnv } from './lib/env.js';
 import { createRedisConnection } from './lib/redis.js';
@@ -124,6 +124,14 @@ async function start(): Promise<void> {
     );
   };
 
+  /**
+   * Re-queue meeting generation from the self-heal watchdog (brief §3.4) — the same
+   * generate queue the Recall webhook feeds; the processor is idempotent per meeting.
+   */
+  const enqueueGenerate = async (payload: GenerationJobPayload): Promise<void> => {
+    await generateQueue.add(JOB_NAMES.generate, payload);
+  };
+
   const app = buildServer({
     connection,
     queues: [
@@ -187,7 +195,7 @@ async function start(): Promise<void> {
   // Watchdog: flag meetings stuck awaiting a transcript past the SLA (P5b).
   const watchdogWorker = createWorker(
     QUEUE_NAMES.watchdog,
-    createWatchdogProcessor(app.log),
+    createWatchdogProcessor(app.log, enqueueGenerate),
     connection,
   );
   watchdogWorker.on('failed', (job, error) => {
