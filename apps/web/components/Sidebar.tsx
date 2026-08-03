@@ -8,7 +8,7 @@ import { ChevronLeft, ChevronRight, LogOut, X } from 'lucide-react';
 import { ROLE_BADGES } from '@gracie/shared';
 
 import { useAuth } from '@/lib/auth';
-import { NAV_ITEMS } from '@/lib/navigation';
+import { NAV_GROUPS } from '@/lib/navigation';
 import { TYPE } from '@/lib/typography';
 import { ClientAvatar } from '@/components/ClientAvatar';
 import { useNavCollapse } from '@/components/ui/nav-collapse';
@@ -32,9 +32,13 @@ export function Sidebar(): React.JSX.Element {
   const pathname = usePathname();
   const { collapsed, toggleCollapsed, mobileOpen, closeMobile } = useNavCollapse();
 
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => item.requires === undefined || can(item.requires),
-  );
+  // Filter each group's items by role, then drop groups left empty — this hides a
+  // section header (CLIENTS/PLANNING/LIBRARY) when all its items are gated away for
+  // the current role, so no orphan header renders over nothing.
+  const visibleGroups = NAV_GROUPS.map((group) => ({
+    header: group.header,
+    items: group.items.filter((item) => item.requires === undefined || can(item.requires)),
+  })).filter((group) => group.items.length > 0);
 
   const roleBadge = ROLE_BADGES[user.role];
 
@@ -109,38 +113,62 @@ export function Sidebar(): React.JSX.Element {
             </button>
           </div>
 
-          <ul className="flex flex-col gap-0.5">
-            {visibleItems.map((item) => {
-              const isActive =
-                pathname === item.href || pathname.startsWith(`${item.href}/`);
-              const { Icon } = item;
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    // Native tooltip surfaces the label in the collapsed icon rail.
-                    title={collapsed ? item.label : undefined}
-                    // External targets (e.g. /roadmap, a raw-HTML route handler) open
-                    // in a new tab and skip prefetch/RSC navigation, which would break
-                    // on a non-page route.
-                    target={item.external ? '_blank' : undefined}
-                    rel={item.external ? 'noopener noreferrer' : undefined}
-                    prefetch={item.external ? false : undefined}
-                    aria-current={isActive ? 'page' : undefined}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${linkJustify}`}
-                    style={{
-                      backgroundColor: isActive ? 'var(--color-navy-800)' : 'transparent',
-                      color: isActive ? '#ffffff' : 'var(--color-slate-100)',
-                      ...TYPE.bodyStrong,
-                    }}
+          <div className="flex flex-col">
+            {visibleGroups.map((group, groupIndex) => (
+              <div
+                key={group.header ?? `group-${groupIndex}`}
+                // Groups after the first get a thin rule + top spacing. The rule
+                // stays in the collapsed rail (only the header text hides), so
+                // icons remain grouped by separators.
+                className={groupIndex > 0 ? 'mt-2 border-t pt-2' : ''}
+                style={
+                  groupIndex > 0 ? { borderColor: 'var(--color-navy-800)' } : undefined
+                }
+              >
+                {group.header ? (
+                  <div
+                    // Muted small-caps section header; hidden in the collapsed rail.
+                    className={`px-3 pb-1 ${labelHidden}`}
+                    style={{ ...TYPE.label, color: 'var(--color-slate-500)' }}
                   >
-                    <Icon aria-hidden="true" size={18} className="shrink-0" />
-                    <span className={labelHidden}>{item.label}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+                    {group.header}
+                  </div>
+                ) : null}
+                <ul className="flex flex-col gap-0.5">
+                  {group.items.map((item) => {
+                    const isActive =
+                      pathname === item.href || pathname.startsWith(`${item.href}/`);
+                    const { Icon } = item;
+                    return (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          // Native tooltip surfaces the label in the collapsed icon rail.
+                          title={collapsed ? item.label : undefined}
+                          // External targets (e.g. a raw-HTML route handler) open in a
+                          // new tab and skip prefetch/RSC navigation, which would break
+                          // on a non-page route.
+                          target={item.external ? '_blank' : undefined}
+                          rel={item.external ? 'noopener noreferrer' : undefined}
+                          prefetch={item.external ? false : undefined}
+                          aria-current={isActive ? 'page' : undefined}
+                          className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${linkJustify}`}
+                          style={{
+                            backgroundColor: isActive ? 'var(--color-navy-800)' : 'transparent',
+                            color: isActive ? '#ffffff' : 'var(--color-slate-100)',
+                            ...TYPE.bodyStrong,
+                          }}
+                        >
+                          <Icon aria-hidden="true" size={18} className="shrink-0" />
+                          <span className={labelHidden}>{item.label}</span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div
@@ -189,16 +217,17 @@ export function Sidebar(): React.JSX.Element {
               </span>
             </div>
           </div>
-          {/* Phase 1B: wire Sign Out to the Logto sign-out endpoint. */}
-          <button
-            type="button"
+          {/* Full-page nav to the Logto sign-out GET route (clears the session and
+              redirects) — a plain <a>, not <Link>, so it never RSC-navigates. */}
+          <a
+            href="/sign-out"
             title={collapsed ? 'Sign Out' : undefined}
             className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors ${linkJustify}`}
             style={{ color: 'var(--color-slate-100)', ...TYPE.bodyStrong }}
           >
             <LogOut aria-hidden="true" size={16} className="shrink-0" />
             <span className={labelHidden}>Sign Out</span>
-          </button>
+          </a>
         </div>
       </nav>
     </>
