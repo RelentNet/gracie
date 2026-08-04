@@ -23,8 +23,9 @@ import { UsersPanel } from './UsersPanel';
  * admin content (mirrors server omission, D14).
  *
  * Sections: Users, Company, Meeting Bot, Notifications, Automations, Scoring, AI
- * Model, and API Settings. Calendar automation controls intentionally live on the
- * Calendar page (next to the connection + sync), not here.
+ * Model, and API Settings. The team-wide meeting-dispatch master switches (global
+ * bot kill-switch + on-demand join) live under Meeting Bot; the per-user
+ * "auto-join meetings I lead" preference stays on the Calendar page.
  */
 export default function SettingsPage(): React.JSX.Element {
   const { can } = useAuth();
