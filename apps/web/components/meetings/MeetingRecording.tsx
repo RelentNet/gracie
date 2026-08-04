@@ -1,65 +1,32 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { activeSegmentIndex, formatClock, type TranscriptSegment } from '@gracie/shared';
 
 import { TYPE } from '@/lib/typography';
 
 /**
- * MeetingRecording — the recorded-meeting player (meeting page Phase C). An HTML5
- * `<video>` streams the MP4 through the same-origin `/api/files/raw` proxy (never a
- * raw Recall URL — those expire + are cross-origin), and the timestamped transcript
- * renders as clickable lines beside it:
+ * MeetingRecording — the recorded-meeting player (meeting page ended-state). An HTML5
+ * `<video>` streams the mixed recording DIRECTLY from Recall's S3 (a fresh signed URL
+ * resolved server-side per view — never stored on our infra, never proxied; S3 honors
+ * Range so native seeking works), with the timestamped transcript beside it:
  *   - click a line  → `video.currentTime = segment.start` and play,
  *   - as it plays   → the active line highlights + scrolls into view (`timeupdate`).
  *
- * The page only mounts this after `canAccessKey` allowed the caller, and the proxy
- * re-checks that same gate on every byte request — so access matches every other
- * file. The transcript is fetched here (small JSON) so a video-only recording still
- * plays with a graceful "no transcript" note.
+ * The transcript `segments` are resolved server-side (our durable MinIO copy, or a
+ * live-pull-and-cache for back-catalog meetings) and passed in directly — the readable
+ * transcript also lands as a downloadable document in the meeting's folder. `null`/empty
+ * segments render a plain "no transcript" note so a video-only recording still plays.
  */
 export interface MeetingRecordingProps {
-  readonly videoKey: string;
-  readonly transcriptKey: string | null;
+  readonly videoUrl: string;
+  readonly segments: readonly TranscriptSegment[] | null;
 }
 
-function rawUrl(key: string): string {
-  return `/api/files/raw?key=${encodeURIComponent(key)}`;
-}
-
-export function MeetingRecording({ videoKey, transcriptKey }: MeetingRecordingProps): React.JSX.Element {
+export function MeetingRecording({ videoUrl, segments }: MeetingRecordingProps): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const [segments, setSegments] = useState<readonly TranscriptSegment[] | null>(null);
-  const [transcriptError, setTranscriptError] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
-
-  const videoUrl = useMemo(() => rawUrl(videoKey), [videoKey]);
-
-  // Load the transcript segments (small JSON, gated by canAccessKey via the proxy).
-  useEffect(() => {
-    if (transcriptKey === null) {
-      setSegments([]);
-      return;
-    }
-    let active = true;
-    setSegments(null);
-    setTranscriptError(false);
-    fetch(rawUrl(transcriptKey))
-      .then((res) => (res.ok ? (res.json() as Promise<TranscriptSegment[]>) : Promise.reject(res.status)))
-      .then((data) => {
-        if (active) setSegments(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {
-        if (active) {
-          setTranscriptError(true);
-          setSegments([]);
-        }
-      });
-    return (): void => {
-      active = false;
-    };
-  }, [transcriptKey]);
 
   // Keep the active line in view as playback moves it.
   useEffect(() => {
@@ -105,15 +72,9 @@ export function MeetingRecording({ videoKey, transcriptKey }: MeetingRecordingPr
           <span style={TYPE.label}>Transcript</span>
         </div>
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-2">
-          {segments === null ? (
+          {!hasTranscript ? (
             <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }} className="p-2">
-              Loading transcript…
-            </p>
-          ) : !hasTranscript ? (
-            <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }} className="p-2">
-              {transcriptError
-                ? 'The transcript could not be loaded.'
-                : 'No transcript is available for this recording.'}
+              No transcript is available for this recording.
             </p>
           ) : (
             <ol>

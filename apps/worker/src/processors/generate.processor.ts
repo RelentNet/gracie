@@ -17,7 +17,6 @@
  * `needs_attention` and a `failed` `pipeline_runs` row is written.
  */
 import { createHash } from 'node:crypto';
-import { Readable } from 'node:stream';
 
 import type { Job, Processor } from 'bullmq';
 import type { FastifyBaseLogger } from 'fastify';
@@ -36,7 +35,7 @@ import {
   type GeneratedDocType,
   type GenerationJobPayload,
 } from '@gracie/shared';
-import { putObject, putObjectStream } from '@gracie/shared/storage';
+import { putObject } from '@gracie/shared/storage';
 
 import { chunkText } from '../lib/chunk.js';
 import { emailAdminsForAlert } from '../lib/email.js';
@@ -179,9 +178,7 @@ export interface MeetingStorageKeys {
   readonly occurrenceDisplayName: string;
   /** Unique R2 key for this meeting's raw transcript. */
   readonly transcriptKey: string;
-  /** R2 key for the recorded MP4 (Phase C player), under this occurrence's folder. */
-  readonly videoKey: string;
-  /** R2 key for the timestamped transcript-segments JSON (Phase C player). */
+  /** R2 key for the timestamped transcript-segments JSON (meeting-page player). */
   readonly transcriptSegmentsKey: string;
   /** Unique R2 key for one generated doc file within this occurrence's folder. */
   objectKey(fileName: string): string;
@@ -213,9 +210,9 @@ export function buildMeetingStorageKeys(input: {
     occurrenceFolderPath,
     occurrenceDisplayName,
     transcriptKey: `clients/${input.slug}/transcripts/${stamp}-${id8}.txt`,
-    // Media sits INSIDE the occurrence folder so canAccessKey (the /api/files/raw
-    // gate) governs it by the client's folder visibility — no new access surface.
-    videoKey: `${occurrenceFolderPath}/recording.mp4`,
+    // The transcript-segments JSON sits INSIDE the occurrence folder so canAccessKey
+    // (the /api/files/raw gate) governs it by the client's folder visibility — no new
+    // access surface. Video is NEVER stored (live-pulled from Recall on the page).
     transcriptSegmentsKey: `${occurrenceFolderPath}/transcript.json`,
     objectKey: (fileName: string) => `${occurrenceFolderPath}/${fileName}`,
   };
@@ -436,6 +433,7 @@ async function persistDocuments(
   slug: string,
   documents: readonly GeneratedDocument[],
   keys: MeetingStorageKeys,
+  transcriptText: string,
 ): Promise<Map<GeneratedDocType, string>> {
   // Idempotent re-runs: clear prior meeting-generated docs for this meeting.
   const cleared = await db
@@ -492,6 +490,33 @@ async function persistDocuments(
     if (error !== null) throw new Error(`generate: insert document ${doc.type}: ${error.message}`);
     ids.set(doc.type, data.id);
   }
+
+  // The raw meeting transcript, filed as a VISIBLE, downloadable document alongside
+  // the generated docs — same occurrence folder, so canAccessKey governs it exactly
+  // like the rest. This is our durable, going-forward transcript copy (the player's
+  // timestamped segments are stored separately as transcript.json backing data).
+  // `other` reuses an existing document_type value (no enum migration); the readable
+  // name is `transcript.md`, the source badge is `meeting` (cleared+recreated on
+  // re-runs by the delete above).
+  const transcriptFileName = 'transcript.md';
+  const transcriptKey = keys.objectKey(transcriptFileName);
+  await putObject(transcriptKey, Buffer.from(transcriptText, 'utf8'), 'text/markdown');
+  const transcriptInsert: DocumentInsert = {
+    client_id: clientId,
+    meeting_id: meeting.id,
+    folder_id: occurrenceFolderId,
+    document_type: 'other',
+    source_badge: 'meeting',
+    r2_key: transcriptKey,
+    file_name: transcriptFileName,
+    file_size: Buffer.byteLength(transcriptText, 'utf8'),
+    requires_review: false,
+    status: 'ready',
+  };
+  const transcriptDoc = await db.from('documents').insert(transcriptInsert);
+  if (transcriptDoc.error !== null) {
+    throw new Error(`generate: insert transcript document: ${transcriptDoc.error.message}`);
+  }
   return ids;
 }
 
@@ -540,35 +565,37 @@ export function buildDigest(content: string): string {
 }
 
 /**
- * Decide the `meeting_media` row from what Recall actually returned + the fixed
- * storage keys: a key is set ONLY when its bytes were stored, so a missing video
- * or empty transcript leaves that column null (the player then degrades to
- * "processing"/none). PURE and exported for unit tests — the side-effecting
- * {@link storeMeetingMedia} streams the bytes, then records exactly this row.
+ * Decide the `meeting_media` row for the click-to-seek player. VIDEO IS NEVER STORED
+ * (`video_key` stays null — the meeting page live-pulls it straight from Recall on
+ * view), so this only records the timestamped-segments key, and only when segments
+ * were actually stored (empty transcript → null → player degrades to "no transcript").
+ * PURE and exported for unit tests — the side-effecting {@link storeMeetingMedia}
+ * writes the segments JSON, then records exactly this row.
  */
 export function decideMeetingMediaRow(input: {
   readonly meetingId: string;
-  readonly keys: Pick<MeetingStorageKeys, 'videoKey' | 'transcriptSegmentsKey'>;
-  readonly videoStored: boolean;
+  readonly transcriptSegmentsKey: string;
   readonly segmentCount: number;
   readonly durationS: number | null;
   readonly fetchedAt: string;
 }): MeetingMediaInsert {
   return {
     meeting_id: input.meetingId,
-    video_key: input.videoStored ? input.keys.videoKey : null,
-    transcript_key: input.segmentCount > 0 ? input.keys.transcriptSegmentsKey : null,
+    // Video is live-pulled from Recall on the meeting page, never persisted here.
+    video_key: null,
+    transcript_key: input.segmentCount > 0 ? input.transcriptSegmentsKey : null,
     video_duration_s: input.durationS,
     fetched_at: input.fetchedAt,
   };
 }
 
 /**
- * Best-effort: fetch the recorded MP4 + timestamped transcript from Recall and
- * store them for the meeting-page player (Phase C). STREAMS the video into MinIO
- * (never buffers a whole large MP4) and writes the segments as JSON, then UPSERTs
- * one `meeting_media` row keyed by meeting_id (idempotent re-runs). The caller
- * wraps this so a media hiccup NEVER fails generation — the docs already committed.
+ * Best-effort: fetch the timestamped transcript segments from Recall and store them
+ * as JSON for the meeting-page click-to-seek player, then UPSERT one `meeting_media`
+ * row keyed by meeting_id (idempotent re-runs). The readable, durable transcript
+ * DOCUMENT is filed separately by {@link persistDocuments}; VIDEO is never stored
+ * (the page live-pulls it from Recall). The caller wraps this so a media hiccup NEVER
+ * fails generation — the docs already committed.
  */
 async function storeMeetingMedia(
   db: ServerClient,
@@ -587,10 +614,8 @@ async function storeMeetingMedia(
     region: process.env.RECALL_REGION,
   });
 
-  let videoStored = false;
-  if (media.videoUrl !== null) {
-    videoStored = await streamVideoToStorage(media.videoUrl, keys.videoKey, log);
-  }
+  // Only the seek-segments are persisted here — the video URL Recall returned is
+  // deliberately ignored (never stored; the page streams it live from Recall).
   if (media.segments.length > 0) {
     await putObject(
       keys.transcriptSegmentsKey,
@@ -601,8 +626,7 @@ async function storeMeetingMedia(
 
   const row = decideMeetingMediaRow({
     meetingId,
-    keys,
-    videoStored,
+    transcriptSegmentsKey: keys.transcriptSegmentsKey,
     segmentCount: media.segments.length,
     durationS: media.durationS,
     fetchedAt: new Date().toISOString(),
@@ -610,39 +634,9 @@ async function storeMeetingMedia(
   const { error } = await db.from('meeting_media').upsert(row, { onConflict: 'meeting_id' });
   if (error !== null) throw new Error(`generate: upsert meeting_media: ${error.message}`);
   log.info(
-    { meetingId, video: videoStored, segments: media.segments.length },
-    'generate: stored meeting media',
+    { meetingId, segments: media.segments.length },
+    'generate: stored meeting transcript segments (video is live-pulled, not stored)',
   );
-}
-
-/**
- * Download Recall's mixed-video MP4 and STREAM it into MinIO without buffering it
- * in memory. Recall's URL is a presigned S3 GET that carries a `Content-Length`;
- * we forward that as the PUT length so the S3 client streams the body straight
- * through. Returns false (logged, not thrown) when the video can't be fetched or
- * lacks a length — the row's `video_key` then stays null and the meeting still
- * completes.
- */
-async function streamVideoToStorage(
-  videoUrl: string,
-  videoKey: string,
-  log: FastifyBaseLogger,
-): Promise<boolean> {
-  const res = await fetch(videoUrl);
-  const lengthHeader = res.headers.get('content-length');
-  const length = lengthHeader !== null ? Number(lengthHeader) : NaN;
-  if (!res.ok || res.body === null || !Number.isFinite(length) || length <= 0) {
-    log.warn(
-      { status: res.status, hasBody: res.body !== null, length: lengthHeader },
-      'generate: recording video not streamable — skipping (video_key left null)',
-    );
-    return false;
-  }
-  // `fetch` yields a DOM ReadableStream; Readable.fromWeb wants the node:stream/web
-  // one — structurally identical, cast to the exact parameter type.
-  const webStream = res.body as Parameters<typeof Readable.fromWeb>[0];
-  await putObjectStream(videoKey, Readable.fromWeb(webStream), length, 'video/mp4');
-  return true;
 }
 
 /** Build the generation processor, logging through the worker's Fastify logger. */
@@ -759,8 +753,8 @@ export function createGenerateProcessor(
         },
       });
 
-      // 6. Store docs + insert `documents` rows.
-      const docIds = await persistDocuments(db, meeting, clientId, slug, documents, keys);
+      // 6. Store docs + insert `documents` rows (incl. the visible transcript document).
+      const docIds = await persistDocuments(db, meeting, clientId, slug, documents, keys, transcript);
 
       // 7. Tasks: insert parsed checklist (idempotent: clear prior for this meeting first).
       const clearedTasks = await db.from('tasks').delete().eq('source_meeting_id', meetingId);
@@ -835,10 +829,11 @@ export function createGenerateProcessor(
         }
       }
 
-      // 11. Recorded video + synced transcript for the meeting page (Phase C) —
-      // BEST-EFFORT: the docs are already committed, so a media failure must never
-      // undo the run. Skipped for the transcript-override (test) path, which has no
-      // Recall bot to pull media from.
+      // 11. Timestamped transcript segments for the meeting-page click-to-seek player
+      // (video is live-pulled from Recall on the page, never stored) — BEST-EFFORT:
+      // the docs (incl. the readable transcript) are already committed, so a segments
+      // failure must never undo the run. Skipped for the transcript-override (test)
+      // path, which has no Recall bot to pull segments from.
       const botJobId = job.data.botJobId;
       if (typeof botJobId === 'string' && botJobId !== '') {
         try {

@@ -89,6 +89,36 @@ export function deriveMeetingFleetState(input: MeetingFleetInput): FleetState {
 }
 
 /**
+ * Where the ended-state player sources the transcript from (the "do both" rule):
+ *   - `stored`   — we have our durable MinIO copy AND the caller may see it → use it.
+ *   - `livepull` — no durable copy yet (a back-catalog meeting) → live-pull it from
+ *                  Recall, then cache it forward.
+ *   - `none`     — a durable copy exists but the caller can't see it (restricted
+ *                  folder → NEVER fall through to a live-pull that would bypass the
+ *                  restriction), or there's simply no transcript to show.
+ * Pure + unit-tested; the I/O (fetch/read/cache) lives in the server data layer.
+ */
+export type TranscriptSource =
+  | { readonly kind: 'stored'; readonly key: string }
+  | { readonly kind: 'livepull'; readonly url: string }
+  | { readonly kind: 'none' };
+
+export function decideTranscriptSource(input: {
+  /** `meeting_media.transcript_key`, or null when nothing is stored yet. */
+  readonly storedKey: string | null;
+  /** canAccessKey(storedKey) result — only meaningful when storedKey is set. */
+  readonly storedAccessible: boolean;
+  /** Fresh Recall transcript download URL, or null when not ready / absent. */
+  readonly liveUrl: string | null;
+}): TranscriptSource {
+  if (input.storedKey !== null) {
+    return input.storedAccessible ? { kind: 'stored', key: input.storedKey } : { kind: 'none' };
+  }
+  if (input.liveUrl !== null) return { kind: 'livepull', url: input.liveUrl };
+  return { kind: 'none' };
+}
+
+/**
  * The most recent meetings BEFORE this occurrence (the "last 3 summaries" prep
  * material). Excludes the current meeting, keeps only strictly-earlier starts,
  * newest first, capped at `limit`.

@@ -21,8 +21,10 @@ import {
   buildTranscriptProviderConfig,
   classifyRecordings,
   dispatchRecallBot,
+  downloadRecallTranscript,
   ensureAsyncTranscript,
   fetchRecallMedia,
+  fetchRecallRecordingUrls,
   fetchRecallTranscript,
   findVideoMixedUrl,
   flattenRecallTranscript,
@@ -344,6 +346,82 @@ test('fetchRecallMedia: no video + no transcript → nulls/[] (best-effort, neve
       assert.equal(media.videoUrl, null);
       assert.equal(media.durationS, null);
       assert.deepEqual(media.segments, []);
+    },
+  );
+});
+
+// --- Live-pull URLs (video streamed direct from Recall, never stored) --------------
+
+test('fetchRecallRecordingUrls: returns FRESH video + transcript URLs + duration, downloads nothing', async () => {
+  const botPayload = {
+    recordings: [
+      {
+        id: 'rec_1',
+        started_at: '2026-08-03T15:00:00Z',
+        completed_at: '2026-08-03T15:30:00Z',
+        media_shortcuts: {
+          video_mixed: { data: { download_url: 'https://recall.s3/video.mp4?sig=x' } },
+          transcript: { status: { code: 'done' }, data: { download_url: 'https://recall.s3/t?token=y' } },
+        },
+      },
+    ],
+  };
+  const seen: string[] = [];
+  await withFetch(
+    (url) => {
+      seen.push(url);
+      return Promise.resolve(jsonResponse(botPayload));
+    },
+    async () => {
+      const urls = await fetchRecallRecordingUrls('bot_1', { apiKey: 'k' });
+      assert.equal(urls.videoUrl, 'https://recall.s3/video.mp4?sig=x');
+      assert.equal(urls.transcriptUrl, 'https://recall.s3/t?token=y');
+      assert.equal(urls.durationS, 1800);
+    },
+  );
+  // ONE bot-retrieve, and crucially NO fetch of the video URL (it's never downloaded).
+  assert.equal(seen.length, 1);
+  assert.ok(seen[0]?.includes('/bot/'));
+});
+
+test('fetchRecallRecordingUrls: no recording / no transcript yet → nulls', async () => {
+  await withFetch(
+    () => Promise.resolve(jsonResponse({ recordings: [{ id: 'rec_1', media_shortcuts: {} }] })),
+    async () => {
+      const urls = await fetchRecallRecordingUrls('bot_1', { apiKey: 'k' });
+      assert.equal(urls.videoUrl, null);
+      assert.equal(urls.transcriptUrl, null);
+    },
+  );
+});
+
+test('downloadRecallTranscript: shapes segments + flattened text from one download (no auth header)', async () => {
+  const transcriptPayload = [
+    { participant: { id: 1, name: 'A' }, words: [{ text: 'Hi', start_timestamp: { relative: 0 }, end_timestamp: { relative: 1 } }] },
+    { participant: { id: 2, name: 'B' }, words: [{ text: 'Bye', start_timestamp: { relative: 2 }, end_timestamp: { relative: 3 } }] },
+  ];
+  await withFetch(
+    (_url, init) => {
+      assert.equal((init?.headers as Record<string, string>)?.Authorization, undefined);
+      return Promise.resolve(jsonResponse(transcriptPayload));
+    },
+    async () => {
+      const dl = await downloadRecallTranscript('https://recall.s3/t?token=y');
+      assert.ok(dl !== null);
+      assert.deepEqual(dl.segments, [
+        { start: 0, end: 1, speaker: 'A', text: 'Hi' },
+        { start: 2, end: 3, speaker: 'B', text: 'Bye' },
+      ]);
+      assert.equal(dl.text, 'A: Hi\nB: Bye');
+    },
+  );
+});
+
+test('downloadRecallTranscript: non-OK response → null (best-effort)', async () => {
+  await withFetch(
+    () => Promise.resolve(jsonResponse({}, false, 404)),
+    async () => {
+      assert.equal(await downloadRecallTranscript('https://recall.s3/gone'), null);
     },
   );
 });

@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  decideTranscriptSource,
   deriveMeetingFleetState,
   deriveOccurrenceState,
   selectPriorMeetings,
@@ -128,4 +129,34 @@ test('prior-meeting selection: excludes self, keeps earlier only, newest-first, 
 test('prior-meeting selection: none on file → empty', () => {
   const prior = selectPriorMeetings([{ id: 'now', dateTime: '2026-07-20T16:00:00Z' }], 'now', '2026-07-20T16:00:00Z');
   assert.deepEqual(prior, []);
+});
+
+// --- Transcript source resolution (the "do both" rule) -----------------------------
+
+test('transcript source: durable copy the caller can see → stored (no live-pull)', () => {
+  assert.deepEqual(
+    decideTranscriptSource({ storedKey: 'clients/x/generated/o/transcript.json', storedAccessible: true, liveUrl: 'https://recall/t' }),
+    { kind: 'stored', key: 'clients/x/generated/o/transcript.json' },
+  );
+});
+
+test('transcript source: back-catalog (nothing stored) with a live URL → live-pull', () => {
+  assert.deepEqual(
+    decideTranscriptSource({ storedKey: null, storedAccessible: false, liveUrl: 'https://recall/t' }),
+    { kind: 'livepull', url: 'https://recall/t' },
+  );
+});
+
+test('transcript source: a stored-but-RESTRICTED copy stays hidden — never live-pulls around the ACL', () => {
+  assert.deepEqual(
+    decideTranscriptSource({ storedKey: 'clients/x/generated/o/transcript.json', storedAccessible: false, liveUrl: 'https://recall/t' }),
+    { kind: 'none' },
+  );
+});
+
+test('transcript source: nothing stored and no live URL (not ready / none) → none', () => {
+  assert.deepEqual(
+    decideTranscriptSource({ storedKey: null, storedAccessible: false, liveUrl: null }),
+    { kind: 'none' },
+  );
 });
