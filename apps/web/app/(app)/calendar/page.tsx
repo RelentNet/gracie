@@ -162,6 +162,17 @@ export default function CalendarPage(): React.JSX.Element {
     });
   }, []);
 
+  // Navigate the whole view (month + selected day) to a given day key — used by
+  // the "needs a client" pointer to jump to the earliest such meeting's day.
+  const jumpToDay = useCallback((dayKey: string): void => {
+    const [y, mo] = dayKey.split('-').map(Number);
+    if (y !== undefined && mo !== undefined) {
+      setViewYear(y);
+      setViewMonth(mo - 1);
+    }
+    setSelectedDay(dayKey);
+  }, []);
+
   return (
     <PageContainer className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
@@ -274,7 +285,7 @@ export default function CalendarPage(): React.JSX.Element {
         </div>
       </div>
 
-      {isAdmin ? <AmbiguousSection /> : null}
+      {isAdmin ? <AmbiguousSection onJump={jumpToDay} /> : null}
       <CadenceSection />
     </PageContainer>
   );

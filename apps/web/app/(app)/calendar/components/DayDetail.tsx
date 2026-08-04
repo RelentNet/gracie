@@ -40,7 +40,10 @@ export function DayDetail({
 }): React.JSX.Element {
   return (
     <Card>
-      <CardHeader title={localDayLabel(dayKey)} description={`${meetings.length} meeting${meetings.length === 1 ? '' : 's'}`} />
+      <CardHeader
+        title={localDayLabel(dayKey)}
+        description={`${meetings.length} meeting${meetings.length === 1 ? '' : 's'}`}
+      />
       {loading ? (
         <LoadingState label="Loading meetings…" />
       ) : meetings.length === 0 ? (
@@ -78,10 +81,24 @@ function OrgChip({
   return (
     <span
       className="inline-flex items-center gap-1 rounded-md"
-      style={{ backgroundColor: bg, color: fg, fontSize: '0.6875rem', fontWeight: 600, padding: '0.0625rem 0.375rem' }}
+      style={{
+        backgroundColor: bg,
+        color: fg,
+        fontSize: '0.6875rem',
+        fontWeight: 600,
+        padding: '0.0625rem 0.375rem',
+      }}
     >
-      <Link href={`/clients/${org.id}`} className="inline-flex items-center gap-1" style={{ color: fg }}>
-        {isInternal ? <Lock size={11} aria-hidden="true" /> : <Building2 size={11} aria-hidden="true" />}
+      <Link
+        href={`/clients/${org.id}`}
+        className="inline-flex items-center gap-1"
+        style={{ color: fg }}
+      >
+        {isInternal ? (
+          <Lock size={11} aria-hidden="true" />
+        ) : (
+          <Building2 size={11} aria-hidden="true" />
+        )}
         {org.name}
       </Link>
       {!isInternal && org.type !== 'client' ? (
@@ -103,7 +120,11 @@ function OrgChip({
 }
 
 /** The external (non-GA) attendees on a meeting, name + email. */
-function ExternalAttendeesList({ people }: { readonly people: readonly ExternalAttendee[] }): React.JSX.Element {
+function ExternalAttendeesList({
+  people,
+}: {
+  readonly people: readonly ExternalAttendee[];
+}): React.JSX.Element {
   return (
     <ul className="flex flex-col gap-0.5">
       {people.map((p) => (
@@ -132,6 +153,11 @@ function MeetingCard({
   const [create, setCreate] = useState<{ domain: string; type: ClientType } | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
   const attention = meetingNeedsAttention(m);
+  // Best domain to bind a brand-new client to when none is flagged as unknown.
+  // A non-internal meeting always has ≥1 external attendee, so this is defined
+  // whenever the assignment block shows — the "Create a new client" action is
+  // therefore always available, never only when there's an unrecognized domain.
+  const createDomain = m.unknownOrgDomains[0] ?? m.externalAttendees[0]?.domain ?? null;
 
   const unlink = useCallback(
     (clientId: string): void => {
@@ -150,17 +176,27 @@ function MeetingCard({
     <div className="flex flex-col gap-2">
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-0.5">
-          <Link href={`/meetings/${m.id}`} className="w-fit hover:underline" style={TYPE.bodyStrong}>
+          <Link
+            href={`/meetings/${m.id}`}
+            className="w-fit hover:underline"
+            style={TYPE.bodyStrong}
+          >
             {m.title ?? 'Untitled meeting'}
           </Link>
-          <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>{localTime(m.dateTime)}</span>
+          <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+            {localTime(m.dateTime)}
+          </span>
         </div>
         <StatusBadge status={toBadgeStatus(m.pipelineStatus)} size="sm" />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         {m.isInternal ? (
-          <Badge bg="var(--color-slate-100)" fg="var(--color-slate-600)" icon={<Lock size={11} aria-hidden="true" />}>
+          <Badge
+            bg="var(--color-slate-100)"
+            fg="var(--color-slate-600)"
+            icon={<Lock size={11} aria-hidden="true" />}
+          >
             Internal
           </Badge>
         ) : null}
@@ -175,12 +211,19 @@ function MeetingCard({
             />
           ))}
         {attention ? (
-          <Badge bg="var(--color-amber-100)" fg="var(--color-amber-600)" icon={<AlertTriangle size={11} aria-hidden="true" />}>
+          <Badge
+            bg="var(--color-amber-100)"
+            fg="var(--color-amber-600)"
+            icon={<AlertTriangle size={11} aria-hidden="true" />}
+          >
             No client
           </Badge>
         ) : null}
         {m.isBotDispatched ? (
-          <span className="inline-flex items-center gap-1" style={{ ...TYPE.label, color: 'var(--color-emerald-600)' }}>
+          <span
+            className="inline-flex items-center gap-1"
+            style={{ ...TYPE.label, color: 'var(--color-emerald-600)' }}
+          >
             <Video size={13} aria-hidden="true" /> Bot dispatched
           </span>
         ) : null}
@@ -200,27 +243,53 @@ function MeetingCard({
           className="flex flex-col gap-2 rounded-lg border p-2"
           style={{ borderColor: 'var(--color-amber-200, var(--border-subtle))' }}
         >
-          {m.unknownOrgDomains.map((domain) => (
-            <div key={domain} className="flex flex-wrap items-center gap-2">
-              <span className="font-data" style={{ ...TYPE.label, color: 'var(--text-primary)' }}>
-                {domain}
+          {m.unknownOrgDomains.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+                Unrecognized {m.unknownOrgDomains.length === 1 ? 'domain' : 'domains'}
               </span>
-              <Button size="sm" variant="secondary" onClick={(): void => setCreate({ domain, type: 'client' })}>
-                Create client
-              </Button>
-              <Button size="sm" variant="secondary" onClick={(): void => setCreate({ domain, type: 'lead' })}>
-                Create lead
-              </Button>
+              {m.unknownOrgDomains.map((domain) => (
+                <div key={domain} className="flex flex-wrap items-center gap-2">
+                  <span
+                    className="font-data"
+                    style={{ ...TYPE.label, color: 'var(--text-primary)' }}
+                  >
+                    {domain}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={(): void => setCreate({ domain, type: 'client' })}
+                  >
+                    Create new client
+                  </Button>
+                </div>
+              ))}
             </div>
-          ))}
-          <button
-            type="button"
-            onClick={(): void => setLinkOpen(true)}
-            className="inline-flex w-fit items-center gap-1"
-            style={{ ...TYPE.label, color: 'var(--color-blue-600)', cursor: 'pointer' }}
-          >
-            <Link2 size={13} aria-hidden="true" /> Link an existing org
-          </button>
+          ) : null}
+          {/* Always offer BOTH create + link. When a domain is already flagged
+              above, its per-domain button is the create path, so the generic
+              "Create a new client" only shows when nothing was flagged. */}
+          <div className="flex flex-wrap items-center gap-3">
+            {m.unknownOrgDomains.length === 0 && createDomain !== null ? (
+              <button
+                type="button"
+                onClick={(): void => setCreate({ domain: createDomain, type: 'client' })}
+                className="inline-flex w-fit items-center gap-1"
+                style={{ ...TYPE.label, color: 'var(--color-blue-600)', cursor: 'pointer' }}
+              >
+                <Building2 size={13} aria-hidden="true" /> Create a new client
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={(): void => setLinkOpen(true)}
+              className="inline-flex w-fit items-center gap-1"
+              style={{ ...TYPE.label, color: 'var(--color-blue-600)', cursor: 'pointer' }}
+            >
+              <Link2 size={13} aria-hidden="true" /> Link an existing org
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -282,7 +351,9 @@ function PeopleRow({ people }: { readonly people: readonly CalendarPerson[] }): 
         </span>
       ))}
       {people.length > shown.length ? (
-        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>+{people.length - shown.length}</span>
+        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+          +{people.length - shown.length}
+        </span>
       ) : null}
     </span>
   );
