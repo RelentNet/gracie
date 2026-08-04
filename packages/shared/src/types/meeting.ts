@@ -46,6 +46,19 @@ export interface Meeting extends Timestamps {
   readonly source: MeetingSource;
 }
 
+/**
+ * One utterance of a recorded meeting's transcript, timestamped for the synced
+ * player (meeting page Phase C). `start`/`end` are SECONDS from the recording
+ * start (Recall's per-word relative timestamps); null when the source shape
+ * carried no timing. Powers click-a-line-to-seek + active-line highlight.
+ */
+export interface TranscriptSegment {
+  readonly start: number | null;
+  readonly end: number | null;
+  readonly speaker: string;
+  readonly text: string;
+}
+
 /** `meeting_type_rules` table — keyword → meeting_type classification. */
 export interface MeetingTypeRule {
   readonly id: UUID;

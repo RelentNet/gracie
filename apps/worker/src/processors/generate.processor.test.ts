@@ -26,7 +26,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { stripReproducedScaffold } from '../lib/generate.js';
-import { buildDigest, buildMeetingStorageKeys, resolveMeetingClientId } from './generate.processor.js';
+import {
+  buildDigest,
+  buildMeetingStorageKeys,
+  decideMeetingMediaRow,
+  resolveMeetingClientId,
+} from './generate.processor.js';
 
 const SLUG = 'grace-associates';
 // Two distinct "clean GOID" series keys (shape mirrors migration 0011 output).
@@ -179,6 +184,55 @@ test('keys + labels are ET-stamped (14:30 UTC → 10:30 EDT); group label is the
   assert.equal(k.occurrenceDisplayName, '2026-07-16 10:30');
   assert.equal(k.transcriptKey, `clients/${SLUG}/transcripts/20260716-1030-aaaaaaaa.txt`);
   assert.equal(k.objectKey('internal_memo.md'), `${k.occurrenceFolderPath}/internal_memo.md`);
+  // Phase C media lives INSIDE the occurrence folder so canAccessKey governs it.
+  assert.equal(k.videoKey, `${k.occurrenceFolderPath}/recording.mp4`);
+  assert.equal(k.transcriptSegmentsKey, `${k.occurrenceFolderPath}/transcript.json`);
+});
+
+// --- Phase C: meeting_media row decision (which keys get set) ----------------------
+
+const MEDIA_KEYS = { videoKey: 'clients/x/generated/g/occ/recording.mp4', transcriptSegmentsKey: 'clients/x/generated/g/occ/transcript.json' } as const;
+
+test('decideMeetingMediaRow: sets a key ONLY when its bytes were stored', () => {
+  const both = decideMeetingMediaRow({
+    meetingId: 'm1',
+    keys: MEDIA_KEYS,
+    videoStored: true,
+    segmentCount: 3,
+    durationS: 1800,
+    fetchedAt: '2026-08-03T00:00:00Z',
+  });
+  assert.deepEqual(both, {
+    meeting_id: 'm1',
+    video_key: MEDIA_KEYS.videoKey,
+    transcript_key: MEDIA_KEYS.transcriptSegmentsKey,
+    video_duration_s: 1800,
+    fetched_at: '2026-08-03T00:00:00Z',
+  });
+});
+
+test('decideMeetingMediaRow: video failed / no transcript → those keys stay null', () => {
+  const videoOnly = decideMeetingMediaRow({
+    meetingId: 'm2',
+    keys: MEDIA_KEYS,
+    videoStored: true,
+    segmentCount: 0,
+    durationS: null,
+    fetchedAt: 'T',
+  });
+  assert.equal(videoOnly.video_key, MEDIA_KEYS.videoKey);
+  assert.equal(videoOnly.transcript_key, null);
+
+  const neither = decideMeetingMediaRow({
+    meetingId: 'm3',
+    keys: MEDIA_KEYS,
+    videoStored: false,
+    segmentCount: 5,
+    durationS: null,
+    fetchedAt: 'T',
+  });
+  assert.equal(neither.video_key, null);
+  assert.equal(neither.transcript_key, MEDIA_KEYS.transcriptSegmentsKey);
 });
 
 test('late-evening UTC lands on the correct ET day (not the UTC day)', () => {

@@ -60,13 +60,21 @@ export async function GET(req: NextRequest): Promise<Response> {
       );
     }
 
-    const { body, contentType } = await getObjectStream(key);
+    // Forward any Range header so <video> seeking works (HTTP 206) — a 200-only
+    // response makes the browser treat the recording as non-seekable.
+    const range = req.headers.get('range');
+    const { body, contentType, contentLength, contentRange, statusCode } = await getObjectStream(
+      key,
+      range,
+    );
 
     const ext = key.split('.').pop()?.toLowerCase() ?? '';
     const type =
       CONTENT_TYPE_BY_EXT[ext] ?? contentType ?? 'application/octet-stream';
 
-    const headers = new Headers({ 'Content-Type': type });
+    const headers = new Headers({ 'Content-Type': type, 'Accept-Ranges': 'bytes' });
+    if (contentLength !== undefined) headers.set('Content-Length', String(contentLength));
+    if (contentRange !== undefined) headers.set('Content-Range', contentRange);
     if (searchParams.get('download') === '1') {
       const name = searchParams.get('name');
       let filename = name !== null && name !== '' ? name : (key.split('/').pop() ?? 'download');
@@ -75,7 +83,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       if (ext !== '' && !filename.toLowerCase().endsWith(`.${ext}`)) filename += `.${ext}`;
       headers.set('Content-Disposition', attachmentDisposition(filename));
     }
-    return new Response(body, { headers });
+    return new Response(body, { status: statusCode, headers });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: { code: 'raw_failed', message } }, { status: 500 });

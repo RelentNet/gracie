@@ -69,6 +69,36 @@ export async function getMeetingMasterRecord(meetingId: string): Promise<MasterR
   return (data ?? []).map(mapMasterRecordEntry);
 }
 
+/**
+ * Recorded-media handles for a meeting (Phase C), or null if none stored yet. The
+ * keys point at MinIO objects served through `/api/files/raw`; the page still runs
+ * `canAccessKey` on them before rendering the player (same gate as every file).
+ */
+export interface MeetingMedia {
+  readonly videoKey: string | null;
+  readonly transcriptKey: string | null;
+  readonly durationS: number | null;
+}
+
+export async function getMeetingMedia(meetingId: string): Promise<MeetingMedia | null> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('meeting_media')
+    .select('video_key, transcript_key, video_duration_s')
+    .eq('meeting_id', meetingId)
+    .maybeSingle();
+  if (error !== null) {
+    // Safe-deploy window: if migration 0014 hasn't been applied yet the table is
+    // absent — degrade to "no recording" rather than crash the meeting page. Any
+    // other error still surfaces.
+    if (error.code === '42P01' || error.code === 'PGRST205') return null;
+    throw new Error(`getMeetingMedia: ${error.message}`);
+  }
+  return data === null
+    ? null
+    : { videoKey: data.video_key, transcriptKey: data.transcript_key, durationS: data.video_duration_s };
+}
+
 /** The latest pipeline run for a meeting (status + raw error), or null if none ran. */
 export interface MeetingPipelineRun {
   readonly runStatus: 'success' | 'failed' | 'partial' | null;

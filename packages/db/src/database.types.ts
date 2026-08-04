@@ -1109,6 +1109,37 @@ export type Database = {
           },
         ]
       }
+      meeting_media: {
+        Row: {
+          fetched_at: string
+          meeting_id: string
+          transcript_key: string | null
+          video_duration_s: number | null
+          video_key: string | null
+        }
+        Insert: {
+          fetched_at?: string
+          meeting_id: string
+          transcript_key?: string | null
+          video_duration_s?: number | null
+          video_key?: string | null
+        }
+        Update: {
+          fetched_at?: string
+          meeting_id?: string
+          transcript_key?: string | null
+          video_duration_s?: number | null
+          video_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_media_meeting_id_fkey"
+            columns: ["meeting_id"]
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meeting_type_rules: {
         Row: {
           created_at: string

@@ -15,14 +15,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { activeSegmentIndex, formatClock } from '@gracie/shared';
 import {
   DEFAULT_TRANSCRIPT_PROVIDER,
   buildTranscriptProviderConfig,
   classifyRecordings,
   dispatchRecallBot,
   ensureAsyncTranscript,
+  fetchRecallMedia,
   fetchRecallTranscript,
+  findVideoMixedUrl,
   flattenRecallTranscript,
+  shapeTranscriptSegments,
 } from '@gracie/shared/recall';
 
 /** Install a fetch stub for the duration of `fn`, restoring the real fetch after. */
@@ -256,4 +260,123 @@ test('classifyRecordings: a done transcript on ANY recording wins over an earlie
     ],
   });
   assert.equal(rec.state, 'regenerate');
+});
+
+// --- Phase C recorded-media helpers -----------------------------------------------
+
+test('shapeTranscriptSegments: start = first word, end = last word (seconds), with speaker + text', () => {
+  const raw = [
+    {
+      participant: { id: 1, name: 'Daniel Velez' },
+      words: [
+        { text: 'Hello', start_timestamp: { relative: 1.5 }, end_timestamp: { relative: 2.0 } },
+        { text: 'there', start_timestamp: { relative: 2.0 }, end_timestamp: { relative: 2.6 } },
+      ],
+    },
+    {
+      participant: { id: 2, name: null },
+      words: [{ text: 'Hi', start_timestamp: { relative: 3.0 }, end_timestamp: { relative: 3.4 } }],
+    },
+  ];
+  assert.deepEqual(shapeTranscriptSegments(raw), [
+    { start: 1.5, end: 2.6, speaker: 'Daniel Velez', text: 'Hello there' },
+    { start: 3.0, end: 3.4, speaker: 'Speaker 2', text: 'Hi' },
+  ]);
+});
+
+test('shapeTranscriptSegments: missing timestamps → null start/end; empty/no-speech dropped; non-array → []', () => {
+  const raw = [
+    { participant: { name: 'X' }, words: [{ text: 'no-times' }] },
+    { participant: { name: 'Y' }, words: [] }, // no speech → dropped
+  ];
+  assert.deepEqual(shapeTranscriptSegments(raw), [{ start: null, end: null, speaker: 'X', text: 'no-times' }]);
+  assert.deepEqual(shapeTranscriptSegments(null), []);
+  assert.deepEqual(shapeTranscriptSegments('nope'), []);
+});
+
+test('findVideoMixedUrl: returns the first mixed-video download URL, else null', () => {
+  assert.equal(
+    findVideoMixedUrl({
+      recordings: [
+        { id: 'r1', media_shortcuts: {} },
+        { id: 'r2', media_shortcuts: { video_mixed: { data: { download_url: 'https://dl/video.mp4' } } } },
+      ],
+    }),
+    'https://dl/video.mp4',
+  );
+  assert.equal(findVideoMixedUrl({ recordings: [{ id: 'r1', media_shortcuts: {} }] }), null);
+  assert.equal(findVideoMixedUrl({}), null);
+});
+
+test('fetchRecallMedia: pulls video URL + duration + shaped segments from ONE bot retrieve', async () => {
+  const botPayload = {
+    recordings: [
+      {
+        id: 'rec_1',
+        started_at: '2026-08-03T15:00:00Z',
+        completed_at: '2026-08-03T15:30:00Z',
+        media_shortcuts: {
+          video_mixed: { data: { download_url: 'https://dl/video.mp4' } },
+          transcript: { status: { code: 'done' }, data: { download_url: 'https://dl/t?token=x' } },
+        },
+      },
+    ],
+  };
+  const transcriptPayload = [
+    { participant: { id: 1, name: 'A' }, words: [{ text: 'Hi', start_timestamp: { relative: 0 }, end_timestamp: { relative: 1 } }] },
+  ];
+  await withFetch(
+    (url) => Promise.resolve(jsonResponse(url.includes('/bot/') ? botPayload : transcriptPayload)),
+    async () => {
+      const media = await fetchRecallMedia('bot_1', { apiKey: 'k' });
+      assert.equal(media.videoUrl, 'https://dl/video.mp4');
+      assert.equal(media.durationS, 1800); // 30 min
+      assert.deepEqual(media.segments, [{ start: 0, end: 1, speaker: 'A', text: 'Hi' }]);
+    },
+  );
+});
+
+test('fetchRecallMedia: no video + no transcript → nulls/[] (best-effort, never throws)', async () => {
+  await withFetch(
+    () => Promise.resolve(jsonResponse({ recordings: [{ id: 'rec_1', media_shortcuts: {} }] })),
+    async () => {
+      const media = await fetchRecallMedia('bot_1', { apiKey: 'k' });
+      assert.equal(media.videoUrl, null);
+      assert.equal(media.durationS, null);
+      assert.deepEqual(media.segments, []);
+    },
+  );
+});
+
+// --- Phase C player: seek/highlight sync helpers ----------------------------------
+
+test('activeSegmentIndex: the LAST segment at/behind t is active (click-to-seek highlight)', () => {
+  const segs = [
+    { start: 0, end: 2, speaker: 'A', text: 'one' },
+    { start: 2, end: 5, speaker: 'B', text: 'two' },
+    { start: 5, end: 9, speaker: 'A', text: 'three' },
+  ];
+  assert.equal(activeSegmentIndex(segs, -1), -1); // before the first
+  assert.equal(activeSegmentIndex(segs, 0), 0);
+  assert.equal(activeSegmentIndex(segs, 4.9), 1);
+  assert.equal(activeSegmentIndex(segs, 5), 2);
+  assert.equal(activeSegmentIndex(segs, 100), 2); // past the end → last
+});
+
+test('activeSegmentIndex: segments without a start timestamp are skipped, never active', () => {
+  const segs = [
+    { start: null, end: null, speaker: 'A', text: 'untimed' },
+    { start: 3, end: 4, speaker: 'B', text: 'timed' },
+  ];
+  assert.equal(activeSegmentIndex(segs, 0), -1);
+  assert.equal(activeSegmentIndex(segs, 3), 1);
+  assert.equal(activeSegmentIndex([], 5), -1);
+});
+
+test('formatClock: m:ss under an hour, h:mm:ss past it', () => {
+  assert.equal(formatClock(0), '0:00');
+  assert.equal(formatClock(9), '0:09');
+  assert.equal(formatClock(75), '1:15');
+  assert.equal(formatClock(3661), '1:01:01');
+  assert.equal(formatClock(-5), '0:00');
 });

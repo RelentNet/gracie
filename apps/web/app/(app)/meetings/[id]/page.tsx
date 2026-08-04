@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import type { Document, MasterRecordEntry, Meeting, Role, Task } from '@gracie/shared';
 
 import { FileList } from '@/components/FileBrowser/FileList';
+import { MeetingRecording } from '@/components/meetings/MeetingRecording';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { PageContainer } from '@/components/ui/PageContainer';
@@ -13,11 +14,13 @@ import { taskStatusLabel } from '@/lib/client-display';
 import { getClient } from '@/lib/data/clients';
 import { getClientMeetings } from '@/lib/data/client-detail';
 import { filterVisibleDocuments, filterVisibleFolders, listFolders } from '@/lib/data/documents';
+import { canAccessKey } from '@/lib/data/files';
 import {
   getLatestPipelineRun,
   getMeetingById,
   getMeetingDocuments,
   getMeetingMasterRecord,
+  getMeetingMedia,
   getMeetingTasks,
 } from '@/lib/data/meeting-occurrence';
 import { formatEasternDate, formatEasternDateTime } from '@/lib/format';
@@ -204,14 +207,54 @@ function DocumentsCard({ documents }: { readonly documents: readonly Document[] 
   );
 }
 
+/**
+ * Recorded video + synced transcript (Phase C). Renders the player only when a
+ * recording is stored AND the caller passes `canAccessKey` on the video key — the
+ * SAME gate `/api/files/raw` re-runs on every byte, so a viewer who can't see the
+ * client sees nothing. While the recording is still downloading, a plain-language
+ * "still processing" note stands in; a meeting that never had a bot shows nothing.
+ */
+function RecordingCard({
+  videoKey,
+  transcriptKey,
+  stillProcessing,
+}: {
+  readonly videoKey: string | null;
+  readonly transcriptKey: string | null;
+  readonly stillProcessing: boolean;
+}): React.JSX.Element | null {
+  if (videoKey === null) {
+    if (!stillProcessing) return null;
+    return (
+      <Card>
+        <CardHeader title="Recording" icon={<Video size={20} aria-hidden="true" />} />
+        <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+          The recording is still processing. It will appear here once it is ready.
+        </p>
+      </Card>
+    );
+  }
+  return (
+    <Card>
+      <CardHeader
+        title="Recording"
+        description="Play the meeting and click any line to jump to that moment."
+        icon={<Video size={20} aria-hidden="true" />}
+      />
+      <MeetingRecording videoKey={videoKey} transcriptKey={transcriptKey} />
+    </Card>
+  );
+}
+
 /** Content for a meeting that has ended / been recorded. */
 async function EndedView({ meeting, role }: { readonly meeting: Meeting; readonly role: Role }): Promise<React.JSX.Element> {
-  const [rawDocs, allFolders, tasks, masterRecord, run] = await Promise.all([
+  const [rawDocs, allFolders, tasks, masterRecord, run, media] = await Promise.all([
     getMeetingDocuments(meeting.id),
     listFolders(),
     getMeetingTasks(meeting.id),
     getMeetingMasterRecord(meeting.id),
     getLatestPipelineRun(meeting.id),
+    getMeetingMedia(meeting.id),
   ]);
 
   // ACCESS CONTROL: same rule as the Documents area — hide restricted folders/docs
@@ -228,8 +271,19 @@ async function EndedView({ meeting, role }: { readonly meeting: Meeting; readonl
   const hasRecording = meeting.botJobId !== null && meeting.botJobId !== '';
   const reason = describePipelineState({ state: fleetState, errorMessage: run?.errorMessage, hasRecording });
 
+  // Gate the video key with canAccessKey — the exact check /api/files/raw enforces —
+  // so the player only mounts for a caller allowed to fetch the underlying object.
+  const videoKey =
+    media?.videoKey != null && (await canAccessKey(media.videoKey, role)) ? media.videoKey : null;
+  const transcriptKey = videoKey !== null ? media?.transcriptKey ?? null : null;
+
   return (
     <>
+      <RecordingCard
+        videoKey={videoKey}
+        transcriptKey={transcriptKey}
+        stillProcessing={hasRecording}
+      />
       <PipelineStatusPanel headline={reason.headline} detail={reason.detail} />
       <DocumentsCard documents={documents} />
       <TasksCard tasks={tasks} />
