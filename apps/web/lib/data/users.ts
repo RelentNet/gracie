@@ -21,6 +21,16 @@ import type { Role } from '@gracie/shared';
 import { deriveInitials } from '../auth-shared';
 import { resolveRole } from '../logto';
 
+/**
+ * Minimal identity for owner/assignee pickers — no role/email/status, so it is
+ * safe for any authenticated user to read (unlike the admin-only `UserListItem`).
+ */
+export interface AssignableUser {
+  readonly id: string;
+  readonly name: string;
+  readonly initials: string;
+}
+
 /** A user row as shown in Settings → Users. Never carries secrets. */
 export interface UserListItem {
   readonly id: string;
@@ -142,6 +152,22 @@ export async function listUsers(): Promise<UserListItem[]> {
     deactivated: u.deactivated_at !== null,
     lastActiveAt: u.last_active_at,
   }));
+}
+
+/**
+ * Active users as {id, name, initials} for owner pickers, ordered by name.
+ * Deactivated users are excluded so they can't be assigned new work. Non-sensitive
+ * fields only — readable by any authenticated user (see `GET /api/users`).
+ */
+export async function listAssignableUsers(): Promise<AssignableUser[]> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('users')
+    .select('id, name, initials')
+    .is('deactivated_at', null)
+    .order('name', { ascending: true });
+  if (error) throw new Error(`list assignable users: ${error.message}`);
+  return (data ?? []).map((u) => ({ id: u.id, name: u.name, initials: u.initials }));
 }
 
 /**

@@ -3,17 +3,20 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Archive,
+  ArchiveRestore,
   Check,
   ChevronDown,
   ChevronRight,
-  MessageSquarePlus,
   Pencil,
+  RotateCcw,
+  Trash2,
+  UserPlus,
 } from 'lucide-react';
 import type { Task, TaskNote, TaskStatus } from '@gracie/shared';
 import { TASK_STATUSES } from '@gracie/shared';
 
 import { apiClient } from '@/lib/api-client';
-import { getClientName, getUserInitials, getUserName } from '@/lib/mock';
+import { getClientName } from '@/lib/mock';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
 import { formatDate, formatDateTime } from '@/lib/format';
@@ -26,6 +29,9 @@ import {
 import type { TaskUrgency } from '@/lib/client-display';
 import { ClientAvatar } from '@/components/ClientAvatar';
 import { Badge } from '@/components/ui/Badge';
+import { Button } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
+import { FormError, SelectField, TextField } from '@/components/ui/Field';
 import { PageContainer } from '@/components/ui/PageContainer';
 import { Table, THead, TBody, TRow, TH, TCell } from '@/components/ui/Table';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
@@ -38,30 +44,37 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews
  * status, and priority; "Show Archived" toggles archived tasks in.
  *
  * ROLE RULES (docs/08 §7, D14):
- *   - Edit / Archive / Add Note appear ONLY for editors (`canEdit()`); they are
- *     absent from the DOM for viewers.
- *   - "Mark Complete": editors may complete ANY task; viewers may complete ONLY
- *     their OWN tasks (`ownerUserId === user.id`). For other tasks a viewer sees
- *     the button disabled (D14 `task.completeOwn`).
+ *   - Edit / Assign / Archive / Delete appear ONLY for editors (`canEdit()`); they
+ *     are absent from the DOM for viewers.
+ *   - "Mark Complete" / "Reopen": editors may toggle ANY task; viewers may toggle
+ *     ONLY their OWN tasks (`ownerUserId === user.internalId`, D14 `task.completeOwn`).
+ *     For other tasks a viewer sees the button disabled.
  *
- * Tasks are fetched from `GET /api/tasks` (real Supabase data); the archived
- * toggle re-fetches with `?archived=true`. Task notes load on demand from
- * `GET /api/tasks/[taskId]/notes` when a row is expanded. Mutating actions
- * below remain visual-only (no network) — Phase 1B wires these to
- * `PATCH/POST /api/tasks/...`. The "today" reference is the fixed mock app date
- * (2026-04-24); Phase 1B replaces `TODAY` with `new Date()`.
+ * Tasks are fetched from `GET /api/tasks` (real Supabase data); the archived toggle
+ * re-fetches with `?archived=true`. Owner names resolve from `GET /api/users` (the
+ * non-admin assignable-users list) so the assign picker works for standard editors
+ * and owners render correctly. Every action calls `PATCH /api/tasks/:id` and updates
+ * the board in place from the response — no full-page reload. "Delete" is a soft
+ * delete (archive) — alpha keeps every row recoverable via "Show archived" → Restore.
  */
-
-// Phase 1B: replace with `new Date()` once tasks come from the live API.
-const TODAY = new Date('2026-04-24T14:00:00.000Z');
 
 type StatusFilter = TaskStatus | 'all';
 type ClientFilter = string | 'all';
 type OwnerFilter = string | 'all';
 type PriorityFilter = 'all' | 'priority' | 'standard';
 
+interface AssignableUser {
+  readonly id: string;
+  readonly name: string;
+  readonly initials: string;
+}
+
 interface TasksResponse {
   readonly tasks: readonly Task[];
+}
+
+interface UsersResponse {
+  readonly users: readonly AssignableUser[];
 }
 
 interface TaskNotesResponse {
@@ -74,18 +87,41 @@ const URGENCY_TONE: Readonly<Record<TaskUrgency, 'critical' | 'warning' | 'defau
   none: 'default',
 };
 
+type UsersById = ReadonlyMap<string, AssignableUser>;
+
+/** Owner/author display name — "Unassigned" for null, "Unknown" for an unknown id. */
+function displayName(users: UsersById, id: string | null): string {
+  if (id === null) return 'Unassigned';
+  return users.get(id)?.name ?? 'Unknown';
+}
+
+/** Owner/author avatar initials — "—" for null or unknown. */
+function displayInitials(users: UsersById, id: string | null): string {
+  if (id === null) return '—';
+  return users.get(id)?.initials ?? '—';
+}
+
 export default function TasksPage(): React.JSX.Element {
   const { user, canEdit } = useAuth();
   const editable = canEdit();
+  const currentUserId = user.internalId;
 
   const [tasks, setTasks] = useState<readonly Task[] | null>(null);
+  const [users, setUsers] = useState<readonly AssignableUser[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [rowBusyId, setRowBusyId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState<boolean>(false);
   const [clientFilter, setClientFilter] = useState<ClientFilter>('all');
   const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+
+  // Modals (page-level so a single instance renders; null = closed).
+  const [editTask, setEditTask] = useState<Task | null>(null);
+  const [assignTask, setAssignTask] = useState<Task | null>(null);
+  const [deleteTask, setDeleteTask] = useState<Task | null>(null);
 
   // Active-only by default; the archived toggle re-fetches with ?archived=true (M6).
   useEffect(() => {
@@ -106,6 +142,24 @@ export default function TasksPage(): React.JSX.Element {
     };
   }, [showArchived]);
 
+  // Assignable users drive both the owner display and the assign picker.
+  useEffect(() => {
+    let active = true;
+    apiClient
+      .get<UsersResponse>('/api/users')
+      .then((data) => {
+        if (active) setUsers(data.users);
+      })
+      .catch(() => {
+        /* Non-fatal: owner names fall back to "Unknown" and the picker is empty. */
+      });
+    return (): void => {
+      active = false;
+    };
+  }, []);
+
+  const usersById = useMemo<UsersById>(() => new Map(users.map((u) => [u.id, u])), [users]);
+
   const baseTasks = useMemo<readonly Task[]>(() => tasks ?? [], [tasks]);
 
   // Distinct clients/owners present in the base set drive the filter dropdowns.
@@ -117,9 +171,9 @@ export default function TasksPage(): React.JSX.Element {
     () =>
       uniqueSorted(
         baseTasks.flatMap((task) => (task.ownerUserId !== null ? [task.ownerUserId] : [])),
-        getUserName,
+        (id) => usersById.get(id)?.name ?? 'Unknown',
       ),
-    [baseTasks],
+    [baseTasks, usersById],
   );
 
   const filteredTasks = useMemo<readonly Task[]>(
@@ -139,10 +193,41 @@ export default function TasksPage(): React.JSX.Element {
   const overdueCount = useMemo<number>(
     () =>
       filteredTasks.filter(
-        (task) => taskUrgency(task.dueDate, task.status === 'complete', TODAY) === 'overdue',
+        (task) => taskUrgency(task.dueDate, task.status === 'complete', new Date()) === 'overdue',
       ).length,
     [filteredTasks],
   );
+
+  // Merge an updated task back into the board. When archived tasks are hidden, a
+  // task that just became archived (Archive/Delete) drops out of view.
+  function applyUpdate(updated: Task): void {
+    setTasks((prev) => {
+      if (prev === null) return prev;
+      if (!showArchived && updated.isArchived) return prev.filter((t) => t.id !== updated.id);
+      return prev.map((t) => (t.id === updated.id ? updated : t));
+    });
+  }
+
+  // Core PATCH: throws on failure so callers (modals) can surface a local error.
+  async function submitPatch(taskId: string, patch: Record<string, unknown>): Promise<void> {
+    const { task } = await apiClient.patch<{ task: Task }>(`/api/tasks/${taskId}`, patch);
+    applyUpdate(task);
+  }
+
+  // Quick row action (complete/reopen/archive/restore/delete): one row at a time,
+  // errors surface in the page-level banner.
+  async function rowPatch(taskId: string, patch: Record<string, unknown>): Promise<void> {
+    if (rowBusyId !== null) return;
+    setRowBusyId(taskId);
+    setActionError(null);
+    try {
+      await submitPatch(taskId, patch);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Action failed. Try again.');
+    } finally {
+      setRowBusyId(null);
+    }
+  }
 
   if (error !== null) {
     return <ErrorState title="Couldn’t load tasks" description={error} />;
@@ -161,6 +246,12 @@ export default function TasksPage(): React.JSX.Element {
         </p>
       </header>
 
+      {actionError !== null ? (
+        <p role="alert" style={{ ...TYPE.secondary, color: 'var(--color-red-600)' }}>
+          {actionError}
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap items-end gap-3">
         <FilterSelect
           label="Client"
@@ -174,7 +265,7 @@ export default function TasksPage(): React.JSX.Element {
           value={ownerFilter}
           onChange={setOwnerFilter}
           allLabel="All owners"
-          options={ownerOptions.map((id) => ({ value: id, label: getUserName(id) }))}
+          options={ownerOptions.map((id) => ({ value: id, label: displayName(usersById, id) }))}
         />
         <FilterSelect
           label="Status"
@@ -234,16 +325,69 @@ export default function TasksPage(): React.JSX.Element {
                 key={task.id}
                 task={task}
                 editable={editable}
-                currentUserId={user.id}
+                currentUserId={currentUserId}
+                usersById={usersById}
+                busy={rowBusyId === task.id}
                 isExpanded={expandedTaskId === task.id}
                 onToggleExpand={(): void =>
                   setExpandedTaskId((current) => (current === task.id ? null : task.id))
                 }
+                onPatch={(patch): void => void rowPatch(task.id, patch)}
+                onEdit={(): void => setEditTask(task)}
+                onAssign={(): void => setAssignTask(task)}
+                onDelete={(): void => setDeleteTask(task)}
               />
             ))}
           </TBody>
         </Table>
       )}
+
+      {editTask !== null ? (
+        <EditTaskModal
+          task={editTask}
+          onClose={(): void => setEditTask(null)}
+          onSubmit={(patch): Promise<void> => submitPatch(editTask.id, patch)}
+        />
+      ) : null}
+
+      {assignTask !== null ? (
+        <AssignOwnerModal
+          task={assignTask}
+          users={users}
+          onClose={(): void => setAssignTask(null)}
+          onSubmit={(ownerUserId): Promise<void> =>
+            submitPatch(assignTask.id, { ownerUserId })
+          }
+        />
+      ) : null}
+
+      <Modal
+        isOpen={deleteTask !== null}
+        onClose={(): void => setDeleteTask(null)}
+        title="Delete task"
+        footer={
+          <>
+            <Button variant="secondary" onClick={(): void => setDeleteTask(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={(): void => {
+                const target = deleteTask;
+                setDeleteTask(null);
+                if (target !== null) void rowPatch(target.id, { archived: true });
+              }}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      >
+        <p style={TYPE.body}>
+          This moves the task to archived. It is not permanently erased — turn on
+          “Show archived” to find and restore it.
+        </p>
+      </Modal>
     </PageContainer>
   );
 }
@@ -252,23 +396,36 @@ function TaskRow({
   task,
   editable,
   currentUserId,
+  usersById,
+  busy,
   isExpanded,
   onToggleExpand,
+  onPatch,
+  onEdit,
+  onAssign,
+  onDelete,
 }: {
   readonly task: Task;
   readonly editable: boolean;
-  readonly currentUserId: string;
+  readonly currentUserId: string | null;
+  readonly usersById: UsersById;
+  readonly busy: boolean;
   readonly isExpanded: boolean;
   readonly onToggleExpand: () => void;
+  readonly onPatch: (patch: Record<string, unknown>) => void;
+  readonly onEdit: () => void;
+  readonly onAssign: () => void;
+  readonly onDelete: () => void;
 }): React.JSX.Element {
   const isComplete = task.status === 'complete';
-  const urgency = taskUrgency(task.dueDate, isComplete, TODAY);
+  const urgency = taskUrgency(task.dueDate, isComplete, new Date());
   const tone = URGENCY_TONE[urgency];
   const priority = priorityBadge(task.hasPriorityFlag);
 
-  // Viewers may complete ONLY their own tasks; editors may complete any task.
-  const isOwnTask = task.ownerUserId === currentUserId;
-  const canMarkComplete = !isComplete && (editable || isOwnTask);
+  // Viewers may toggle ONLY their own tasks; editors may toggle any task. A null
+  // internal id (ownership unknown) never matches, so it fails closed.
+  const isOwnTask = currentUserId !== null && task.ownerUserId === currentUserId;
+  const canToggleComplete = !task.isArchived && (editable || isOwnTask);
 
   // Columns the expanded notes row spans (THead always renders 8 columns:
   // expander, status, task, client, owner, due, priority, actions).
@@ -308,8 +465,8 @@ function TaskRow({
         </TCell>
         <TCell>
           <span className="flex items-center gap-2">
-            <ClientAvatar initials={getUserInitials(task.ownerUserId)} size="sm" />
-            <span style={TYPE.secondary}>{getUserName(task.ownerUserId)}</span>
+            <ClientAvatar initials={displayInitials(usersById, task.ownerUserId)} size="sm" />
+            <span style={TYPE.secondary}>{displayName(usersById, task.ownerUserId)}</span>
           </span>
         </TCell>
         <TCell>
@@ -326,40 +483,77 @@ function TaskRow({
         </TCell>
         <TCell>
           <span className="flex items-center justify-end gap-1">
-            <RowAction
-              label={`Mark "${task.description}" complete`}
-              icon={<Check size={16} />}
-              disabled={!canMarkComplete}
-              title={
-                isComplete
-                  ? 'Already complete'
-                  : canMarkComplete
-                    ? 'Mark complete'
-                    : 'You can only complete your own tasks'
-              }
-            />
-            {editable ? (
+            {task.isArchived ? (
+              editable ? (
+                <RowAction
+                  label={`Restore "${task.description}"`}
+                  icon={<ArchiveRestore size={16} />}
+                  title="Restore task"
+                  disabled={busy}
+                  onClick={(): void => onPatch({ archived: false })}
+                />
+              ) : null
+            ) : (
               <>
-                <RowAction label={`Edit "${task.description}"`} icon={<Pencil size={16} />} />
                 <RowAction
-                  label={`Add note to "${task.description}"`}
-                  icon={<MessageSquarePlus size={16} />}
+                  label={
+                    isComplete
+                      ? `Reopen "${task.description}"`
+                      : `Mark "${task.description}" complete`
+                  }
+                  icon={isComplete ? <RotateCcw size={16} /> : <Check size={16} />}
+                  disabled={!canToggleComplete || busy}
+                  title={
+                    canToggleComplete
+                      ? isComplete
+                        ? 'Reopen task'
+                        : 'Mark complete'
+                      : 'You can only complete your own tasks'
+                  }
+                  onClick={(): void => onPatch({ status: isComplete ? 'open' : 'complete' })}
                 />
-                <RowAction
-                  label={`Archive "${task.description}"`}
-                  icon={<Archive size={16} />}
-                  disabled={task.isArchived}
-                  title={task.isArchived ? 'Already archived' : 'Archive task'}
-                />
+                {editable ? (
+                  <>
+                    <RowAction
+                      label={`Edit "${task.description}"`}
+                      icon={<Pencil size={16} />}
+                      title="Edit task"
+                      disabled={busy}
+                      onClick={onEdit}
+                    />
+                    <RowAction
+                      label={`Assign "${task.description}"`}
+                      icon={<UserPlus size={16} />}
+                      title="Assign owner"
+                      disabled={busy}
+                      onClick={onAssign}
+                    />
+                    <RowAction
+                      label={`Archive "${task.description}"`}
+                      icon={<Archive size={16} />}
+                      title="Archive task"
+                      disabled={busy}
+                      onClick={(): void => onPatch({ archived: true })}
+                    />
+                    <RowAction
+                      label={`Delete "${task.description}"`}
+                      icon={<Trash2 size={16} />}
+                      title="Delete task"
+                      disabled={busy}
+                      danger
+                      onClick={onDelete}
+                    />
+                  </>
+                ) : null}
               </>
-            ) : null}
+            )}
           </span>
         </TCell>
       </TRow>
       {isExpanded ? (
         <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
           <td colSpan={COLUMN_COUNT} className="px-4 py-3" style={{ backgroundColor: '#f8fafc' }}>
-            <TaskNotes taskId={task.id} />
+            <TaskNotes taskId={task.id} usersById={usersById} />
           </td>
         </tr>
       ) : null}
@@ -377,7 +571,7 @@ function DueDateCell({
   if (task.dueDate === null) {
     return <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>No due date</span>;
   }
-  const overdueDays = urgency === 'overdue' ? daysOverdue(task.dueDate, TODAY) : 0;
+  const overdueDays = urgency === 'overdue' ? daysOverdue(task.dueDate, new Date()) : 0;
   return (
     <span className="flex flex-col">
       <span style={TYPE.secondary}>{formatDate(task.dueDate)}</span>
@@ -392,7 +586,156 @@ function DueDateCell({
   );
 }
 
-function TaskNotes({ taskId }: { readonly taskId: string }): React.JSX.Element {
+/** Edit a task's description, due date, and priority (editors only). */
+function EditTaskModal({
+  task,
+  onClose,
+  onSubmit,
+}: {
+  readonly task: Task;
+  readonly onClose: () => void;
+  readonly onSubmit: (patch: Record<string, unknown>) => Promise<void>;
+}): React.JSX.Element {
+  const [description, setDescription] = useState<string>(task.description);
+  const [dueDate, setDueDate] = useState<string>(task.dueDate ?? '');
+  const [priority, setPriority] = useState<boolean>(task.hasPriorityFlag);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const invalid = description.trim() === '';
+
+  async function save(): Promise<void> {
+    if (saving || invalid) return;
+    setSaving(true);
+    setFormError(null);
+    try {
+      await onSubmit({
+        description: description.trim(),
+        dueDate: dueDate === '' ? null : dueDate,
+        priorityFlag: priority,
+      });
+      onClose();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Failed to save task');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Edit task"
+      footer={
+        <>
+          <Button variant="secondary" disabled={saving} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" disabled={saving || invalid} onClick={(): void => void save()}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <TextField
+          label="Description"
+          value={description}
+          onChange={setDescription}
+          placeholder="What needs to be done?"
+          required
+        />
+        <TextField label="Due date" type="date" value={dueDate} onChange={setDueDate} />
+        <label className="flex items-center gap-2" htmlFor="edit-task-priority">
+          <input
+            id="edit-task-priority"
+            type="checkbox"
+            checked={priority}
+            onChange={(event): void => setPriority(event.target.checked)}
+          />
+          <span style={TYPE.body}>High priority</span>
+        </label>
+        <FormError message={formError} />
+      </div>
+    </Modal>
+  );
+}
+
+/** Assign (or clear) a task's owner from the assignable-users list (editors only). */
+function AssignOwnerModal({
+  task,
+  users,
+  onClose,
+  onSubmit,
+}: {
+  readonly task: Task;
+  readonly users: readonly AssignableUser[];
+  readonly onClose: () => void;
+  readonly onSubmit: (ownerUserId: string | null) => Promise<void>;
+}): React.JSX.Element {
+  const [ownerId, setOwnerId] = useState<string>(task.ownerUserId ?? '');
+  const [saving, setSaving] = useState<boolean>(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  async function save(): Promise<void> {
+    if (saving) return;
+    setSaving(true);
+    setFormError(null);
+    try {
+      await onSubmit(ownerId === '' ? null : ownerId);
+      onClose();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Failed to assign owner');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Assign owner"
+      footer={
+        <>
+          <Button variant="secondary" disabled={saving} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" disabled={saving} onClick={(): void => void save()}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <SelectField
+          label="Owner"
+          value={ownerId}
+          onChange={setOwnerId}
+          options={[
+            { value: '', label: 'Unassigned' },
+            ...users.map((u) => ({ value: u.id, label: u.name })),
+          ]}
+        />
+        {users.length === 0 ? (
+          <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+            No users available to assign.
+          </p>
+        ) : null}
+        <FormError message={formError} />
+      </div>
+    </Modal>
+  );
+}
+
+function TaskNotes({
+  taskId,
+  usersById,
+}: {
+  readonly taskId: string;
+  readonly usersById: UsersById;
+}): React.JSX.Element {
   const [notes, setNotes] = useState<readonly TaskNote[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -438,10 +781,10 @@ function TaskNotes({ taskId }: { readonly taskId: string }): React.JSX.Element {
     <ul className="flex flex-col gap-3">
       {notes.map((note) => (
         <li key={note.id} className="flex items-start gap-3">
-          <ClientAvatar initials={getUserInitials(note.authorUserId)} size="sm" />
+          <ClientAvatar initials={displayInitials(usersById, note.authorUserId)} size="sm" />
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="flex items-center gap-2">
-              <span style={TYPE.bodyStrong}>{getUserName(note.authorUserId)}</span>
+              <span style={TYPE.bodyStrong}>{displayName(usersById, note.authorUserId)}</span>
               <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
                 {formatDateTime(note.createdAt)}
               </span>
@@ -457,13 +800,17 @@ function TaskNotes({ taskId }: { readonly taskId: string }): React.JSX.Element {
 function RowAction({
   label,
   icon,
+  onClick,
   disabled = false,
   title,
+  danger = false,
 }: {
   readonly label: string;
   readonly icon: React.ReactNode;
+  readonly onClick: () => void;
   readonly disabled?: boolean;
   readonly title?: string;
+  readonly danger?: boolean;
 }): React.JSX.Element {
   return (
     <button
@@ -471,9 +818,10 @@ function RowAction({
       aria-label={label}
       title={title}
       disabled={disabled}
+      onClick={onClick}
       className="rounded-md p-1"
       style={{
-        color: 'var(--text-secondary)',
+        color: danger ? 'var(--color-red-600)' : 'var(--text-secondary)',
         background: 'transparent',
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.4 : 1,
