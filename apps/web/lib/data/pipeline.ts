@@ -62,7 +62,10 @@ const IN_PROGRESS_STATES = ['scheduled', 'in_progress', 'awaiting_transcript', '
  *
  * `needs_attention` rows are returned first; the rest are newest-first.
  */
-export async function listPipelineFleet(limit = 100): Promise<FleetRowView[]> {
+export async function listPipelineFleet(
+  limit = 100,
+  opts?: { readonly preflight?: boolean },
+): Promise<FleetRowView[]> {
   const db = getServerClient();
   const cap = Math.min(Math.max(limit, 1), 200);
 
@@ -165,9 +168,15 @@ export async function listPipelineFleet(limit = 100): Promise<FleetRowView[]> {
   // actually work (brief §3.2/§6). Best-effort + bounded: on any failure the row
   // keeps `recovery: null` and falls back to the `canRetrigger` proxy.
   const allRows = [...runRows, ...stuckRows];
-  const recoveryByBot = await classifyStuckRows(allRows).catch(
-    () => new Map<string, { state: RecallRecoveryState; detail: string | null }>(),
-  );
+  // The live Recall pre-flight only refines which recovery BUTTON to offer; a caller
+  // that just needs states/reasons/counts (the Overview "Needs attention" tile) passes
+  // `preflight: false` to skip the network calls and keep that page snappy.
+  const recoveryByBot =
+    opts?.preflight === false
+      ? new Map<string, { state: RecallRecoveryState; detail: string | null }>()
+      : await classifyStuckRows(allRows).catch(
+          () => new Map<string, { state: RecallRecoveryState; detail: string | null }>(),
+        );
   const withRecovery = allRows.map((r): FleetRowView => {
     const rec = r.botJobId !== null ? recoveryByBot.get(r.botJobId) : undefined;
     if (rec === undefined) return r;
