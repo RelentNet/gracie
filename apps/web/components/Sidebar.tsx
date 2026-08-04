@@ -28,7 +28,7 @@ import { useNavCollapse } from '@/components/ui/nav-collapse';
  *    Always renders fully expanded regardless of the desktop collapsed state.
  */
 export function Sidebar(): React.JSX.Element {
-  const { user, can } = useAuth();
+  const { user, can, brandLogoKey } = useAuth();
   const pathname = usePathname();
   const { collapsed, toggleCollapsed, mobileOpen, closeMobile } = useNavCollapse();
 
@@ -95,11 +95,28 @@ export function Sidebar(): React.JSX.Element {
           <div className="mb-3 flex items-center gap-2">
             <Link
               href="/dashboard"
-              className={`flex-1 px-3 py-2 ${collapsed ? 'md:px-0 md:text-center' : ''}`}
+              aria-label="GA App — dashboard"
+              className={`flex-1 px-3 py-2 ${collapsed ? 'md:flex md:justify-center md:px-0' : ''}`}
               style={{ ...TYPE.sectionHeader, color: '#ffffff' }}
             >
-              <span className={labelHidden}>GA App</span>
-              <span className={`hidden ${collapsed ? 'md:inline' : ''}`}>GA</span>
+              {brandLogoKey !== null ? (
+                // Configured brand logo (Settings → Company → Branding). Rendered
+                // ONLY as <img src> — never inlined — so an uploaded SVG loads in
+                // the browser's secure static mode (can't execute script). The
+                // ?v=<key> busts the cache when the logo is replaced. Constrained
+                // height, aspect preserved; a wide wordmark shrinks in the rail.
+                <img
+                  src={`/api/brand/logo?v=${encodeURIComponent(brandLogoKey)}`}
+                  alt="GA App"
+                  className="max-w-full object-contain"
+                  style={{ height: '2rem', width: 'auto' }}
+                />
+              ) : (
+                <>
+                  <span className={labelHidden}>GA App</span>
+                  <span className={`hidden ${collapsed ? 'md:inline' : ''}`}>GA</span>
+                </>
+              )}
             </Link>
             {/* Mobile-only close button. */}
             <button

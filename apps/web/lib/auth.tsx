@@ -31,6 +31,13 @@ export interface AuthContextValue {
    * root layout so every client component gates on it without its own fetch.
    */
   readonly healthScoresVisible: boolean;
+  /**
+   * MinIO object key of the configured nav brand logo, or null when none is set.
+   * Hydrated from `settings.brand_logo_key` in the root layout (same pattern as
+   * `healthScoresVisible`) so the Sidebar renders the logo without its own fetch
+   * and never flashes a broken image. Doubles as the `<img src>` cache-buster.
+   */
+  readonly brandLogoKey: string | null;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -39,10 +46,12 @@ export function AuthProvider({
   children,
   initialUser = MOCK_USER,
   healthScoresVisible = true,
+  brandLogoKey = null,
 }: {
   readonly children: ReactNode;
   readonly initialUser?: AuthUser;
   readonly healthScoresVisible?: boolean;
+  readonly brandLogoKey?: string | null;
 }): React.JSX.Element {
   const value = useMemo<AuthContextValue>(() => {
     const user = initialUser;
@@ -52,8 +61,9 @@ export function AuthProvider({
       can: (permission: Permission): boolean => can(user.role, permission),
       canEdit: (): boolean => user.role === 'admin' || user.role === 'standard',
       healthScoresVisible,
+      brandLogoKey,
     };
-  }, [initialUser, healthScoresVisible]);
+  }, [initialUser, healthScoresVisible, brandLogoKey]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
