@@ -7,8 +7,7 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { Markdown } from '@/components/ui/Markdown';
 import { PageContainer } from '@/components/ui/PageContainer';
 import { EmptyState } from '@/components/ui/StateViews';
-import { Tabs } from '@/components/ui/Tabs';
-import { getTodayAndYesterday, type DailySyncRecord } from '@/lib/data/daily-sync';
+import { easternDateString, getDailySync, type DailySyncRecord } from '@/lib/data/daily-sync';
 import { getHealthScoresVisible } from '@/lib/data/scoring-settings';
 import { formatEasternDate, formatEasternDateTime } from '@/lib/format';
 import { getCurrentUser } from '@/lib/server-auth';
@@ -74,7 +73,11 @@ function MeetingRow({ m }: { readonly m: DailySyncMeeting }): React.JSX.Element 
   );
 }
 
-/** Render one day's sync (Today or Yesterday). Server component. */
+/**
+ * Render today's morning sync. Server component. Empty cards are omitted; a fully
+ * quiet day collapses to a single friendly line. The "Clients to watch" card is
+ * also gated on `showHealth` (the platform-wide health-scores toggle, #82).
+ */
 function DailySyncView({
   record,
   dateLabel,
@@ -96,6 +99,11 @@ function DailySyncView({
 
   const y = content.yesterday;
   const delivered = record?.deliveredAt ?? null;
+  const hasYesterday = y.meetingsProcessed + y.documentsGenerated + y.tasksCreated + y.tasksCompleted > 0;
+  const hasMeetings = content.todayMeetings.length > 0;
+  const hasAtRisk = showHealth && content.atRiskClients.length > 0;
+  const hasBriefs = content.briefs.length > 0;
+  const quiet = !hasYesterday && !hasMeetings && !hasAtRisk && !hasBriefs;
 
   return (
     <div className="flex flex-col gap-4">
@@ -106,111 +114,106 @@ function DailySyncView({
         {delivered !== null ? ` · Emailed staff ${formatEasternDateTime(delivered)}` : ' · Not yet emailed'}
       </p>
 
-      <Card>
-        <CardHeader title="Yesterday" description="Activity across the workspace." />
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="Meetings processed" value={y.meetingsProcessed} />
-          <Stat label="Documents" value={y.documentsGenerated} />
-          <Stat label="Tasks created" value={y.tasksCreated} />
-          <Stat label="Tasks completed" value={y.tasksCompleted} />
-        </div>
-      </Card>
+      {quiet ? <p style={TYPE.body}>Quiet day — nothing scheduled.</p> : null}
 
-      <Card>
-        <CardHeader title="Today's meetings" icon={<CalendarClock size={20} aria-hidden="true" />} />
-        {content.todayMeetings.length > 0 ? (
+      {hasYesterday ? (
+        <Card>
+          <CardHeader title="Yesterday's activity" description="Activity across the workspace." />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat label="Meetings processed" value={y.meetingsProcessed} />
+            <Stat label="Documents" value={y.documentsGenerated} />
+            <Stat label="Tasks created" value={y.tasksCreated} />
+            <Stat label="Tasks completed" value={y.tasksCompleted} />
+          </div>
+        </Card>
+      ) : null}
+
+      {hasMeetings ? (
+        <Card>
+          <CardHeader title="Today's meetings" icon={<CalendarClock size={20} aria-hidden="true" />} />
           <ul>
             {content.todayMeetings.map((m) => (
               <MeetingRow key={m.meetingId} m={m} />
             ))}
           </ul>
-        ) : (
-          <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>No meetings scheduled.</p>
-        )}
-      </Card>
+        </Card>
+      ) : null}
 
-      {showHealth ? (
-        <Card accent={content.atRiskClients.length > 0 ? 'critical' : 'none'}>
+      {hasAtRisk ? (
+        <Card accent="critical">
           <CardHeader
             title="Clients to watch"
             description="Low or declining relationship health."
             icon={<AlertTriangle size={20} aria-hidden="true" />}
           />
-          {content.atRiskClients.length > 0 ? (
-            <ul>
-              {content.atRiskClients.map((c) => {
-                const badge = healthBadge(c.health);
-                return (
-                  <li
-                    key={c.clientId}
-                    className="flex items-center justify-between gap-3 border-b py-2 last:border-0"
-                    style={{ borderColor: 'var(--border-subtle)' }}
-                  >
-                    <span style={TYPE.bodyStrong}>{c.name}</span>
-                    <span className="flex items-center gap-2">
-                      {c.trend !== null ? (
-                        <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>{c.trend}</span>
-                      ) : null}
-                      <Badge bg={badge.bg} fg={badge.fg}>
-                        health {badge.label}
-                      </Badge>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>No at-risk clients right now.</p>
-          )}
+          <ul>
+            {content.atRiskClients.map((c) => {
+              const badge = healthBadge(c.health);
+              return (
+                <li
+                  key={c.clientId}
+                  className="flex items-center justify-between gap-3 border-b py-2 last:border-0"
+                  style={{ borderColor: 'var(--border-subtle)' }}
+                >
+                  <span style={TYPE.bodyStrong}>{c.name}</span>
+                  <span className="flex items-center gap-2">
+                    {c.trend !== null ? (
+                      <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>{c.trend}</span>
+                    ) : null}
+                    <Badge bg={badge.bg} fg={badge.fg}>
+                      health {badge.label}
+                    </Badge>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader title="Pre-meeting briefs" description="Context for today's client meetings." />
-        {content.briefs.length > 0 ? (
-          <div className="flex flex-col gap-3">
+      {hasBriefs ? (
+        <Card>
+          <CardHeader title="Pre-meeting briefs" description="Context for today's client meetings." />
+          <div className="flex flex-col gap-2">
             {content.briefs.map((b) => (
-              <div key={b.meetingId} className="rounded-lg border p-3" style={{ borderColor: 'var(--border-subtle)' }}>
-                <p style={TYPE.bodyStrong}>
-                  {b.title}
-                  {b.clientName !== null ? ` · ${b.clientName}` : ''}
-                </p>
-                <div className="mt-1">
+              <details
+                key={b.meetingId}
+                className="rounded-lg border p-3"
+                style={{ borderColor: 'var(--border-subtle)' }}
+              >
+                <summary className="cursor-pointer">
+                  <span style={TYPE.bodyStrong}>
+                    {b.title}
+                    {b.clientName !== null ? ` · ${b.clientName}` : ''}
+                  </span>{' '}
+                  <Badge
+                    bg="var(--color-slate-100)"
+                    fg="var(--text-secondary)"
+                    icon={<FileText size={11} aria-hidden="true" />}
+                  >
+                    Brief
+                  </Badge>
+                </summary>
+                <div className="mt-2">
                   <Markdown content={b.content} />
                 </div>
-              </div>
+              </details>
             ))}
           </div>
-        ) : (
-          <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-            No briefs for today&rsquo;s meetings.
-          </p>
-        )}
-      </Card>
+        </Card>
+      ) : null}
     </div>
   );
 }
 
-/** Module 8 — Daily Sync (docs/08 §M8). Today + Yesterday tabs over `daily_syncs`. */
+/** Module 8 — Daily Sync (docs/08 §M8). Today's morning briefing over `daily_syncs`. */
 export default async function DailySyncPage(): Promise<React.JSX.Element> {
-  const [{ today, yesterday, todayDate, yesterdayDate }, user, showHealth] = await Promise.all([
-    getTodayAndYesterday(),
+  const todayDate = easternDateString(new Date());
+  const [today, user, showHealth] = await Promise.all([
+    getDailySync(todayDate),
     getCurrentUser(),
     getHealthScoresVisible().catch(() => true), // a read blip must never break the page
   ]);
-
-  const items = [
-    {
-      id: 'today',
-      label: 'Today',
-      content: <DailySyncView record={today} dateLabel={longEtDate(todayDate)} showHealth={showHealth} />,
-    },
-    {
-      id: 'yesterday',
-      label: 'Yesterday',
-      content: <DailySyncView record={yesterday} dateLabel={longEtDate(yesterdayDate)} showHealth={showHealth} />,
-    },
-  ];
 
   return (
     <PageContainer className="flex flex-col gap-6">
@@ -223,7 +226,7 @@ export default async function DailySyncPage(): Promise<React.JSX.Element> {
         </div>
         {user.role === 'admin' ? <GenerateSyncButton /> : null}
       </header>
-      <Tabs items={items} ariaLabel="Daily sync day" />
+      <DailySyncView record={today} dateLabel={longEtDate(todayDate)} showHealth={showHealth} />
     </PageContainer>
   );
 }
