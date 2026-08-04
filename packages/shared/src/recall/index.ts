@@ -29,12 +29,13 @@
  * follow `recordings[].media_shortcuts.transcript.data.download_url`, then parse
  * the `[{ participant, words }]` array.
  *
- * RECORDED MEDIA (meeting page Phase C): `fetchRecallMedia` reads the SAME bot to
- * pull the mixed-video MP4 URL (`media_shortcuts.video_mixed`) plus the transcript
- * shaped into timestamped {@link TranscriptSegment}s for the synced player. The
- * worker streams that MP4 into MinIO (dodging Recall's ~5h URL expiry) and serves
- * both through the same-origin `/api/files/raw` proxy — the browser never touches
- * a raw Recall URL.
+ * RECORDED MEDIA (meeting page player): the VIDEO is never stored on our infra —
+ * `fetchRecallRecordingUrls` reads the bot for FRESH signed URLs and the browser
+ * streams the mixed-video MP4 DIRECTLY from Recall's S3 (native seeking; the URL
+ * expires ~5h, so it's fetched per view). The TRANSCRIPT does both: the worker keeps
+ * a durable copy (segments via `fetchRecallMedia`, readable doc from the flattened
+ * transcript), and the page live-pulls + caches it for back-catalog meetings via
+ * `downloadRecallTranscript`.
  */
 import type { TranscriptSegment } from '../types/meeting.js';
 
@@ -517,6 +518,51 @@ export async function fetchRecallMedia(
     if (dlRes.ok) segments = shapeTranscriptSegments((await dlRes.json()) as unknown);
   }
   return { videoUrl, durationS, segments };
+}
+
+/** Fresh Recall download URLs for the meeting-page player (live-pull; nothing stored). */
+export interface RecallRecordingUrls {
+  /** Mixed-video MP4 URL (signed, ~5h) — streamed DIRECTLY by the browser, never stored. */
+  readonly videoUrl: string | null;
+  /** Transcript download URL (signed) — null until the transcript is ready. */
+  readonly transcriptUrl: string | null;
+  /** Recording length in seconds (Recall metadata), else null. */
+  readonly durationS: number | null;
+}
+
+/**
+ * Read one bot's FRESH recorded-media URLs from a single bot-retrieve — the mixed
+ * video (streamed straight from Recall's S3 to the browser, never stored on our
+ * infra) and the transcript download URL. Only the bot fetch itself throws (a
+ * transient network error surfaces to the caller); a missing recording / not-ready
+ * transcript simply yields null. Nothing is downloaded here.
+ */
+export async function fetchRecallRecordingUrls(
+  botJobId: string,
+  options: RecallFetchOptions,
+): Promise<RecallRecordingUrls> {
+  const bot = await retrieveBot(botJobId, options);
+  return {
+    videoUrl: findVideoMixedUrl(bot),
+    transcriptUrl: findTranscriptDownloadUrl(bot),
+    durationS: recordingDurationS(bot),
+  };
+}
+
+/**
+ * Download a Recall transcript by its (signed) download URL and shape it BOTH ways in
+ * one fetch: timestamped {@link TranscriptSegment}s for the click-to-seek player, and
+ * a flattened `Speaker: words` transcript for the readable, durable document. Returns
+ * null on a non-OK response (best-effort — the caller degrades to "no transcript").
+ * The URL carries its own token, so no Recall auth header (a second credential 400s S3).
+ */
+export async function downloadRecallTranscript(
+  transcriptUrl: string,
+): Promise<{ readonly segments: TranscriptSegment[]; readonly text: string } | null> {
+  const res = await fetch(transcriptUrl, { headers: { Accept: 'application/json' } });
+  if (!res.ok) return null;
+  const raw = (await res.json()) as unknown;
+  return { segments: shapeTranscriptSegments(raw), text: flattenRecallTranscript(raw) };
 }
 
 /**

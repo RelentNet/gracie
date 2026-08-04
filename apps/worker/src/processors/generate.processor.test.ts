@@ -184,55 +184,42 @@ test('keys + labels are ET-stamped (14:30 UTC → 10:30 EDT); group label is the
   assert.equal(k.occurrenceDisplayName, '2026-07-16 10:30');
   assert.equal(k.transcriptKey, `clients/${SLUG}/transcripts/20260716-1030-aaaaaaaa.txt`);
   assert.equal(k.objectKey('internal_memo.md'), `${k.occurrenceFolderPath}/internal_memo.md`);
-  // Phase C media lives INSIDE the occurrence folder so canAccessKey governs it.
-  assert.equal(k.videoKey, `${k.occurrenceFolderPath}/recording.mp4`);
+  // The click-to-seek segments JSON lives INSIDE the occurrence folder so canAccessKey
+  // governs it. Video is never stored (live-pulled from Recall), so no videoKey here.
   assert.equal(k.transcriptSegmentsKey, `${k.occurrenceFolderPath}/transcript.json`);
 });
 
-// --- Phase C: meeting_media row decision (which keys get set) ----------------------
+// --- meeting_media row decision (video NEVER stored; segments only) -----------------
 
-const MEDIA_KEYS = { videoKey: 'clients/x/generated/g/occ/recording.mp4', transcriptSegmentsKey: 'clients/x/generated/g/occ/transcript.json' } as const;
+const SEGMENTS_KEY = 'clients/x/generated/g/occ/transcript.json';
 
-test('decideMeetingMediaRow: sets a key ONLY when its bytes were stored', () => {
-  const both = decideMeetingMediaRow({
+test('decideMeetingMediaRow: video_key is ALWAYS null; transcript_key set only when segments exist', () => {
+  const withSegments = decideMeetingMediaRow({
     meetingId: 'm1',
-    keys: MEDIA_KEYS,
-    videoStored: true,
+    transcriptSegmentsKey: SEGMENTS_KEY,
     segmentCount: 3,
     durationS: 1800,
     fetchedAt: '2026-08-03T00:00:00Z',
   });
-  assert.deepEqual(both, {
+  assert.deepEqual(withSegments, {
     meeting_id: 'm1',
-    video_key: MEDIA_KEYS.videoKey,
-    transcript_key: MEDIA_KEYS.transcriptSegmentsKey,
+    video_key: null, // the operator's firm rule: no video is ever persisted on our infra
+    transcript_key: SEGMENTS_KEY,
     video_duration_s: 1800,
     fetched_at: '2026-08-03T00:00:00Z',
   });
 });
 
-test('decideMeetingMediaRow: video failed / no transcript → those keys stay null', () => {
-  const videoOnly = decideMeetingMediaRow({
+test('decideMeetingMediaRow: no segments → transcript_key null (and video_key still null)', () => {
+  const none = decideMeetingMediaRow({
     meetingId: 'm2',
-    keys: MEDIA_KEYS,
-    videoStored: true,
+    transcriptSegmentsKey: SEGMENTS_KEY,
     segmentCount: 0,
     durationS: null,
     fetchedAt: 'T',
   });
-  assert.equal(videoOnly.video_key, MEDIA_KEYS.videoKey);
-  assert.equal(videoOnly.transcript_key, null);
-
-  const neither = decideMeetingMediaRow({
-    meetingId: 'm3',
-    keys: MEDIA_KEYS,
-    videoStored: false,
-    segmentCount: 5,
-    durationS: null,
-    fetchedAt: 'T',
-  });
-  assert.equal(neither.video_key, null);
-  assert.equal(neither.transcript_key, MEDIA_KEYS.transcriptSegmentsKey);
+  assert.equal(none.video_key, null);
+  assert.equal(none.transcript_key, null);
 });
 
 test('late-evening UTC lands on the correct ET day (not the UTC day)', () => {

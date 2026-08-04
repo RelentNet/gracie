@@ -6,7 +6,6 @@ export {
   getS3Client,
   getS3Config,
   putObject,
-  putObjectStream,
   getObjectBytes,
   getObjectStream,
   deleteObject,

@@ -75,32 +75,6 @@ export async function putObject(
   );
 }
 
-/**
- * Stream a body of KNOWN length straight to storage without buffering it in
- * memory (the recorded-meeting MP4 path, Phase C). `body` is a Node `Readable`
- * (e.g. the downloaded Recall video piped through) and `contentLength` MUST be the
- * exact byte count — the S3 client needs it to send a single-PUT streaming body
- * rather than reading the whole stream to measure it. Use {@link putObject} when
- * the bytes are already in memory.
- */
-export async function putObjectStream(
-  key: string,
-  body: Readable,
-  contentLength: number,
-  contentType?: string,
-): Promise<void> {
-  const { bucket } = getS3Config();
-  await getS3Client().send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: body,
-      ContentLength: contentLength,
-      ContentType: contentType,
-    }),
-  );
-}
-
 /** Fetch an object's full bytes (worker-side, for text extraction). */
 export async function getObjectBytes(key: string): Promise<Buffer> {
   const { bucket } = getS3Config();

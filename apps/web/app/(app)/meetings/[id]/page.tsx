@@ -15,7 +15,6 @@ import { taskStatusLabel } from '@/lib/client-display';
 import { getClient } from '@/lib/data/clients';
 import { getClientMeetings } from '@/lib/data/client-detail';
 import { filterVisibleDocuments, filterVisibleFolders, listFolders } from '@/lib/data/documents';
-import { canAccessKey } from '@/lib/data/files';
 import {
   getLatestPipelineRun,
   getMeetingById,
@@ -23,6 +22,8 @@ import {
   getMeetingMasterRecord,
   getMeetingMedia,
   getMeetingTasks,
+  resolveMeetingPlayback,
+  type MeetingPlayback,
 } from '@/lib/data/meeting-occurrence';
 import { formatEasternDate, formatEasternDateTime } from '@/lib/format';
 import {
@@ -209,28 +210,27 @@ function DocumentsCard({ documents }: { readonly documents: readonly Document[] 
 }
 
 /**
- * Recorded video + synced transcript (Phase C). Renders the player only when a
- * recording is stored AND the caller passes `canAccessKey` on the video key — the
- * SAME gate `/api/files/raw` re-runs on every byte, so a viewer who can't see the
- * client sees nothing. While the recording is still downloading, a plain-language
- * "still processing" note stands in; a meeting that never had a bot shows nothing.
+ * Recorded meeting player (ended-state). The video is live-pulled from Recall on view
+ * and streamed DIRECTLY from Recall's S3 (never stored on our infra, never proxied);
+ * the transcript segments are resolved server-side (our durable copy, or a
+ * live-pull-and-cache for back-catalog meetings). A meeting that never had a bot shows
+ * nothing; a meeting whose recording is gone (retention lapsed / never made) shows a
+ * plain-language "no longer available" note.
  */
 function RecordingCard({
-  videoKey,
-  transcriptKey,
-  stillProcessing,
+  playback,
+  hasBot,
 }: {
-  readonly videoKey: string | null;
-  readonly transcriptKey: string | null;
-  readonly stillProcessing: boolean;
+  readonly playback: MeetingPlayback | null;
+  readonly hasBot: boolean;
 }): React.JSX.Element | null {
-  if (videoKey === null) {
-    if (!stillProcessing) return null;
+  if (!hasBot) return null;
+  if (playback === null || playback.videoUrl === null) {
     return (
       <Card>
         <CardHeader title="Recording" icon={<Video size={20} aria-hidden="true" />} />
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          The recording is still processing. It will appear here once it is ready.
+          The recording is no longer available.
         </p>
       </Card>
     );
@@ -242,7 +242,7 @@ function RecordingCard({
         description="Play the meeting and click any line to jump to that moment."
         icon={<Video size={20} aria-hidden="true" />}
       />
-      <MeetingRecording videoKey={videoKey} transcriptKey={transcriptKey} />
+      <MeetingRecording videoUrl={playback.videoUrl} segments={playback.segments} />
     </Card>
   );
 }
@@ -272,19 +272,15 @@ async function EndedView({ meeting, role }: { readonly meeting: Meeting; readonl
   const hasRecording = meeting.botJobId !== null && meeting.botJobId !== '';
   const reason = describePipelineState({ state: fleetState, errorMessage: run?.errorMessage, hasRecording });
 
-  // Gate the video key with canAccessKey — the exact check /api/files/raw enforces —
-  // so the player only mounts for a caller allowed to fetch the underlying object.
-  const videoKey =
-    media?.videoKey != null && (await canAccessKey(media.videoKey, role)) ? media.videoKey : null;
-  const transcriptKey = videoKey !== null ? media?.transcriptKey ?? null : null;
+  // Assemble the player on view: a FRESH Recall video URL (streamed directly, never
+  // stored) + transcript segments (our durable copy, else live-pull-and-cache). The
+  // page is already authenticated-staff gated; the transcript's folder ACL is enforced
+  // inside resolveMeetingPlayback.
+  const playback = hasRecording ? await resolveMeetingPlayback(meeting, media, role) : null;
 
   return (
     <>
-      <RecordingCard
-        videoKey={videoKey}
-        transcriptKey={transcriptKey}
-        stillProcessing={hasRecording}
-      />
+      <RecordingCard playback={playback} hasBot={hasRecording} />
       <PipelineStatusPanel headline={reason.headline} detail={reason.detail} />
       <DocumentsCard documents={documents} />
       <TasksCard tasks={tasks} />
