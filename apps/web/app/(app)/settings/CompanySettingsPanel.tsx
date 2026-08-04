@@ -9,13 +9,19 @@
  * be removed — the server rejects removing it too, so the internal decision can never
  * silently open up.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Lock, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
+
+/** Client-side courtesy cap; the server enforces the real 1 MB limit. */
+const MAX_LOGO_BYTES = 1024 * 1024;
+const ACCEPTED_LOGO = 'image/png,image/jpeg,image/svg+xml';
 
 interface CompanySettings {
   readonly companyDescription: string;
@@ -30,6 +36,15 @@ const inputClass = 'w-full rounded-lg border bg-white px-3 py-2';
 const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body } as const;
 
 export function CompanySettingsPanel(): React.JSX.Element {
+  const router = useRouter();
+  const { brandLogoKey } = useAuth();
+  // Local mirror of the firm brand-logo key for instant preview feedback; the nav
+  // itself re-hydrates from the server on router.refresh() after a change.
+  const [logoKey, setLogoKey] = useState<string | null>(brandLogoKey);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoNote, setLogoNote] = useState<{ text: string; ok: boolean } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [floorDomains, setFloorDomains] = useState<readonly string[]>([]);
   const [description, setDescription] = useState('');
   const [domains, setDomains] = useState<string[]>([]);
@@ -97,11 +112,109 @@ export function CompanySettingsPanel(): React.JSX.Element {
       .finally(() => setSaving(false));
   }, [description, domains, hydrate]);
 
+  const uploadLogo = useCallback(
+    (file: File): void => {
+      setLogoNote(null);
+      if (file.size > MAX_LOGO_BYTES) {
+        setLogoNote({ text: 'Logo must be 1 MB or smaller.', ok: false });
+        return;
+      }
+      setLogoBusy(true);
+      const body = new FormData();
+      body.set('file', file);
+      fetch('/api/brand/logo', { method: 'POST', body })
+        .then(async (res) => {
+          const payload = (await res.json().catch(() => null)) as
+            | { brandLogoKey?: string | null; error?: { message?: string } }
+            | null;
+          if (!res.ok) throw new Error(payload?.error?.message ?? `Upload failed: ${res.status}`);
+          setLogoKey(payload?.brandLogoKey ?? null);
+          setLogoNote({ text: 'Logo updated.', ok: true });
+          router.refresh(); // re-hydrate the nav with the new logo
+        })
+        .catch((e: unknown) => setLogoNote({ text: e instanceof Error ? e.message : 'Upload failed.', ok: false }))
+        .finally(() => {
+          setLogoBusy(false);
+          if (fileInputRef.current !== null) fileInputRef.current.value = '';
+        });
+    },
+    [router],
+  );
+
+  const removeLogo = useCallback((): void => {
+    setLogoBusy(true);
+    setLogoNote(null);
+    apiClient
+      .del('/api/brand/logo')
+      .then(() => {
+        setLogoKey(null);
+        setLogoNote({ text: 'Reset to the default.', ok: true });
+        router.refresh();
+      })
+      .catch((e: unknown) => setLogoNote({ text: e instanceof Error ? e.message : 'Remove failed.', ok: false }))
+      .finally(() => setLogoBusy(false));
+  }, [router]);
+
   if (loadError !== null) return <ErrorState title="Couldn’t load company settings" description={loadError} />;
   if (!loaded) return <LoadingState label="Loading company settings…" />;
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Branding — the configurable nav logo. Its own upload/remove controls
+          (multipart), separate from the description/domains Save button below. */}
+      <fieldset className="flex flex-col gap-2">
+        <legend style={TYPE.bodyStrong}>Brand logo</legend>
+        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+          Brand logo — shown in the top-left of the navigation. PNG, JPG, or SVG, up to 1 MB. Leave it
+          unset to keep the default “GA App” wordmark.
+        </span>
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Live preview on a navy swatch (the nav surface). */}
+          <div
+            className="flex h-16 min-w-40 items-center justify-center rounded-lg px-4"
+            style={{ backgroundColor: 'var(--color-navy-900)' }}
+          >
+            {logoKey !== null ? (
+              // Preview mirrors the nav: <img> only. ?v busts cache on replace.
+              <img
+                src={`/api/brand/logo?v=${encodeURIComponent(logoKey)}`}
+                alt="Current brand logo"
+                className="max-w-full object-contain"
+                style={{ height: '2rem', width: 'auto' }}
+              />
+            ) : (
+              <span style={{ ...TYPE.sectionHeader, color: '#ffffff' }}>GA App</span>
+            )}
+          </div>
+          <div className="flex flex-col gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_LOGO}
+              disabled={logoBusy}
+              aria-label="Choose a brand logo image"
+              onChange={(e): void => {
+                const file = e.target.files?.[0];
+                if (file !== undefined) uploadLogo(file);
+              }}
+            />
+            {logoKey !== null ? (
+              <Button variant="secondary" onClick={removeLogo} disabled={logoBusy}>
+                Remove / reset to default
+              </Button>
+            ) : null}
+          </div>
+        </div>
+        {logoNote !== null ? (
+          <span
+            role={logoNote.ok ? undefined : 'alert'}
+            style={{ ...TYPE.secondary, color: logoNote.ok ? 'var(--text-secondary)' : 'var(--color-red-600)' }}
+          >
+            {logoNote.text}
+          </span>
+        ) : null}
+      </fieldset>
+
       {/* Company description */}
       <label className="flex flex-col gap-1">
         <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Company description</span>
