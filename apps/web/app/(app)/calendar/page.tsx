@@ -167,8 +167,8 @@ export default function CalendarPage(): React.JSX.Element {
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Calendar</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          Every team meeting from Outlook — matched to clients by attendee domain, with unknown
-          orgs one click from a new client, lead, or prospect.
+          Every team meeting from Outlook — matched to clients by attendee domain, with unknown orgs
+          one click from a new client, lead, or prospect.
         </p>
       </header>
 
@@ -270,12 +270,7 @@ export default function CalendarPage(): React.JSX.Element {
             editable={editable}
             onChanged={reload}
           />
-          <ConnectionPanel
-            isAdmin={isAdmin}
-            onSynced={reload}
-            manualJoinEnabled={manualJoinEnabled}
-            onManualJoinChanged={setManualJoinEnabled}
-          />
+          <ConnectionPanel isAdmin={isAdmin} onSynced={reload} />
         </div>
       </div>
 
@@ -300,7 +295,11 @@ function IconNavButton({
       aria-label={label}
       onClick={onClick}
       className="inline-flex items-center justify-center rounded-lg border p-1.5"
-      style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+      style={{
+        borderColor: 'var(--border-subtle)',
+        color: 'var(--text-secondary)',
+        cursor: 'pointer',
+      }}
     >
       {children}
     </button>

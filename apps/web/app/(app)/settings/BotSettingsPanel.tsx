@@ -14,9 +14,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { Lock } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
+import { SettingToggle } from '@/components/ui/SettingToggle';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
 
 interface AutoLeave {
@@ -50,7 +52,7 @@ const TRANSCRIPT_PROVIDER_OPTIONS: ReadonlyArray<{
   {
     value: 'recallai',
     label: 'Recall ASR (recommended)',
-    hint: "Recall transcribes the recording after the meeting ends. Reliable on any Teams/Zoom/Meet call regardless of caption settings. Billed per hour.",
+    hint: 'Recall transcribes the recording after the meeting ends. Reliable on any Teams/Zoom/Meet call regardless of caption settings. Billed per hour.',
   },
   {
     value: 'meeting_captions',
@@ -76,6 +78,7 @@ const inputClass = 'w-full rounded-lg border bg-white px-3 py-2';
 const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body } as const;
 
 export function BotSettingsPanel(): React.JSX.Element {
+  const { can } = useAuth();
   const [config, setConfig] = useState<BotConfigView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -185,7 +188,9 @@ export function BotSettingsPanel(): React.JSX.Element {
         hydrate(d.config);
         setMessage({ text: 'Saved.', ok: true });
       })
-      .catch((e: unknown) => setMessage({ text: e instanceof Error ? e.message : 'Save failed.', ok: false }))
+      .catch((e: unknown) =>
+        setMessage({ text: e instanceof Error ? e.message : 'Save failed.', ok: false }),
+      )
       .finally(() => setSaving(false));
   }, [
     name,
@@ -198,175 +203,241 @@ export function BotSettingsPanel(): React.JSX.Element {
     hydrate,
   ]);
 
-  if (loadError !== null) return <ErrorState title="Couldn’t load bot settings" description={loadError} />;
-  if (config === null) return <LoadingState label="Loading bot settings…" />;
+  // The two team-wide dispatch master switches (global bot kill-switch +
+  // on-demand join) moved here from the Calendar page. Rendered above the
+  // config-dependent form so the kill-switch stays reachable even if the bot
+  // config fails to load. Gated on calendar.configure (admin-tier).
+  const dispatchSwitches = can('calendar.configure') ? (
+    <section
+      className="flex flex-col gap-1 rounded-lg border p-4"
+      style={{ borderColor: 'var(--border-subtle)' }}
+    >
+      <h3 style={TYPE.bodyStrong}>Meeting dispatch</h3>
+      <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+        Team-wide switches for when and how Gracie’s bot joins meetings.
+      </span>
+      <SettingToggle
+        getUrl="/api/calendar/settings"
+        patchUrl="/api/calendar/settings"
+        responseKey="botDispatchEnabled"
+        defaultValue={false}
+        label="Auto-join meetings (global)"
+        description="Master switch for the whole team. When off, the meeting bot won’t join any meeting, regardless of per-user settings."
+      />
+      <SettingToggle
+        getUrl="/api/calendar/manual-join"
+        patchUrl="/api/calendar/manual-join"
+        responseKey="enabled"
+        defaultValue={false}
+        label="On-demand meeting join"
+        description="When on, staff can paste a meeting link on the Calendar and have Gracie join and record it immediately. Independent of the auto-join switch — this is an explicit, per-meeting action."
+      />
+    </section>
+  ) : null;
+
+  const configBody =
+    loadError !== null ? (
+      <ErrorState title="Couldn’t load bot settings" description={loadError} />
+    ) : config === null ? (
+      <LoadingState label="Loading bot settings…" />
+    ) : (
+      <div className="flex flex-col gap-6">
+        {/* Name */}
+        <label className="flex max-w-md flex-col gap-1">
+          <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+            Display name (shown to attendees)
+          </span>
+          <input
+            type="text"
+            className={inputClass}
+            style={inputStyle}
+            value={name}
+            maxLength={100}
+            disabled={saving}
+            onChange={(e): void => setName(e.target.value)}
+            aria-label="Bot display name"
+          />
+        </label>
+
+        {/* Transcription provider */}
+        <label className="flex max-w-md flex-col gap-1">
+          <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Transcription</span>
+          <select
+            className={inputClass}
+            style={inputStyle}
+            value={transcriptProvider}
+            disabled={saving}
+            onChange={(e): void => setTranscriptProvider(e.target.value as TranscriptProvider)}
+            aria-label="Transcription provider"
+          >
+            {TRANSCRIPT_PROVIDER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+            {TRANSCRIPT_PROVIDER_OPTIONS.find((o) => o.value === transcriptProvider)?.hint}
+          </span>
+        </label>
+
+        {/* Live transcript (Phase D) */}
+        <div className="flex max-w-md flex-col gap-1">
+          <ToggleSwitch
+            checked={realtimeTranscript}
+            onChange={setRealtimeTranscript}
+            disabled={saving}
+            label="Show the transcript live during the meeting"
+            ariaLabel="Enable live transcript"
+          />
+          <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+            Streams the transcript onto the meeting page as people speak. When on, the bot uses live
+            transcription for that meeting instead of after-the-meeting transcription. Leave off to
+            keep the recommended after-the-meeting transcript.
+          </span>
+        </div>
+
+        {/* Avatar */}
+        <div className="flex flex-col gap-2">
+          <ToggleSwitch
+            checked={avatarEnabled}
+            onChange={setAvatarEnabled}
+            disabled={saving}
+            label="Show an image tile in the meeting"
+            ariaLabel="Show bot avatar tile"
+          />
+          <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+            Gracie appears as a video tile showing this image (like tl;dv). JPEG, 16:9, ~1280×720,
+            ≤1.3 MB.
+          </span>
+          <div className="flex items-center gap-4">
+            <div
+              className="flex items-center justify-center overflow-hidden rounded-lg border"
+              style={{
+                width: 160,
+                height: 90,
+                borderColor: 'var(--border-subtle)',
+                backgroundColor: 'var(--color-slate-100)',
+              }}
+            >
+              {previewUrl !== null ? (
+                <img
+                  src={previewUrl}
+                  alt="Bot avatar preview"
+                  style={{ maxWidth: '100%', maxHeight: '100%' }}
+                />
+              ) : (
+                <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>No image</span>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <label>
+                <input
+                  type="file"
+                  accept="image/jpeg"
+                  disabled={saving}
+                  className="hidden"
+                  onChange={(e): void => onPickFile(e.target.files?.[0])}
+                />
+                <span
+                  className="inline-flex cursor-pointer items-center rounded-lg border px-3 py-1.5"
+                  style={{ borderColor: 'var(--border-subtle)', ...TYPE.bodyStrong }}
+                >
+                  Choose image…
+                </span>
+              </label>
+              {previewUrl !== null ? (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={(): void => {
+                    setPendingDataUrl(null);
+                    setRemoveAvatar(true);
+                  }}
+                  style={{
+                    ...TYPE.label,
+                    color: 'var(--color-red-600)',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  Remove image
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        {/* Auto-leave */}
+        <fieldset className="flex flex-col gap-2">
+          <legend style={TYPE.bodyStrong}>Auto-leave</legend>
+          <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+            When Gracie should give up and leave, in seconds. Leave blank to use Recall’s default
+            (shown in each box). Prevents a bot lingering in an empty call.
+          </span>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {AUTO_LEAVE_FIELDS.map((f) => (
+              <label key={f.key} className="flex flex-col gap-1">
+                <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>{f.label}</span>
+                <input
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  className={inputClass}
+                  style={inputStyle}
+                  placeholder={`Default: ${f.recallDefault}s`}
+                  value={autoLeaveStr[f.key]}
+                  disabled={saving}
+                  onChange={(e): void =>
+                    setAutoLeaveStr((prev) => ({ ...prev, [f.key]: e.target.value }))
+                  }
+                  aria-label={f.label}
+                />
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        {/* Observe-only assurance (locked) */}
+        <div
+          className="flex items-start gap-2 rounded-lg border p-3"
+          style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--color-slate-100)' }}
+        >
+          <Lock
+            size={16}
+            aria-hidden="true"
+            style={{ color: 'var(--text-secondary)', marginTop: 2 }}
+          />
+          <span style={{ ...TYPE.secondary, color: 'var(--text-primary)' }}>
+            <strong>Observe-only.</strong> Gracie never chats, speaks, or reacts in a meeting — she
+            only records for notes. This can’t be turned on, so she can never disrupt or engage your
+            customers.
+          </span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Button variant="primary" onClick={save} disabled={saving}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+          {message !== null ? (
+            <span
+              role={message.ok ? undefined : 'alert'}
+              style={{
+                ...TYPE.secondary,
+                color: message.ok ? 'var(--text-secondary)' : 'var(--color-red-600)',
+              }}
+            >
+              {message.text}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    );
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Name */}
-      <label className="flex max-w-md flex-col gap-1">
-        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Display name (shown to attendees)</span>
-        <input
-          type="text"
-          className={inputClass}
-          style={inputStyle}
-          value={name}
-          maxLength={100}
-          disabled={saving}
-          onChange={(e): void => setName(e.target.value)}
-          aria-label="Bot display name"
-        />
-      </label>
-
-      {/* Transcription provider */}
-      <label className="flex max-w-md flex-col gap-1">
-        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Transcription</span>
-        <select
-          className={inputClass}
-          style={inputStyle}
-          value={transcriptProvider}
-          disabled={saving}
-          onChange={(e): void => setTranscriptProvider(e.target.value as TranscriptProvider)}
-          aria-label="Transcription provider"
-        >
-          {TRANSCRIPT_PROVIDER_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-          {TRANSCRIPT_PROVIDER_OPTIONS.find((o) => o.value === transcriptProvider)?.hint}
-        </span>
-      </label>
-
-      {/* Live transcript (Phase D) */}
-      <div className="flex max-w-md flex-col gap-1">
-        <ToggleSwitch
-          checked={realtimeTranscript}
-          onChange={setRealtimeTranscript}
-          disabled={saving}
-          label="Show the transcript live during the meeting"
-          ariaLabel="Enable live transcript"
-        />
-        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-          Streams the transcript onto the meeting page as people speak. When on, the bot uses live
-          transcription for that meeting instead of after-the-meeting transcription. Leave off to keep the
-          recommended after-the-meeting transcript.
-        </span>
-      </div>
-
-      {/* Avatar */}
-      <div className="flex flex-col gap-2">
-        <ToggleSwitch
-          checked={avatarEnabled}
-          onChange={setAvatarEnabled}
-          disabled={saving}
-          label="Show an image tile in the meeting"
-          ariaLabel="Show bot avatar tile"
-        />
-        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-          Gracie appears as a video tile showing this image (like tl;dv). JPEG, 16:9, ~1280×720, ≤1.3 MB.
-        </span>
-        <div className="flex items-center gap-4">
-          <div
-            className="flex items-center justify-center overflow-hidden rounded-lg border"
-            style={{ width: 160, height: 90, borderColor: 'var(--border-subtle)', backgroundColor: 'var(--color-slate-100)' }}
-          >
-            {previewUrl !== null ? (
-              <img src={previewUrl} alt="Bot avatar preview" style={{ maxWidth: '100%', maxHeight: '100%' }} />
-            ) : (
-              <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>No image</span>
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <label>
-              <input
-                type="file"
-                accept="image/jpeg"
-                disabled={saving}
-                className="hidden"
-                onChange={(e): void => onPickFile(e.target.files?.[0])}
-              />
-              <span
-                className="inline-flex cursor-pointer items-center rounded-lg border px-3 py-1.5"
-                style={{ borderColor: 'var(--border-subtle)', ...TYPE.bodyStrong }}
-              >
-                Choose image…
-              </span>
-            </label>
-            {previewUrl !== null ? (
-              <button
-                type="button"
-                disabled={saving}
-                onClick={(): void => {
-                  setPendingDataUrl(null);
-                  setRemoveAvatar(true);
-                }}
-                style={{ ...TYPE.label, color: 'var(--color-red-600)', cursor: 'pointer', textAlign: 'left' }}
-              >
-                Remove image
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {/* Auto-leave */}
-      <fieldset className="flex flex-col gap-2">
-        <legend style={TYPE.bodyStrong}>Auto-leave</legend>
-        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-          When Gracie should give up and leave, in seconds. Leave blank to use Recall’s default (shown in
-          each box). Prevents a bot lingering in an empty call.
-        </span>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {AUTO_LEAVE_FIELDS.map((f) => (
-            <label key={f.key} className="flex flex-col gap-1">
-              <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>{f.label}</span>
-              <input
-                type="number"
-                min={0}
-                inputMode="numeric"
-                className={inputClass}
-                style={inputStyle}
-                placeholder={`Default: ${f.recallDefault}s`}
-                value={autoLeaveStr[f.key]}
-                disabled={saving}
-                onChange={(e): void =>
-                  setAutoLeaveStr((prev) => ({ ...prev, [f.key]: e.target.value }))
-                }
-                aria-label={f.label}
-              />
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      {/* Observe-only assurance (locked) */}
-      <div
-        className="flex items-start gap-2 rounded-lg border p-3"
-        style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--color-slate-100)' }}
-      >
-        <Lock size={16} aria-hidden="true" style={{ color: 'var(--text-secondary)', marginTop: 2 }} />
-        <span style={{ ...TYPE.secondary, color: 'var(--text-primary)' }}>
-          <strong>Observe-only.</strong> Gracie never chats, speaks, or reacts in a meeting — she only
-          records for notes. This can’t be turned on, so she can never disrupt or engage your customers.
-        </span>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <Button variant="primary" onClick={save} disabled={saving}>
-          {saving ? 'Saving…' : 'Save changes'}
-        </Button>
-        {message !== null ? (
-          <span
-            role={message.ok ? undefined : 'alert'}
-            style={{ ...TYPE.secondary, color: message.ok ? 'var(--text-secondary)' : 'var(--color-red-600)' }}
-          >
-            {message.text}
-          </span>
-        ) : null}
-      </div>
+      {dispatchSwitches}
+      {configBody}
     </div>
   );
 }

@@ -23,12 +23,6 @@ export interface AmbiguousResponse {
   readonly meetings: readonly AmbiguousMeeting[];
   readonly clientOptions: ReadonlyArray<{ readonly id: string; readonly name: string }>;
 }
-export interface AutoJoinResponse {
-  readonly autoJoinMeetings: boolean;
-}
-export interface CalendarSettingsResponse {
-  readonly botDispatchEnabled: boolean;
-}
 export interface ManualJoinStateResponse {
   readonly enabled: boolean;
 }
