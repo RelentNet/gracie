@@ -75,6 +75,32 @@ export async function putObject(
   );
 }
 
+/**
+ * Stream a body of KNOWN length straight to storage without buffering it in
+ * memory (the recorded-meeting MP4 path, Phase C). `body` is a Node `Readable`
+ * (e.g. the downloaded Recall video piped through) and `contentLength` MUST be the
+ * exact byte count — the S3 client needs it to send a single-PUT streaming body
+ * rather than reading the whole stream to measure it. Use {@link putObject} when
+ * the bytes are already in memory.
+ */
+export async function putObjectStream(
+  key: string,
+  body: Readable,
+  contentLength: number,
+  contentType?: string,
+): Promise<void> {
+  const { bucket } = getS3Config();
+  await getS3Client().send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ContentLength: contentLength,
+      ContentType: contentType,
+    }),
+  );
+}
+
 /** Fetch an object's full bytes (worker-side, for text extraction). */
 export async function getObjectBytes(key: string): Promise<Buffer> {
   const { bucket } = getS3Config();
@@ -92,7 +118,12 @@ export async function getObjectBytes(key: string): Promise<Buffer> {
 export interface ObjectStream {
   readonly body: ReadableStream<Uint8Array>;
   readonly contentType: string | undefined;
+  /** Byte length of THIS response (the partial length when a range was served). */
   readonly contentLength: number | undefined;
+  /** `bytes <start>-<end>/<total>` when a range was served, else undefined. */
+  readonly contentRange: string | undefined;
+  /** 206 when a byte range was served, else 200. */
+  readonly statusCode: 200 | 206;
 }
 
 /**
@@ -101,19 +132,31 @@ export interface ObjectStream {
  * this through the app instead. Node runtime only — `Body` is a Node `Readable`,
  * converted to a web `ReadableStream` so a route handler can return it directly
  * without buffering the whole file.
+ *
+ * Pass the request's `Range` header to serve a byte range (HTTP 206): HTML5
+ * `<video>` seeking (the meeting-page recording player) depends on range support —
+ * without it the browser treats the resource as non-seekable and click-to-seek
+ * breaks. Forwarded straight to S3/MinIO, which returns the partial body +
+ * `Content-Range`.
  */
-export async function getObjectStream(key: string): Promise<ObjectStream> {
+export async function getObjectStream(
+  key: string,
+  range?: string | null,
+): Promise<ObjectStream> {
   const { bucket } = getS3Config();
   const res: GetObjectCommandOutput = await getS3Client().send(
-    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    new GetObjectCommand({ Bucket: bucket, Key: key, Range: range ?? undefined }),
   );
   if (res.Body === undefined) {
     throw new Error(`getObjectStream: empty body for key "${key}"`);
   }
+  const served206 = range != null && range !== '' && res.ContentRange !== undefined;
   return {
     body: Readable.toWeb(res.Body as Readable) as ReadableStream<Uint8Array>,
     contentType: res.ContentType,
     contentLength: res.ContentLength,
+    contentRange: res.ContentRange,
+    statusCode: served206 ? 206 : 200,
   };
 }
 

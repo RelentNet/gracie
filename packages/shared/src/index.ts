@@ -8,3 +8,4 @@ export * from './permissions/index.js';
 export * from './domains/index.js';
 export * from './ai/index.js';
 export * from './health/index.js';
+export * from './meeting/index.js';

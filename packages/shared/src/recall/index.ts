@@ -28,7 +28,15 @@
  * CURRENT API (the v1 `/bot/{id}/transcript/` route is legacy): read the bot,
  * follow `recordings[].media_shortcuts.transcript.data.download_url`, then parse
  * the `[{ participant, words }]` array.
+ *
+ * RECORDED MEDIA (meeting page Phase C): `fetchRecallMedia` reads the SAME bot to
+ * pull the mixed-video MP4 URL (`media_shortcuts.video_mixed`) plus the transcript
+ * shaped into timestamped {@link TranscriptSegment}s for the synced player. The
+ * worker streams that MP4 into MinIO (dodging Recall's ~5h URL expiry) and serves
+ * both through the same-origin `/api/files/raw` proxy — the browser never touches
+ * a raw Recall URL.
  */
+import type { TranscriptSegment } from '../types/meeting.js';
 
 export interface RecallFetchOptions {
   readonly apiKey: string;
@@ -145,11 +153,18 @@ function buildAutomaticLeave(al: RecallAutoLeave | undefined): Record<string, nu
  * `{ participant: { name }, words: [{ text }] }`. The legacy flat `speaker`/`text`
  * shape is still tolerated defensively.
  */
+interface RecallTranscriptWord {
+  readonly text?: string | null;
+  /** Seconds from the recording start (Recall's per-word relative timestamp). */
+  readonly start_timestamp?: { readonly relative?: number | null } | null;
+  readonly end_timestamp?: { readonly relative?: number | null } | null;
+}
+
 interface RecallTranscriptSegment {
   readonly participant?: { readonly id?: number | null; readonly name?: string | null } | null;
   readonly speaker?: string | null;
   readonly text?: string | null;
-  readonly words?: ReadonlyArray<{ readonly text?: string | null }> | null;
+  readonly words?: ReadonlyArray<RecallTranscriptWord> | null;
 }
 
 const DEFAULT_REGION = 'us-west-2';
@@ -168,19 +183,59 @@ function segmentSpeaker(segment: RecallTranscriptSegment): string {
   return typeof speaker === 'string' ? speaker.trim() : '';
 }
 
+/** A segment's spoken text (no speaker prefix), tolerating either response shape. */
+function segmentText(segment: RecallTranscriptSegment): string {
+  return typeof segment.text === 'string' && segment.text.trim() !== ''
+    ? segment.text.trim()
+    : (segment.words ?? [])
+        .map((word) => word.text ?? '')
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 /** Join one segment into a `Speaker: words…` line, tolerating either response shape. */
 function segmentToLine(segment: RecallTranscriptSegment): string {
-  const text =
-    typeof segment.text === 'string' && segment.text.trim() !== ''
-      ? segment.text.trim()
-      : (segment.words ?? [])
-          .map((word) => word.text ?? '')
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .trim();
+  const text = segmentText(segment);
   if (text === '') return '';
   const speaker = segmentSpeaker(segment);
   return speaker !== '' ? `${speaker}: ${text}` : text;
+}
+
+/** First finite relative timestamp across a segment's words (`which` = start/end edge). */
+function edgeTimestamp(
+  words: ReadonlyArray<RecallTranscriptWord>,
+  which: 'start_timestamp' | 'end_timestamp',
+): number | null {
+  const ordered = which === 'start_timestamp' ? words : [...words].reverse();
+  for (const word of ordered) {
+    const t = word[which]?.relative;
+    if (typeof t === 'number' && Number.isFinite(t)) return t;
+  }
+  return null;
+}
+
+/**
+ * Shape Recall's transcript array (`[{ participant, words }]`) into timestamped
+ * {@link TranscriptSegment}s for the synced player — `start`/`end` in SECONDS from
+ * the recording start (first word's start, last word's end), `null` when the shape
+ * carried no timing. Empty/no-speech utterances are dropped. Pure; unit-tested.
+ */
+export function shapeTranscriptSegments(raw: unknown): TranscriptSegment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TranscriptSegment[] = [];
+  for (const segment of raw as RecallTranscriptSegment[]) {
+    const text = segmentText(segment);
+    if (text === '') continue;
+    const words = segment.words ?? [];
+    out.push({
+      start: edgeTimestamp(words, 'start_timestamp'),
+      end: edgeTimestamp(words, 'end_timestamp'),
+      speaker: segmentSpeaker(segment),
+      text,
+    });
+  }
+  return out;
 }
 
 /**
@@ -259,11 +314,15 @@ export async function dispatchRecallBot(options: RecallDispatchOptions): Promise
 interface RecallBotRecordings {
   readonly recordings?: ReadonlyArray<{
     readonly id?: string | null;
+    readonly started_at?: string | null;
+    readonly completed_at?: string | null;
     readonly media_shortcuts?: {
       readonly transcript?: {
         readonly status?: { readonly code?: string | null; readonly sub_code?: string | null } | null;
         readonly data?: { readonly download_url?: string | null } | null;
       } | null;
+      /** Mixed (single-tile) recording MP4 — the video the meeting-page player streams. */
+      readonly video_mixed?: { readonly data?: { readonly download_url?: string | null } | null } | null;
     } | null;
   }> | null;
 }
@@ -332,6 +391,65 @@ export async function fetchRecallTranscript(
     throw new Error(`Recall transcript for bot ${botJobId} was empty`);
   }
   return transcript;
+}
+
+/** First mixed-video (MP4) download URL in a bot-retrieve payload, else null. Pure. */
+export function findVideoMixedUrl(bot: RecallBotRecordings): string | null {
+  for (const recording of bot.recordings ?? []) {
+    const url = recording?.media_shortcuts?.video_mixed?.data?.download_url;
+    if (typeof url === 'string' && url !== '') return url;
+  }
+  return null;
+}
+
+/** Recording length in whole seconds from `started_at`/`completed_at`, else null. */
+function recordingDurationS(bot: RecallBotRecordings): number | null {
+  for (const recording of bot.recordings ?? []) {
+    const start = recording?.started_at;
+    const end = recording?.completed_at;
+    if (typeof start === 'string' && typeof end === 'string') {
+      const ms = Date.parse(end) - Date.parse(start);
+      if (Number.isFinite(ms) && ms > 0) return Math.round(ms / 1000);
+    }
+  }
+  return null;
+}
+
+/** Recorded-media handles for the meeting-page player ({@link fetchRecallMedia}). */
+export interface RecallMedia {
+  /** Recall's mixed-video MP4 URL (short-lived, cross-origin) — the worker streams it to MinIO. */
+  readonly videoUrl: string | null;
+  /** Recording length in seconds (from Recall metadata), else null. */
+  readonly durationS: number | null;
+  /** Timestamped transcript utterances for the synced player (empty if none ready). */
+  readonly segments: TranscriptSegment[];
+}
+
+/**
+ * Read one bot's recorded media (meeting page Phase C): the mixed-video MP4 URL +
+ * the transcript shaped into timestamped {@link TranscriptSegment}s, from a single
+ * bot-retrieve. Best-effort by design — a missing video or not-yet-ready transcript
+ * yields `null`/`[]` rather than throwing (only the bot fetch itself throws, so a
+ * transient network error still surfaces to the caller's retry/log). The MP4 URL is
+ * NOT downloaded here — the worker streams it into MinIO so this module stays
+ * storage-free.
+ */
+export async function fetchRecallMedia(
+  botJobId: string,
+  options: RecallFetchOptions,
+): Promise<RecallMedia> {
+  const bot = await retrieveBot(botJobId, options);
+  const videoUrl = findVideoMixedUrl(bot);
+  const durationS = recordingDurationS(bot);
+
+  let segments: TranscriptSegment[] = [];
+  const downloadUrl = findTranscriptDownloadUrl(bot);
+  if (downloadUrl !== null) {
+    // Presigned/token URL — no Recall auth header (a second credential 400s S3).
+    const dlRes = await fetch(downloadUrl, { headers: { Accept: 'application/json' } });
+    if (dlRes.ok) segments = shapeTranscriptSegments((await dlRes.json()) as unknown);
+  }
+  return { videoUrl, durationS, segments };
 }
 
 /**
