@@ -38,7 +38,7 @@ export default function ClientOverviewPage({
   readonly params: Promise<{ clientId: string }>;
 }): React.JSX.Element {
   const { clientId } = use(params);
-  const { can, canEdit } = useAuth();
+  const { can, canEdit, healthScoresVisible } = useAuth();
   const editable = canEdit();
 
   const [data, setData] = useState<OverviewResponse | null>(null);
@@ -75,11 +75,13 @@ export default function ClientOverviewPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <HealthCard clientId={clientId} fallbackScore={client.relationshipHealth} />
+      <div className={healthScoresVisible ? 'grid grid-cols-1 gap-6 lg:grid-cols-3' : ''}>
+        {healthScoresVisible ? (
+          <HealthCard clientId={clientId} fallbackScore={client.relationshipHealth} />
+        ) : null}
 
-        {/* Last meeting snapshot */}
-        <Card className="p-6 lg:col-span-2">
+        {/* Last meeting snapshot — spans 2/3 alongside the health card, full-width without it */}
+        <Card className={`p-6 ${healthScoresVisible ? 'lg:col-span-2' : ''}`}>
           <CardHeader title="Last Meeting" />
           {lastMeeting === null ? (
             <EmptyState

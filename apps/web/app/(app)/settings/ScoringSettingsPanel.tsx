@@ -16,6 +16,7 @@ import { RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
+import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
 import type { ClientCadence, HealthConfig, HealthSignalKey } from '@gracie/shared';
@@ -87,6 +88,12 @@ export function ScoringSettingsPanel(): React.JSX.Element {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
 
+  // Display-only "show scores" toggle — instant-save, independent of the config
+  // editor below (never triggers a recompute).
+  const [scoresVisible, setScoresVisible] = useState<boolean | null>(null);
+  const [visSaving, setVisSaving] = useState(false);
+  const [visNote, setVisNote] = useState<{ text: string; ok: boolean } | null>(null);
+
   useEffect(() => {
     let active = true;
     apiClient
@@ -102,6 +109,38 @@ export function ScoringSettingsPanel(): React.JSX.Element {
     return (): void => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    apiClient
+      .get<{ visible: boolean }>('/api/settings/health-visibility')
+      .then((d) => {
+        if (active) setScoresVisible(d.visible);
+      })
+      .catch(() => {
+        if (active) setScoresVisible(true); // fail open — the default is visible
+      });
+    return (): void => {
+      active = false;
+    };
+  }, []);
+
+  const toggleVisible = useCallback((next: boolean): void => {
+    setScoresVisible(next); // optimistic
+    setVisSaving(true);
+    setVisNote(null);
+    apiClient
+      .patch<{ visible: boolean }>('/api/settings/health-visibility', { visible: next })
+      .then((d) => {
+        setScoresVisible(d.visible);
+        setVisNote({ text: 'Saved.', ok: true });
+      })
+      .catch((e: unknown) => {
+        setScoresVisible(!next); // revert on failure
+        setVisNote({ text: e instanceof Error ? e.message : 'Save failed.', ok: false });
+      })
+      .finally(() => setVisSaving(false));
   }, []);
 
   const set = useCallback((id: string, next: string): void => {
@@ -196,6 +235,32 @@ export function ScoringSettingsPanel(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Display toggle — hides the score everywhere without stopping computation. */}
+      <div className="flex flex-col gap-2 rounded-lg border p-4" style={{ borderColor: 'var(--border-subtle)' }}>
+        <div className="flex items-center gap-3">
+          <ToggleSwitch
+            checked={scoresVisible ?? true}
+            onChange={toggleVisible}
+            disabled={scoresVisible === null || visSaving}
+            label="Show client health scores"
+            ariaLabel="Show client health scores"
+          />
+          {visNote !== null ? (
+            <span
+              role={visNote.ok ? undefined : 'alert'}
+              style={{ ...TYPE.secondary, color: visNote.ok ? 'var(--text-secondary)' : 'var(--color-red-600)' }}
+            >
+              {visNote.text}
+            </span>
+          ) : null}
+        </div>
+        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+          When off, relationship-health scores and badges are hidden across the app (client list, client
+          overview, strategy, daily sync). Scores keep computing in the background — turn this back on to
+          surface them once they’re meaningful.
+        </span>
+      </div>
+
       <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
         The relationship-health score is a weighted 0–100 blend of four signals. Weights need not sum to 100 —
         the effective split is shown below. Saving recomputes every client’s score.

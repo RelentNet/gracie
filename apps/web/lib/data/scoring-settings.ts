@@ -28,6 +28,13 @@ import {
 } from '@gracie/shared';
 
 const HEALTH_CONFIG_SETTING_KEY = 'relationship_health_config';
+/**
+ * DISPLAY-ONLY toggle (Settings → Scoring). When false, every UI surface hides the
+ * relationship-health score/badge/label; the worker keeps COMPUTING scores. Stored as
+ * a 'true'/'false' string (matching the daily-sync boolean pattern); missing → visible,
+ * so existing installs are unaffected.
+ */
+const HEALTH_SCORES_VISIBLE_KEY = 'client_health_scores_visible';
 
 /** A partial patch of the config — every field optional; merged over the current row. */
 export interface ScoringConfigPatch {
@@ -174,4 +181,33 @@ export async function setScoringConfig(
 /** The hardcoded defaults (for the panel's “reset to defaults” affordance + reference). */
 export function getScoringDefaults(): HealthConfig {
   return DEFAULT_HEALTH_CONFIG;
+}
+
+/** Read the display toggle. Missing/any-non-'false' value → visible (the safe default). */
+export async function getHealthScoresVisible(): Promise<boolean> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('settings')
+    .select('value')
+    .eq('key', HEALTH_SCORES_VISIBLE_KEY)
+    .maybeSingle();
+  if (error !== null) throw new Error(`getHealthScoresVisible: ${error.message}`);
+  const v = data?.value;
+  return typeof v === 'string' ? v.trim().toLowerCase() !== 'false' : true;
+}
+
+/** Persist the display toggle (display-only — no recompute). Admin-gated at the route. */
+export async function setHealthScoresVisible(visible: boolean, updatedByUserId: string | null): Promise<boolean> {
+  const db = getServerClient();
+  const { error } = await db.from('settings').upsert(
+    {
+      key: HEALTH_SCORES_VISIBLE_KEY,
+      value: visible ? 'true' : 'false',
+      updated_by_user_id: updatedByUserId,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'key' },
+  );
+  if (error !== null) throw new Error(`setHealthScoresVisible: ${error.message}`);
+  return visible;
 }

@@ -7,6 +7,7 @@ import type { Client, ClientNote, MasterRecordEntry } from '@gracie/shared';
 
 import { getUserName } from '@/lib/mock';
 import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { cadenceLabel, trendDisplay } from '@/lib/client-display';
@@ -42,6 +43,7 @@ export default function ClientStrategyPage({
   readonly params: Promise<{ clientId: string }>;
 }): React.JSX.Element {
   const { clientId } = use(params);
+  const { healthScoresVisible } = useAuth();
 
   const [data, setData] = useState<StrategyResponse | null>(null);
   const [adminNotes, setAdminNotes] = useState<readonly ClientNote[] | null>(null);
@@ -77,9 +79,10 @@ export default function ClientStrategyPage({
   const { client, masterRecord } = data;
   const trend = trendDisplay(client.relationshipTrend);
   const TrendIcon = trend !== null ? TREND_ICON[trend.direction] : ArrowRight;
+  // The health-score flag is suppressed when scores are hidden; the trend flag stays.
   const isAtRisk =
     client.relationshipTrend === 'declining' ||
-    (client.relationshipHealth !== null && client.relationshipHealth < 70);
+    (healthScoresVisible && client.relationshipHealth !== null && client.relationshipHealth < 70);
 
   return (
     <div className="flex flex-col gap-6">
@@ -126,7 +129,7 @@ export default function ClientStrategyPage({
                 Relationship trend is declining — recommend an executive check-in.
               </li>
             ) : null}
-            {client.relationshipHealth !== null && client.relationshipHealth < 70 ? (
+            {healthScoresVisible && client.relationshipHealth !== null && client.relationshipHealth < 70 ? (
               <li
                 className="flex items-center gap-2"
                 style={{ ...TYPE.body, color: 'var(--color-red-600)' }}

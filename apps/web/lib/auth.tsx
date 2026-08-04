@@ -25,6 +25,12 @@ export interface AuthContextValue {
   can(permission: Permission): boolean;
   /** Convenience: editors (admin/standard) may mutate content. */
   canEdit(): boolean;
+  /**
+   * Firm-wide DISPLAY toggle for relationship-health scores (Settings → Scoring).
+   * Not user-scoped — hydrated from `settings.client_health_scores_visible` in the
+   * root layout so every client component gates on it without its own fetch.
+   */
+  readonly healthScoresVisible: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -32,9 +38,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({
   children,
   initialUser = MOCK_USER,
+  healthScoresVisible = true,
 }: {
   readonly children: ReactNode;
   readonly initialUser?: AuthUser;
+  readonly healthScoresVisible?: boolean;
 }): React.JSX.Element {
   const value = useMemo<AuthContextValue>(() => {
     const user = initialUser;
@@ -43,8 +51,9 @@ export function AuthProvider({
       hasRole: (...roles: readonly Role[]): boolean => roles.includes(user.role),
       can: (permission: Permission): boolean => can(user.role, permission),
       canEdit: (): boolean => user.role === 'admin' || user.role === 'standard',
+      healthScoresVisible,
     };
-  }, [initialUser]);
+  }, [initialUser, healthScoresVisible]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

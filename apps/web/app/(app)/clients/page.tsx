@@ -47,7 +47,7 @@ interface ClientsResponse {
 }
 
 export default function ClientsPage(): React.JSX.Element {
-  const { hasRole } = useAuth();
+  const { hasRole, healthScoresVisible } = useAuth();
   const isAdmin = hasRole('admin');
 
   const [party, setParty] = useState<ClientType>('client');
@@ -206,7 +206,7 @@ export default function ClientsPage(): React.JSX.Element {
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map((client) => (
             <li key={client.id}>
-              <ClientCard client={client} isAdmin={isAdmin} />
+              <ClientCard client={client} isAdmin={isAdmin} showHealth={healthScoresVisible} />
             </li>
           ))}
         </ul>
@@ -230,9 +230,11 @@ export default function ClientsPage(): React.JSX.Element {
 function ClientCard({
   client,
   isAdmin,
+  showHealth,
 }: {
   readonly client: Client;
   readonly isAdmin: boolean;
+  readonly showHealth: boolean;
 }): React.JSX.Element {
   const fee = isAdmin ? feeTierDisplay(client.feeTier) : null;
   const health = client.relationshipHealth;
@@ -285,22 +287,24 @@ function ClientCard({
             </dd>
           </div>
 
-          <div className="flex items-center justify-between gap-2">
-            <dt style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>Relationship health</dt>
-            <dd className="flex items-center gap-1.5">
-              <span
-                aria-hidden="true"
-                className="size-2 rounded-full"
-                style={{ backgroundColor: healthColor(health) }}
-              />
-              <span style={{ ...TYPE.bodyStrong, color: healthColor(health) }}>
-                {health !== null ? `${health}` : '—'}
-              </span>
-              <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-                {healthLabel(health)}
-              </span>
-            </dd>
-          </div>
+          {showHealth ? (
+            <div className="flex items-center justify-between gap-2">
+              <dt style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>Relationship health</dt>
+              <dd className="flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className="size-2 rounded-full"
+                  style={{ backgroundColor: healthColor(health) }}
+                />
+                <span style={{ ...TYPE.bodyStrong, color: healthColor(health) }}>
+                  {health !== null ? `${health}` : '—'}
+                </span>
+                <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+                  {healthLabel(health)}
+                </span>
+              </dd>
+            </div>
+          ) : null}
         </dl>
       </Card>
     </Link>
