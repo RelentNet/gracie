@@ -42,7 +42,11 @@ export default async function AppLayout({
             <div className="flex-1" />
             <NotificationBell />
           </header>
-          <main className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">{children}</main>
+          {/* Sole owner of page padding (PageContainer adds none, so no doubling).
+              Top is kept tighter than the sides/bottom on purpose. */}
+          <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-6 pt-4 sm:px-6 md:px-8 md:pb-8 md:pt-6">
+            {children}
+          </main>
         </div>
       </div>
     </NavCollapseProvider>

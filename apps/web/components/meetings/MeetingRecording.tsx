@@ -64,54 +64,64 @@ export function MeetingRecording({ videoUrl, segments }: MeetingRecordingProps):
         <track kind="captions" />
       </video>
 
-      <div
-        className="flex max-h-[70vh] min-h-[12rem] flex-col overflow-hidden rounded-lg border"
-        style={{ borderColor: 'var(--border-subtle)' }}
-      >
-        <div className="border-b p-3" style={{ borderColor: 'var(--border-subtle)' }}>
-          <span style={TYPE.label}>Transcript</span>
-        </div>
-        <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-2">
-          {!hasTranscript ? (
-            <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }} className="p-2">
-              No transcript is available for this recording.
-            </p>
-          ) : (
-            <ol>
-              {segments.map((segment, i) => {
-                const isActive = i === activeIndex;
-                const seekable = segment.start !== null;
-                return (
-                  <li key={i} data-seg={i}>
-                    <button
-                      type="button"
-                      onClick={(): void => seekTo(segment)}
-                      disabled={!seekable}
-                      aria-current={isActive ? 'true' : undefined}
-                      className="flex w-full gap-2 rounded-md p-2 text-left"
-                      style={{
-                        cursor: seekable ? 'pointer' : 'default',
-                        background: isActive ? 'var(--color-blue-100)' : 'transparent',
-                      }}
-                    >
-                      <span
-                        className="shrink-0 font-data tabular-nums"
-                        style={{ ...TYPE.label, color: 'var(--color-blue-600)', textTransform: 'none' }}
+      {/* On lg the video (a replaced element) sets the row height; this cell stretches
+          to it. The inner panel is absolutely positioned so its long transcript can't
+          grow the row — making the panel exactly the video's height. Stacked, it flows
+          normally with a max-height so it never dominates. Both scroll internally. */}
+      <div className="relative min-h-0">
+        <div
+          className="flex max-h-[60vh] min-h-[12rem] flex-col overflow-hidden rounded-lg border lg:absolute lg:inset-0 lg:max-h-none lg:min-h-0"
+          style={{ borderColor: 'var(--border-subtle)' }}
+        >
+          <div className="border-b p-3" style={{ borderColor: 'var(--border-subtle)' }}>
+            <span style={TYPE.label}>Transcript</span>
+          </div>
+          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-2">
+            {!hasTranscript ? (
+              <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }} className="p-2">
+                No transcript is available for this recording.
+              </p>
+            ) : (
+              <ol>
+                {segments.map((segment, i) => {
+                  const isActive = i === activeIndex;
+                  const seekable = segment.start !== null;
+                  return (
+                    <li key={i} data-seg={i}>
+                      <button
+                        type="button"
+                        onClick={(): void => seekTo(segment)}
+                        disabled={!seekable}
+                        aria-current={isActive ? 'true' : undefined}
+                        className="flex w-full gap-2 rounded-md p-2 text-left"
+                        style={{
+                          cursor: seekable ? 'pointer' : 'default',
+                          background: isActive ? 'var(--color-blue-100)' : 'transparent',
+                        }}
                       >
-                        {segment.start !== null ? formatClock(segment.start) : '—'}
-                      </span>
-                      <span className="min-w-0">
-                        {segment.speaker !== '' ? (
-                          <span style={TYPE.bodyStrong}>{segment.speaker}: </span>
-                        ) : null}
-                        <span style={TYPE.body}>{segment.text}</span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
+                        <span
+                          className="shrink-0 font-data tabular-nums"
+                          style={{
+                            ...TYPE.label,
+                            color: 'var(--color-blue-600)',
+                            textTransform: 'none',
+                          }}
+                        >
+                          {segment.start !== null ? formatClock(segment.start) : '—'}
+                        </span>
+                        <span className="min-w-0">
+                          {segment.speaker !== '' ? (
+                            <span style={TYPE.bodyStrong}>{segment.speaker}: </span>
+                          ) : null}
+                          <span style={TYPE.body}>{segment.text}</span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </div>
         </div>
       </div>
     </div>

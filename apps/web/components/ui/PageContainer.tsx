@@ -1,12 +1,11 @@
 import type { ReactNode } from 'react';
 
 /**
- * PageContainer (RL foundation) — a consistent max-width + responsive-padding
- * wrapper for page content. It is intentionally NOT wired into any page yet; the
- * pass-2 responsive sweep drops it into each page's root so padding and max-width
- * are uniform (and shrink correctly on mobile) everywhere.
+ * PageContainer (RL foundation) — a consistent max-width + horizontal-centering
+ * wrapper for page content. Page PADDING is owned solely by the app shell's
+ * `<main>` (see app/(app)/layout.tsx); this wrapper deliberately adds none, so a
+ * page nested in `<main>` is never double-padded.
  *
- * Padding scales with the viewport (tight on mobile, roomier on desktop) and
  * `min-w-0` lets wide children (tables, code) shrink/scroll inside their own
  * container instead of forcing the shell to scroll horizontally.
  */
@@ -33,10 +32,6 @@ export function PageContainer({
   readonly className?: string;
 }): React.JSX.Element {
   return (
-    <div
-      className={`mx-auto w-full min-w-0 px-4 py-6 sm:px-6 lg:px-8 ${MAX_WIDTH[width]} ${className}`}
-    >
-      {children}
-    </div>
+    <div className={`mx-auto w-full min-w-0 ${MAX_WIDTH[width]} ${className}`}>{children}</div>
   );
 }
