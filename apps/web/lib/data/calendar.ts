@@ -37,7 +37,9 @@ import {
 } from '@gracie/shared';
 import { dispatchRecallBot } from '@gracie/shared/recall';
 
+import { shouldGenerateOnLink } from '../generate-on-link.js';
 import { mapExternalAttendees } from '../mappers/meeting.js';
+import { enqueueGenerate } from '../queue.js';
 import { selectByIdsChunked } from './chunked.js';
 import { createClient, normalizeDomain } from './clients.js';
 
@@ -278,6 +280,7 @@ export async function assignMeetingClient(meetingId: string, clientId: string): 
   if ((updated.data ?? []).length === 0) throw new Error('Unknown meeting');
 
   await linkMeetingOrgRow(db, meetingId, clientId);
+  await maybeGenerateOnLink(db, meetingId);
 }
 
 /** The GA `internal` org id (home for internal meetings), or null if absent. */
@@ -291,6 +294,63 @@ async function loadInternalOrgId(db: ServerClient): Promise<string | null> {
     .maybeSingle();
   if (error !== null) throw new Error(`calendar.loadInternalOrgId: ${error.message}`);
   return data?.id ?? null;
+}
+
+/**
+ * Generate-on-link (operator directive "record every meeting, link afterward"): if
+ * this meeting was already RECORDED with no client (transcript captured, doc
+ * generation deferred — see generate.processor `captureWithoutClient`), auto-run the
+ * notes pipeline now that a client is linked. Reuses the SAME generate queue the
+ * Recall webhook uses. Idempotent (`shouldGenerateOnLink` skips when docs already
+ * exist or generation is in flight). BEST-EFFORT: a queue hiccup must never fail the
+ * link itself — the meeting stays linked + recorded and can be re-triggered from the
+ * Pipeline. Call AFTER the primary `client_id` has been recomputed.
+ *
+ * ponytail: fires for the ONE meeting the user acted on; sibling meetings bulk-linked
+ * by a new org's domain backfill aren't auto-generated (they stay a visible "Recorded —
+ * link a client…" row, re-triggerable from Pipeline). Widen if that becomes common.
+ */
+async function maybeGenerateOnLink(db: ServerClient, meetingId: string): Promise<void> {
+  try {
+    const { data: meeting, error } = await db
+      .from('meetings')
+      .select('client_id, transcript_received, pipeline_status, bot_job_id')
+      .eq('id', meetingId)
+      .maybeSingle();
+    if (error !== null) throw new Error(error.message);
+    if (meeting === null) return;
+
+    // Any meeting-generated doc already present → never re-generate (idempotent).
+    const docRes = await db
+      .from('documents')
+      .select('id')
+      .eq('meeting_id', meetingId)
+      .eq('source_badge', 'meeting')
+      .is('deleted_at', null)
+      .limit(1)
+      .maybeSingle();
+    if (docRes.error !== null) throw new Error(docRes.error.message);
+
+    if (
+      !shouldGenerateOnLink({
+        clientId: meeting.client_id,
+        transcriptReceived: meeting.transcript_received,
+        hasDocuments: docRes.data !== null,
+        pipelineStatus: meeting.pipeline_status,
+      })
+    ) {
+      return;
+    }
+
+    await enqueueGenerate({ meetingId, botJobId: meeting.bot_job_id });
+    await db
+      .from('meetings')
+      .update({ pipeline_status: 'processing', pipeline_started_at: new Date().toISOString() })
+      .eq('id', meetingId);
+  } catch (err) {
+    // Best-effort: the org link already committed; never fail it on a generation hiccup.
+    console.error(`maybeGenerateOnLink(${meetingId}):`, err instanceof Error ? err.message : err);
+  }
 }
 
 /** Insert one meeting↔org link (idempotent; add-only). */
@@ -436,6 +496,7 @@ export async function linkMeetingOrg(meetingId: string, clientId: string): Promi
   await requireExternalMeeting(db, meetingId);
   await linkMeetingOrgRow(db, meetingId, clientId);
   await recomputePrimaryOrg(db, meetingId);
+  await maybeGenerateOnLink(db, meetingId);
 }
 
 /** Unlink an org from a meeting (P4.1), then recompute the primary. */
@@ -508,6 +569,10 @@ export async function createOrgFromMeeting(input: CreateOrgFromMeetingInput): Pr
   // Link this meeting + retroactively link every other meeting on the domain,
   // setting the primary where still unassigned (in-process match, not a jsonb op).
   await backfillMeetingsForDomains(db, client.id, [domain], input.meetingId);
+
+  // If the originating meeting was already recorded with no client, generate its
+  // notes now (the transcript was captured; only doc-generation was deferred).
+  await maybeGenerateOnLink(db, input.meetingId);
 
   return client;
 }

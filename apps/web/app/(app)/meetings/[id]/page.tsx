@@ -167,14 +167,18 @@ function MasterRecordCard({ entries }: { readonly entries: readonly MasterRecord
 function PipelineStatusPanel({
   headline,
   detail,
+  action,
 }: {
   readonly headline: string;
   readonly detail: string | null;
+  /** Optional call-to-action rendered under the headline (e.g. "Link a client"). */
+  readonly action?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <Card>
       <CardHeader title="Document generation" />
       <p style={TYPE.body}>{headline}</p>
+      {action !== undefined ? <div className="mt-3">{action}</div> : null}
       {detail !== null ? (
         <details className="mt-3">
           <summary style={{ ...TYPE.label, color: 'var(--text-secondary)', cursor: 'pointer' }}>
@@ -272,6 +276,20 @@ async function EndedView({ meeting, role }: { readonly meeting: Meeting; readonl
   const hasRecording = meeting.botJobId !== null && meeting.botJobId !== '';
   const reason = describePipelineState({ state: fleetState, errorMessage: run?.errorMessage, hasRecording });
 
+  // Recorded-but-unlinked: the transcript is captured but there's no client to file
+  // notes under. Offer the link action right here (linking a client auto-generates
+  // the notes — see maybeGenerateOnLink). Linking lives on the Calendar meeting card.
+  const needsClientLink = meeting.clientId === null && documents.length === 0;
+  const linkAction = needsClientLink ? (
+    <Link
+      href="/calendar"
+      className="inline-flex w-fit items-center gap-1"
+      style={{ ...TYPE.label, color: 'var(--color-blue-600)' }}
+    >
+      Link a client on the Calendar →
+    </Link>
+  ) : undefined;
+
   // Assemble the player on view: a FRESH Recall video URL (streamed directly, never
   // stored) + transcript segments (our durable copy, else live-pull-and-cache). The
   // page is already authenticated-staff gated; the transcript's folder ACL is enforced
@@ -281,7 +299,7 @@ async function EndedView({ meeting, role }: { readonly meeting: Meeting; readonl
   return (
     <>
       <RecordingCard playback={playback} hasBot={hasRecording} />
-      <PipelineStatusPanel headline={reason.headline} detail={reason.detail} />
+      <PipelineStatusPanel headline={reason.headline} detail={reason.detail} action={linkAction} />
       <DocumentsCard documents={documents} />
       <TasksCard tasks={tasks} />
       <MasterRecordCard entries={masterRecord} />
