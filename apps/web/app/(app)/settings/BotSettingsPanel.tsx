@@ -30,6 +30,7 @@ interface BotConfigView {
   readonly name: string;
   readonly avatarEnabled: boolean;
   readonly transcriptProvider: TranscriptProvider;
+  readonly realtimeTranscript: boolean;
   readonly autoLeave: AutoLeave;
   readonly hasAvatar: boolean;
   readonly avatarDataUrl: string | null;
@@ -82,6 +83,7 @@ export function BotSettingsPanel(): React.JSX.Element {
   const [name, setName] = useState('');
   const [avatarEnabled, setAvatarEnabled] = useState(false);
   const [transcriptProvider, setTranscriptProvider] = useState<TranscriptProvider>('recallai');
+  const [realtimeTranscript, setRealtimeTranscript] = useState(false);
   const [autoLeaveStr, setAutoLeaveStr] = useState<Record<AutoLeaveField, string>>({
     everyoneLeftSec: '',
     waitingRoomSec: '',
@@ -100,6 +102,7 @@ export function BotSettingsPanel(): React.JSX.Element {
     setName(c.name);
     setAvatarEnabled(c.avatarEnabled);
     setTranscriptProvider(c.transcriptProvider);
+    setRealtimeTranscript(c.realtimeTranscript);
     setAutoLeaveStr({
       everyoneLeftSec: c.autoLeave.everyoneLeftSec?.toString() ?? '',
       waitingRoomSec: c.autoLeave.waitingRoomSec?.toString() ?? '',
@@ -162,6 +165,7 @@ export function BotSettingsPanel(): React.JSX.Element {
       name,
       avatarEnabled,
       transcriptProvider,
+      realtimeTranscript,
       autoLeave: {
         everyoneLeftSec: parseSeconds(autoLeaveStr.everyoneLeftSec),
         waitingRoomSec: parseSeconds(autoLeaveStr.waitingRoomSec),
@@ -183,7 +187,16 @@ export function BotSettingsPanel(): React.JSX.Element {
       })
       .catch((e: unknown) => setMessage({ text: e instanceof Error ? e.message : 'Save failed.', ok: false }))
       .finally(() => setSaving(false));
-  }, [name, avatarEnabled, transcriptProvider, autoLeaveStr, pendingDataUrl, removeAvatar, hydrate]);
+  }, [
+    name,
+    avatarEnabled,
+    transcriptProvider,
+    realtimeTranscript,
+    autoLeaveStr,
+    pendingDataUrl,
+    removeAvatar,
+    hydrate,
+  ]);
 
   if (loadError !== null) return <ErrorState title="Couldn’t load bot settings" description={loadError} />;
   if (config === null) return <LoadingState label="Loading bot settings…" />;
@@ -226,6 +239,22 @@ export function BotSettingsPanel(): React.JSX.Element {
           {TRANSCRIPT_PROVIDER_OPTIONS.find((o) => o.value === transcriptProvider)?.hint}
         </span>
       </label>
+
+      {/* Live transcript (Phase D) */}
+      <div className="flex max-w-md flex-col gap-1">
+        <ToggleSwitch
+          checked={realtimeTranscript}
+          onChange={setRealtimeTranscript}
+          disabled={saving}
+          label="Show the transcript live during the meeting"
+          ariaLabel="Enable live transcript"
+        />
+        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+          Streams the transcript onto the meeting page as people speak. When on, the bot uses live
+          transcription for that meeting instead of after-the-meeting transcription. Leave off to keep the
+          recommended after-the-meeting transcript.
+        </span>
+      </div>
 
       {/* Avatar */}
       <div className="flex flex-col gap-2">
