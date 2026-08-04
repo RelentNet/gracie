@@ -29,7 +29,12 @@ import type {
   MeetingOrg,
   PipelineStatus,
 } from '@gracie/shared';
-import { deriveOrgNameFromDomain, isFreeEmailDomain, parseInternalDomains } from '@gracie/shared';
+import {
+  buildRealtimeTranscriptUrl,
+  deriveOrgNameFromDomain,
+  isFreeEmailDomain,
+  parseInternalDomains,
+} from '@gracie/shared';
 import { dispatchRecallBot } from '@gracie/shared/recall';
 
 import { mapExternalAttendees } from '../mappers/meeting.js';
@@ -758,6 +763,16 @@ export async function joinMeetingNow(input: JoinMeetingInput): Promise<JoinedMee
     }
 
     const botConfig = await getBotConfig();
+    // Phase D: an on-demand join is a meeting happening right now — the prime
+    // live-transcript case — so it streams live too when realtime is enabled.
+    // ponytail: default app URL duplicated from worker notify-config (web can't
+    // import worker); update both if the prod host changes.
+    const realtimeTranscriptUrl = botConfig.realtimeTranscript
+      ? buildRealtimeTranscriptUrl(
+          process.env.APP_BASE_URL?.trim() || 'https://gracie.graceandassociates.com',
+          meetingId,
+        )
+      : null;
     const botJobId = await dispatchRecallBot({
       meetingUrl: url,
       apiKey,
@@ -766,6 +781,7 @@ export async function joinMeetingNow(input: JoinMeetingInput): Promise<JoinedMee
       botAvatarJpegB64: botConfig.avatarEnabled ? botConfig.avatarJpegB64 : null,
       autoLeave: botConfig.autoLeave,
       transcriptProvider: botConfig.transcriptProvider,
+      realtimeTranscriptUrl,
     });
 
     const stored = await db

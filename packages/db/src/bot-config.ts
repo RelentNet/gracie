@@ -67,6 +67,13 @@ export interface BotConfig {
   readonly autoLeave: BotAutoLeave;
   /** Transcription provider sent to Recall at dispatch. */
   readonly transcriptProvider: BotTranscriptProvider;
+  /**
+   * Phase D live transcript. When true, dispatched bots stream realtime utterances
+   * to the app's ingest webhook (shown live on the meeting page). Default OFF —
+   * enabling it makes the bot's transcript stream (see `buildRecordingConfig` in
+   * `@gracie/shared/recall` for the async-transcript interaction). Kill-switch.
+   */
+  readonly realtimeTranscript: boolean;
 }
 
 /** Coerce an unknown to a non-negative integer number of seconds, or null. */
@@ -95,6 +102,7 @@ function parseConfig(raw: Json | undefined): Omit<BotConfig, 'avatarJpegB64'> {
     name,
     avatarEnabled,
     transcriptProvider: toTranscriptProvider(obj.transcriptProvider),
+    realtimeTranscript: obj.realtimeTranscript === true,
     autoLeave: {
       everyoneLeftSec: toSeconds(al.everyoneLeftSec),
       waitingRoomSec: toSeconds(al.waitingRoomSec),
@@ -122,6 +130,7 @@ export interface BotConfigPatch {
   readonly name?: string;
   readonly avatarEnabled?: boolean;
   readonly transcriptProvider?: BotTranscriptProvider;
+  readonly realtimeTranscript?: boolean;
   readonly autoLeave?: Partial<BotAutoLeave>;
 }
 
@@ -141,6 +150,7 @@ export async function setBotConfig(patch: BotConfigPatch): Promise<BotConfig> {
       patch.transcriptProvider !== undefined
         ? toTranscriptProvider(patch.transcriptProvider)
         : current.transcriptProvider,
+    realtimeTranscript: patch.realtimeTranscript ?? current.realtimeTranscript,
     autoLeave: {
       everyoneLeftSec:
         patch.autoLeave?.everyoneLeftSec !== undefined

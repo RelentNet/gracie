@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import type { Document, MasterRecordEntry, Meeting, Role, Task } from '@gracie/shared';
 
 import { FileList } from '@/components/FileBrowser/FileList';
+import { LiveTranscript } from '@/components/meetings/LiveTranscript';
 import { MeetingRecording } from '@/components/meetings/MeetingRecording';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -319,6 +320,7 @@ async function PrepView({
             This meeting is within its scheduled time and a Gracie bot was dispatched. Documents appear
             here once it ends.
           </p>
+          <LiveTranscript meetingId={meeting.id} />
         </Card>
       ) : null}
       <RecentHistory prior={prior} />

@@ -33,9 +33,10 @@ import type { FastifyBaseLogger } from 'fastify';
 
 import { getBotConfig, getCredential, getServerClient } from '@gracie/db';
 import type { ServerClient } from '@gracie/db';
-import type { BotDispatchJobPayload } from '@gracie/shared';
+import { buildRealtimeTranscriptUrl, type BotDispatchJobPayload } from '@gracie/shared';
 
 import { BOT_DISPATCH_GRACE_MINUTES, BOT_DISPATCH_LEAD_MINUTES } from '../lib/calendar-config.js';
+import { getAppBaseUrl } from '../lib/notify-config.js';
 import { dispatchRecallBot } from '../lib/recall.js';
 
 /**
@@ -169,6 +170,10 @@ export function createBotDispatchProcessor(
     // auto-leave). Admins change these in Settings → Meeting Bot; applied here.
     const botConfig = await getBotConfig();
     const botAvatarJpegB64 = botConfig.avatarEnabled ? botConfig.avatarJpegB64 : null;
+    // Phase D: when realtime transcript is on, resolve the app base URL once; each
+    // bot below streams utterances to `${base}/api/webhooks/recall/transcript`
+    // tagged with its meeting id. null (default) → no realtime, record-only as before.
+    const realtimeBaseUrl = botConfig.realtimeTranscript ? getAppBaseUrl() : null;
 
     let dispatched = 0;
     let skippedOptOut = 0;
@@ -217,6 +222,8 @@ export function createBotDispatchProcessor(
           botAvatarJpegB64,
           autoLeave: botConfig.autoLeave,
           transcriptProvider: botConfig.transcriptProvider,
+          realtimeTranscriptUrl:
+            realtimeBaseUrl !== null ? buildRealtimeTranscriptUrl(realtimeBaseUrl, meeting.id) : null,
         });
         const stored = await db.from('meetings').update({ bot_job_id: botJobId }).eq('id', meeting.id);
         if (stored.error !== null) throw new Error(stored.error.message);

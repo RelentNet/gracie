@@ -99,6 +99,13 @@ export interface RecallDispatchOptions extends RecallFetchOptions {
    * the module header).
    */
   readonly transcriptProvider?: RecallTranscriptProvider;
+  /**
+   * Phase D live transcript. When set (non-empty), the bot streams realtime
+   * utterances to this webhook URL via `recording_config.realtime_endpoints`, and
+   * a STREAMING transcript provider is attached (Recall requires one for realtime).
+   * Omit / null for the record-only default. See {@link buildRecordingConfig}.
+   */
+  readonly realtimeTranscriptUrl?: string | null;
 }
 
 const DEFAULT_BOT_NAME = 'Gracie';
@@ -130,6 +137,50 @@ export function buildTranscriptProviderConfig(
     case 'recallai':
       return null;
   }
+}
+
+/**
+ * Streaming transcript provider used for realtime (Phase D). `recallai_streaming`
+ * is Recall's own live ASR, independent of the meeting platform's caption
+ * settings. When the operator selected `meeting_captions`, realtime rides the
+ * platform's live captions instead (no extra ASR cost). Both emit `transcript.data`.
+ *
+ * ⚠️ Enabling realtime SUPERSEDES the async transcript for that bot: Recall allows
+ * ONE transcript provider per recording, so the recording's transcript becomes the
+ * streaming one and `transcript.done` fires off it (not `recallai_async`). Phase C
+ * still works — it renders whatever transcript the recording carries. Kept behind a
+ * default-OFF kill-switch so this only happens when an admin opts in.
+ */
+function realtimeProviderConfig(provider: RecallTranscriptProvider): Record<string, unknown> {
+  return provider === 'meeting_captions' ? { meeting_captions: {} } : { recallai_streaming: {} };
+}
+
+/**
+ * Build the full `recording_config` for a bot (or null to omit it), combining the
+ * transcript provider with the optional Phase-D realtime endpoint:
+ *   - no realtime + `recallai`         → null (record-only, async transcript later)
+ *   - no realtime + `meeting_captions` → `{ transcript: { provider: {...} } }`
+ *   - realtime (url set)               → `{ transcript: { provider: <streaming> },
+ *       realtime_endpoints: [{ type:'webhook', url, events:['transcript.data'] }] }`
+ * Pure; exported for unit tests.
+ */
+export function buildRecordingConfig(
+  provider: RecallTranscriptProvider,
+  realtimeTranscriptUrl?: string | null,
+): Record<string, unknown> | null {
+  const realtime = typeof realtimeTranscriptUrl === 'string' && realtimeTranscriptUrl !== '';
+  const transcriptProvider = realtime
+    ? realtimeProviderConfig(provider)
+    : buildTranscriptProviderConfig(provider);
+
+  const config: Record<string, unknown> = {};
+  if (transcriptProvider !== null) config.transcript = { provider: transcriptProvider };
+  if (realtime) {
+    config.realtime_endpoints = [
+      { type: 'webhook', url: realtimeTranscriptUrl, events: ['transcript.data'] },
+    ];
+  }
+  return Object.keys(config).length > 0 ? config : null;
 }
 
 /**
@@ -239,6 +290,22 @@ export function shapeTranscriptSegments(raw: unknown): TranscriptSegment[] {
 }
 
 /**
+ * Shape one realtime `transcript.data` event (Phase D) into a {@link TranscriptSegment}.
+ * The event nests the utterance at `data.data` with the SAME `{ participant, words }`
+ * shape the async download uses, so it reuses {@link shapeTranscriptSegments}:
+ *   `{ event, data: { data: { words, participant, language_code } } }`
+ * Returns null for a non-utterance / empty-speech event (dropped, not streamed).
+ * Pure; exported for unit tests.
+ */
+export function parseRealtimeTranscript(raw: unknown): TranscriptSegment | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const data = (raw as Record<string, unknown>).data;
+  const inner = typeof data === 'object' && data !== null ? (data as Record<string, unknown>).data : null;
+  if (typeof inner !== 'object' || inner === null) return null;
+  return shapeTranscriptSegments([inner])[0] ?? null;
+}
+
+/**
  * Flatten Recall's transcript array (`[{ participant, words }]`) into
  * `Speaker: words…` lines. Pure; exported for unit tests. Non-array input yields
  * an empty string (the caller treats empty as "not ready / no speech").
@@ -269,13 +336,13 @@ export async function dispatchRecallBot(options: RecallDispatchOptions): Promise
   // record-only here — the recording.done webhook requests the async transcript
   // (see buildTranscriptProviderConfig for why create-bot can't).
   const provider = options.transcriptProvider ?? DEFAULT_TRANSCRIPT_PROVIDER;
-  const providerConfig = buildTranscriptProviderConfig(provider);
+  const recordingConfig = buildRecordingConfig(provider, options.realtimeTranscriptUrl);
   const body: Record<string, unknown> = {
     meeting_url: options.meetingUrl,
     bot_name: options.botName ?? DEFAULT_BOT_NAME,
   };
-  if (providerConfig !== null) {
-    body.recording_config = { transcript: { provider: providerConfig } };
+  if (recordingConfig !== null) {
+    body.recording_config = recordingConfig;
   }
 
   // Static image tile: show it both while recording and before, so the bot always
