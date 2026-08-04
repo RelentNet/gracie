@@ -33,6 +33,7 @@ import { deriveOrgNameFromDomain, isFreeEmailDomain, parseInternalDomains } from
 import { dispatchRecallBot } from '@gracie/shared/recall';
 
 import { mapExternalAttendees } from '../mappers/meeting.js';
+import { selectByIdsChunked } from './chunked.js';
 import { createClient, normalizeDomain } from './clients.js';
 
 const LAST_SCAN_SETTING_KEY = 'calendar_last_scan_at';
@@ -101,19 +102,27 @@ async function loadKnownDomains(db: ServerClient): Promise<Set<string>> {
   return new Set((data ?? []).map((r) => r.domain.trim().toLowerCase()));
 }
 
-/** Linked orgs per meeting (from the `meeting_clients` junction), for chips. */
+/**
+ * Linked orgs per meeting (from the `meeting_clients` junction), for chips.
+ *
+ * `meetingIds` is every meeting in the requested window (a whole month for the
+ * grid), so the `.in(...)` is chunked — a single unbounded `?meeting_id=in.(…)`
+ * URL overflows Kong/PostgREST's URI length limit and 414s on a busy month. Each
+ * meeting id lands in exactly one chunk, so a meeting's full org list still comes
+ * back together and the resulting Map is identical to the single-query version.
+ */
 async function loadMeetingOrgs(
   db: ServerClient,
   meetingIds: readonly string[],
 ): Promise<Map<string, MeetingOrg[]>> {
   const map = new Map<string, MeetingOrg[]>();
-  if (meetingIds.length === 0) return map;
-  const { data, error } = await db
-    .from('meeting_clients')
-    .select('meeting_id, clients!inner(id, name, type)')
-    .in('meeting_id', meetingIds);
-  if (error !== null) throw new Error(`calendar.loadMeetingOrgs: ${error.message}`);
-  for (const row of data ?? []) {
+  const rows = await selectByIdsChunked(
+    'calendar.loadMeetingOrgs',
+    meetingIds,
+    (chunk) =>
+      db.from('meeting_clients').select('meeting_id, clients!inner(id, name, type)').in('meeting_id', chunk),
+  );
+  for (const row of rows) {
     const org = row.clients as unknown as MeetingOrg | null;
     if (org === null) continue;
     const list = map.get(row.meeting_id) ?? [];
