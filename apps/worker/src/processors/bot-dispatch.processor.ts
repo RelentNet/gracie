@@ -2,13 +2,18 @@
  * Bot-dispatch processor (P4, docs/07 §1, docs/09 Phase 4). A tight repeatable
  * sweep (~60s) that dispatches exactly ONE Recall bot per due meeting:
  *
- *   select meetings starting within the lead window that are BOT-ELIGIBLE (P4.1:
- *   internal — a GA-only meeting — OR linked to ≥1 `client`-type org; leads /
- *   prospects / partners / still-unassigned meetings never dispatch), have a join
- *   URL, are still `scheduled`, and whose lead has NOT opted out → atomically
- *   claim (flip `bot_dispatched` false→true) → dispatch the Recall bot → store
- *   `bot_job_id`. On dispatch failure the claim is rolled back so the next sweep
- *   retries.
+ *   select meetings starting within the lead window that have a join URL, are
+ *   still `scheduled`, and whose lead has NOT opted out → atomically claim (flip
+ *   `bot_dispatched` false→true) → dispatch the Recall bot → store `bot_job_id`.
+ *   On dispatch failure the claim is rolled back so the next sweep retries.
+ *
+ * RECORD EVERY MEETING (2026-08-04, operator directive): a bot fires for ANY
+ * scheduled meeting with a join link — linked, partner-linked, or still
+ * UNLINKED — not just internal-or-client-linked ones. Real client calls that
+ * hadn't been linked to a `client`-type org (Optum, Solventum) were silently
+ * getting no notetaker; now they record and the client can be linked afterward
+ * (the transcript is captured with no client, and generation runs on link — see
+ * generate.processor). The kill-switch, opt-out and duplicate-dedupe are unchanged.
  *
  * P4's job ENDS here. When the meeting ends, Recall calls the already-built
  * `POST /api/webhooks/recall` (P5b), which matches by `bot_job_id` and runs
@@ -73,6 +78,34 @@ export function callKey(videoLink: string, dateTime: string): string {
 }
 
 /**
+ * Per-candidate dispatch decision (pure). The sweep no longer filters on client
+ * eligibility — every scheduled meeting with a join link records — so the only
+ * reasons to skip are: the lead opted out, there's no join link (query-guaranteed,
+ * re-checked for safety), or another bot already covers this exact call (dedupe).
+ * Exported so the test pins the rule without a DB.
+ */
+export type DispatchDecision = 'dispatch' | 'skip_opted_out' | 'skip_no_link' | 'skip_duplicate';
+
+export function decideDispatch(
+  meeting: {
+    readonly video_link: string | null;
+    readonly date_time: string;
+    readonly meeting_lead_user_id: string | null;
+  },
+  ctx: {
+    readonly optedOut: ReadonlySet<string>;
+    readonly coverage: { isCovered(videoLink: string, dateTime: string): boolean };
+  },
+): DispatchDecision {
+  if (meeting.meeting_lead_user_id !== null && ctx.optedOut.has(meeting.meeting_lead_user_id)) {
+    return 'skip_opted_out';
+  }
+  if (meeting.video_link === null) return 'skip_no_link';
+  if (ctx.coverage.isCovered(meeting.video_link, meeting.date_time)) return 'skip_duplicate';
+  return 'dispatch';
+}
+
+/**
  * Sweep-local view of which real calls already have a bot. Seeded from the DB
  * (confirmed bots: `bot_dispatched` AND a stored `bot_job_id`, so a rolled-back
  * claim never blocks anyone) and extended as this sweep dispatches. Exported for
@@ -114,11 +147,11 @@ export function createBotDispatchProcessor(
     const graceStart = new Date(now - BOT_DISPATCH_GRACE_MINUTES * 60_000).toISOString();
     const leadEnd = new Date(now + BOT_DISPATCH_LEAD_MINUTES * 60_000).toISOString();
 
-    // Candidates: due, joinable, still scheduled, not dispatched. Eligibility
-    // (internal OR client-linked) is resolved below, after the kill-switch.
+    // Candidates: due, joinable, still scheduled, not dispatched. There is no
+    // client-eligibility filter — every such meeting records (operator directive).
     const { data: candidates, error } = await db
       .from('meetings')
-      .select('id, video_link, date_time, meeting_lead_user_id, is_internal')
+      .select('id, video_link, date_time, meeting_lead_user_id')
       .eq('bot_dispatched', false)
       .eq('pipeline_status', 'scheduled')
       .not('video_link', 'is', null)
@@ -139,17 +172,6 @@ export function createBotDispatchProcessor(
       return { scanned: 0, dispatched: 0, skippedOptOut: 0, skippedDuplicate: 0 };
     }
 
-    // Bot-eligible = internal (GA-only) OR linked to ≥1 `client`-type org. A
-    // lead-only / prospect-only / unassigned meeting must NOT dispatch.
-    const clientLinked = await loadClientLinkedMeetings(
-      db,
-      inWindow.map((m) => m.id),
-    );
-    const due = inWindow.filter((m) => m.is_internal || clientLinked.has(m.id));
-    if (due.length === 0) {
-      return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0, skippedDuplicate: 0 };
-    }
-
     // Per-user opt-out: leads who set auto_join_meetings = false.
     const optedOut = await loadOptedOutLeads(db);
 
@@ -164,7 +186,7 @@ export function createBotDispatchProcessor(
     // One bot per real call: seed coverage with every call (join link + start)
     // that already has a CONFIRMED bot — from earlier sweeps or the on-demand
     // join route — then extend it as this sweep dispatches.
-    const coverage = createCallCoverage(await loadCoveredCallKeys(db, due));
+    const coverage = createCallCoverage(await loadCoveredCallKeys(db, inWindow));
 
     // Resolve the meeting-bot appearance/behavior once per sweep (name, avatar,
     // auto-leave). Admins change these in Settings → Meeting Bot; applied here.
@@ -179,18 +201,19 @@ export function createBotDispatchProcessor(
     let skippedOptOut = 0;
     let skippedDuplicate = 0;
 
-    for (const meeting of due) {
-      if (meeting.meeting_lead_user_id !== null && optedOut.has(meeting.meeting_lead_user_id)) {
+    for (const meeting of inWindow) {
+      const decision = decideDispatch(meeting, { optedOut, coverage });
+      if (decision === 'skip_opted_out') {
         skippedOptOut += 1;
         log.info({ meetingId: meeting.id }, 'bot-dispatch: lead opted out — skipping');
         continue;
       }
-      if (meeting.video_link === null) continue; // narrowed by the query, re-checked for TS
+      if (decision === 'skip_no_link' || meeting.video_link === null) continue; // query-guaranteed; re-checked for TS
 
       // Duplicate invite for a call that already has a bot → skip, and record
       // the reason where the app can show it (never dispatch a second bot even
       // if the bookkeeping write fails).
-      if (coverage.isCovered(meeting.video_link, meeting.date_time)) {
+      if (decision === 'skip_duplicate') {
         skippedDuplicate += 1;
         log.info(
           { meetingId: meeting.id, videoLink: meeting.video_link, dateTime: meeting.date_time },
@@ -337,24 +360,4 @@ async function loadOptedOutLeads(db: ServerClient): Promise<Set<string>> {
   const { data, error } = await db.from('users').select('id').eq('auto_join_meetings', false);
   if (error !== null) throw new Error(`bot-dispatch: load opt-outs: ${error.message}`);
   return new Set((data ?? []).map((u) => u.id));
-}
-
-/**
- * Of the given meeting ids, the subset linked to ≥1 `client`-type org (via the
- * `meeting_clients` junction). Lead/prospect/partner/internal links do NOT count
- * here — internal meetings are made eligible separately by their `is_internal`
- * flag, so a meeting linked only to non-client orgs is not bot-eligible.
- */
-async function loadClientLinkedMeetings(
-  db: ServerClient,
-  meetingIds: readonly string[],
-): Promise<Set<string>> {
-  if (meetingIds.length === 0) return new Set();
-  const { data, error } = await db
-    .from('meeting_clients')
-    .select('meeting_id, clients!inner(type)')
-    .in('meeting_id', meetingIds)
-    .eq('clients.type', 'client');
-  if (error !== null) throw new Error(`bot-dispatch: load client links: ${error.message}`);
-  return new Set((data ?? []).map((row) => row.meeting_id));
 }

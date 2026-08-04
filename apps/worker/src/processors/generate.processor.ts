@@ -35,7 +35,7 @@ import {
   type GeneratedDocType,
   type GenerationJobPayload,
 } from '@gracie/shared';
-import { putObject } from '@gracie/shared/storage';
+import { getObjectBytes, putObject } from '@gracie/shared/storage';
 
 import { chunkText } from '../lib/chunk.js';
 import { emailAdminsForAlert } from '../lib/email.js';
@@ -71,8 +71,9 @@ export interface GenerateResult {
  *                  reliably home it to GA so internal meetings DO generate (fixes the
  *                  "Allie & Daniel" inconsistency).
  *   - `skip`     — genuinely client-less (unassigned external / ad-hoc / test, or internal
- *                  with no GA org) → skip generation GRACEFULLY (benign terminal state,
- *                  not a failed run, not a red fleet-view error).
+ *                  with no GA org) → DEFER doc generation but still capture the transcript
+ *                  (benign "Recorded — link a client…" state, not a failed run); generation
+ *                  auto-runs once a client is linked (generate-on-link).
  * Pure + exported for unit tests.
  */
 export type ClientResolution =
@@ -94,14 +95,23 @@ export function resolveMeetingClientId(
 }
 
 /**
- * Plain-language reason recorded when a client-less meeting skips generation — written
- * to `pipeline_runs.error_message` with status left null (an explanation, not a failure,
- * so the Pipeline view shows it as a benign "Skipped" row, never a red error). Mirrors
- * the duplicate-invite skip pattern (bot-dispatch).
+ * Plain-language reason recorded when a meeting is recorded but has no client yet —
+ * written to `pipeline_runs.error_message` with status left null (an explanation, not
+ * a failure, so the Pipeline view + meeting page show it as a benign row, never a red
+ * error). The transcript IS captured; only doc generation waits for a client, which
+ * is auto-enqueued the moment one is linked (see generate-on-link, apps/web).
  */
-const NO_CLIENT_SKIP_REASON =
-  'No notes were generated — this meeting isn’t linked to a client. ' +
-  'Assign it to a client from the meeting page and re-run if notes are needed.';
+const NO_CLIENT_SKIP_REASON = 'Recorded — link a client to generate its notes.';
+
+/**
+ * MinIO key for the durable transcript copy of a recorded-but-not-yet-linked meeting.
+ * Client-independent (no slug), keyed by meeting id so a later generate-on-link run can
+ * fall back to it if Recall's retention lapsed before the client was linked. Exported
+ * for the unit test.
+ */
+export function unlinkedTranscriptKey(meetingId: string): string {
+  return `unlinked/${meetingId}/transcript.txt`;
+}
 
 /** `GeneratedDocType` → the `document_type` enum (emails differ — see docs/06 §5 mapping). */
 const DOC_TYPE_TO_ENUM: Record<GeneratedDocType, DocumentTypeEnum> = {
@@ -242,18 +252,37 @@ async function getInternalOrgId(db: ServerClient): Promise<string | null> {
 }
 
 /**
- * Skip generation for a client-less meeting GRACEFULLY (root cause #2): mark the
- * meeting terminal (`cancelled` — the watchdog won't flag it, no re-dispatch) and
- * record a status-null `pipeline_runs` explanation so the Pipeline view shows a
- * benign "Skipped" row, not a red failure. Never overwrites a completed meeting.
+ * Capture a recorded meeting that has NO client yet, then DEFER doc generation
+ * (operator directive: record every meeting, link a client afterward). The
+ * transcript is fetched + stored durably and the meeting is marked
+ * `transcript_received` so:
+ *   - the watchdog leaves it alone (it only chases `transcript_received = false`);
+ *   - the meeting page reads "ended / recorded";
+ *   - generate-on-link can detect it (transcript captured, docs held) and re-run
+ *     this pipeline the moment a client is linked.
+ * Marked terminal (`cancelled`) with a benign status-null `pipeline_runs` row
+ * carrying the plain-language "Recorded — link a client…" reason (never a red
+ * failure). Never overwrites a completed meeting.
  */
-async function skipNoClient(db: ServerClient, meetingId: string, log: FastifyBaseLogger): Promise<void> {
-  const cancelled = await db
+async function captureWithoutClient(
+  db: ServerClient,
+  data: GenerationJobPayload,
+  meetingId: string,
+  log: FastifyBaseLogger,
+): Promise<void> {
+  // Capture REGARDLESS of client so "link afterward" is useful: fetch the transcript
+  // and store a durable, client-independent copy. A fetch failure throws → the outer
+  // handler flags it needs_attention (a truly un-capturable recording IS a problem).
+  const transcript = await resolveTranscript(data, log);
+  await putObject(unlinkedTranscriptKey(meetingId), Buffer.from(transcript, 'utf8'), 'text/plain');
+
+  const patched = await db
     .from('meetings')
-    .update({ pipeline_status: 'cancelled' })
+    .update({ transcript_received: true, pipeline_status: 'cancelled' })
     .eq('id', meetingId)
     .neq('pipeline_status', 'complete');
-  if (cancelled.error !== null) throw new Error(`generate: mark no-client cancelled: ${cancelled.error.message}`);
+  if (patched.error !== null) throw new Error(`generate: mark recorded-no-client: ${patched.error.message}`);
+
   const recorded = await db.from('pipeline_runs').insert({
     meeting_id: meetingId,
     source: 'recall',
@@ -261,8 +290,11 @@ async function skipNoClient(db: ServerClient, meetingId: string, log: FastifyBas
     documents_generated: 0,
     error_message: NO_CLIENT_SKIP_REASON,
   });
-  if (recorded.error !== null) throw new Error(`generate: record no-client skip: ${recorded.error.message}`);
-  log.info({ meetingId }, 'generate: meeting has no client — skipped (nothing to generate)');
+  if (recorded.error !== null) throw new Error(`generate: record no-client capture: ${recorded.error.message}`);
+  log.info(
+    { meetingId },
+    'generate: no client yet — transcript captured, doc generation deferred until a client is linked',
+  );
 }
 
 /** Read a global setting string (e.g. ga_company_description), or null if unset. */
@@ -298,9 +330,21 @@ function toVectorLiteral(vector: readonly number[]): string {
   return `[${vector.join(',')}]`;
 }
 
+/** Read our durable unlinked-transcript copy, or null if absent/unreadable (best-effort). */
+async function readUnlinkedTranscript(meetingId: string): Promise<string | null> {
+  try {
+    const text = (await getObjectBytes(unlinkedTranscriptKey(meetingId))).toString('utf8');
+    return text.trim() === '' ? null : text;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Resolve the transcript: use `transcriptOverride` (test path) when present, else
- * fetch from Recall using the stored credential + bot_job_id (docs/06 §4).
+ * fetch from Recall using the stored credential + bot_job_id (docs/06 §4). If Recall
+ * has nothing (retention lapsed before a client was linked), fall back to our durable
+ * unlinked copy so generate-on-link still completes the notes.
  */
 async function resolveTranscript(
   data: GenerationJobPayload,
@@ -311,16 +355,26 @@ async function resolveTranscript(
     return data.transcriptOverride;
   }
   if (data.botJobId === null || data.botJobId === '') {
+    const stored = await readUnlinkedTranscript(data.meetingId);
+    if (stored !== null) return stored;
     throw new Error('generate: no transcriptOverride and no botJobId to fetch from Recall');
   }
   const apiKey = await getCredential('recall');
   if (apiKey === null || apiKey === '') {
     throw new Error('generate: no Recall API key configured (Admin → API Settings).');
   }
-  return fetchRecallTranscript(data.botJobId, {
-    apiKey,
-    region: process.env.RECALL_REGION,
-  });
+  try {
+    const fetched = await fetchRecallTranscript(data.botJobId, { apiKey, region: process.env.RECALL_REGION });
+    if (fetched.trim() !== '') return fetched;
+  } catch (err) {
+    log.warn({ err: err instanceof Error ? err.message : String(err) }, 'generate: Recall transcript fetch failed — trying durable copy');
+  }
+  const stored = await readUnlinkedTranscript(data.meetingId);
+  if (stored !== null) {
+    log.info({ meetingId: data.meetingId }, 'generate: using durable unlinked transcript copy (Recall unavailable)');
+    return stored;
+  }
+  throw new Error('generate: Recall returned no transcript and no durable copy is stored');
 }
 
 /** Embed the transcript chunks and (re)write `embeddings` rows; returns the vectors. */
@@ -675,7 +729,7 @@ export function createGenerateProcessor(
         meeting.client_id === null ? await getInternalOrgId(db) : null,
       );
       if (resolution.kind === 'skip') {
-        await skipNoClient(db, meetingId, log);
+        await captureWithoutClient(db, job.data, meetingId, log);
         return { meetingId, documents: 0, tasks: 0, status: 'skipped' };
       }
       const clientId = resolution.clientId;

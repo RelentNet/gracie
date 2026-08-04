@@ -14,7 +14,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { callKey, createCallCoverage } from './bot-dispatch.processor.js';
+import { callKey, createCallCoverage, decideDispatch } from './bot-dispatch.processor.js';
 
 const TEAMS_LINK = 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_abc%40thread.v2/0';
 
@@ -80,4 +80,63 @@ test('same start time on different links never dedupes', () => {
     { id: 'call-y', video_link: `${TEAMS_LINK}?x=2`, date_time: '2026-07-21 14:00:00+00' },
   ]);
   assert.deepEqual(dispatched, ['call-x', 'call-y']);
+});
+
+/*
+ * decideDispatch — the per-candidate rule after the client-eligibility gate was
+ * removed (2026-08-04, operator directive "record every meeting"). The only skips
+ * left are: lead opted out, no join link, or a call another bot already covers.
+ * Crucially, an UNLINKED meeting (no client, not internal) now DISPATCHES.
+ */
+const NO_OPTOUT = { optedOut: new Set<string>(), coverage: createCallCoverage() };
+const AT = '2026-07-21 14:00:00+00';
+
+test('decideDispatch: an UNLINKED meeting (no client, not internal) dispatches', () => {
+  // The whole point of the change — no eligibility field is even consulted.
+  assert.equal(
+    decideDispatch({ video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: 'lead-1' }, NO_OPTOUT),
+    'dispatch',
+  );
+  // …and with no lead at all.
+  assert.equal(
+    decideDispatch({ video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: null }, NO_OPTOUT),
+    'dispatch',
+  );
+});
+
+test('decideDispatch: a lead who opted out of auto-join is skipped', () => {
+  assert.equal(
+    decideDispatch(
+      { video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: 'lead-1' },
+      { optedOut: new Set(['lead-1']), coverage: createCallCoverage() },
+    ),
+    'skip_opted_out',
+  );
+});
+
+test('decideDispatch: a meeting with no join link is skipped', () => {
+  assert.equal(
+    decideDispatch({ video_link: null, date_time: AT, meeting_lead_user_id: null }, NO_OPTOUT),
+    'skip_no_link',
+  );
+});
+
+test('decideDispatch: a call already covered by another bot is skipped as a duplicate', () => {
+  const coverage = createCallCoverage([callKey(TEAMS_LINK, AT)]);
+  assert.equal(
+    decideDispatch({ video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: null }, { optedOut: new Set(), coverage }),
+    'skip_duplicate',
+  );
+});
+
+test('decideDispatch: opt-out is checked before the join-link and dedupe gates', () => {
+  // An opted-out lead is skipped even when the call is otherwise dispatchable.
+  const coverage = createCallCoverage();
+  assert.equal(
+    decideDispatch(
+      { video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: 'lead-9' },
+      { optedOut: new Set(['lead-9']), coverage },
+    ),
+    'skip_opted_out',
+  );
 });
