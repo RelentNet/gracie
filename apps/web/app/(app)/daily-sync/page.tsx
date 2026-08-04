@@ -9,6 +9,7 @@ import { PageContainer } from '@/components/ui/PageContainer';
 import { EmptyState } from '@/components/ui/StateViews';
 import { Tabs } from '@/components/ui/Tabs';
 import { getTodayAndYesterday, type DailySyncRecord } from '@/lib/data/daily-sync';
+import { getHealthScoresVisible } from '@/lib/data/scoring-settings';
 import { formatEasternDate, formatEasternDateTime } from '@/lib/format';
 import { getCurrentUser } from '@/lib/server-auth';
 import { TYPE } from '@/lib/typography';
@@ -77,9 +78,11 @@ function MeetingRow({ m }: { readonly m: DailySyncMeeting }): React.JSX.Element 
 function DailySyncView({
   record,
   dateLabel,
+  showHealth,
 }: {
   readonly record: DailySyncRecord | null;
   readonly dateLabel: string;
+  readonly showHealth: boolean;
 }): React.JSX.Element {
   const content: DailySyncContent | null = record?.content ?? null;
   if (content === null) {
@@ -126,39 +129,41 @@ function DailySyncView({
         )}
       </Card>
 
-      <Card accent={content.atRiskClients.length > 0 ? 'critical' : 'none'}>
-        <CardHeader
-          title="Clients to watch"
-          description="Low or declining relationship health."
-          icon={<AlertTriangle size={20} aria-hidden="true" />}
-        />
-        {content.atRiskClients.length > 0 ? (
-          <ul>
-            {content.atRiskClients.map((c) => {
-              const badge = healthBadge(c.health);
-              return (
-                <li
-                  key={c.clientId}
-                  className="flex items-center justify-between gap-3 border-b py-2 last:border-0"
-                  style={{ borderColor: 'var(--border-subtle)' }}
-                >
-                  <span style={TYPE.bodyStrong}>{c.name}</span>
-                  <span className="flex items-center gap-2">
-                    {c.trend !== null ? (
-                      <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>{c.trend}</span>
-                    ) : null}
-                    <Badge bg={badge.bg} fg={badge.fg}>
-                      health {badge.label}
-                    </Badge>
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>No at-risk clients right now.</p>
-        )}
-      </Card>
+      {showHealth ? (
+        <Card accent={content.atRiskClients.length > 0 ? 'critical' : 'none'}>
+          <CardHeader
+            title="Clients to watch"
+            description="Low or declining relationship health."
+            icon={<AlertTriangle size={20} aria-hidden="true" />}
+          />
+          {content.atRiskClients.length > 0 ? (
+            <ul>
+              {content.atRiskClients.map((c) => {
+                const badge = healthBadge(c.health);
+                return (
+                  <li
+                    key={c.clientId}
+                    className="flex items-center justify-between gap-3 border-b py-2 last:border-0"
+                    style={{ borderColor: 'var(--border-subtle)' }}
+                  >
+                    <span style={TYPE.bodyStrong}>{c.name}</span>
+                    <span className="flex items-center gap-2">
+                      {c.trend !== null ? (
+                        <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>{c.trend}</span>
+                      ) : null}
+                      <Badge bg={badge.bg} fg={badge.fg}>
+                        health {badge.label}
+                      </Badge>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>No at-risk clients right now.</p>
+          )}
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader title="Pre-meeting briefs" description="Context for today's client meetings." />
@@ -188,21 +193,22 @@ function DailySyncView({
 
 /** Module 8 — Daily Sync (docs/08 §M8). Today + Yesterday tabs over `daily_syncs`. */
 export default async function DailySyncPage(): Promise<React.JSX.Element> {
-  const [{ today, yesterday, todayDate, yesterdayDate }, user] = await Promise.all([
+  const [{ today, yesterday, todayDate, yesterdayDate }, user, showHealth] = await Promise.all([
     getTodayAndYesterday(),
     getCurrentUser(),
+    getHealthScoresVisible().catch(() => true), // a read blip must never break the page
   ]);
 
   const items = [
     {
       id: 'today',
       label: 'Today',
-      content: <DailySyncView record={today} dateLabel={longEtDate(todayDate)} />,
+      content: <DailySyncView record={today} dateLabel={longEtDate(todayDate)} showHealth={showHealth} />,
     },
     {
       id: 'yesterday',
       label: 'Yesterday',
-      content: <DailySyncView record={yesterday} dateLabel={longEtDate(yesterdayDate)} />,
+      content: <DailySyncView record={yesterday} dateLabel={longEtDate(yesterdayDate)} showHealth={showHealth} />,
     },
   ];
 
