@@ -102,6 +102,44 @@ export async function getMeetingMedia(meetingId: string): Promise<MeetingMedia |
 }
 
 /**
+ * A screen-share still to pin inline in the transcript. `src` is the same-origin
+ * `/api/files/raw` URL (which re-checks `canAccessKey` on every fetch), so passing it to
+ * the client opens no access the page didn't already have.
+ */
+export interface MeetingStill {
+  readonly tsSeconds: number;
+  readonly src: string;
+}
+
+/**
+ * Screen-share stills for a meeting, oldest first — the permanent visual record that
+ * survives the video's expiry. All of a meeting's stills live under one occurrence
+ * folder, so a SINGLE `canAccessKey` check on the first key answers for the set (a
+ * restricted transcripts-style folder hides them from a non-admin). Returns `[]` when
+ * there are none, the caller can't see them, or the table isn't migrated yet.
+ */
+export async function getMeetingStills(meetingId: string, role: Role): Promise<MeetingStill[]> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('meeting_stills')
+    .select('ts_seconds, object_key')
+    .eq('meeting_id', meetingId)
+    .order('ts_seconds', { ascending: true });
+  if (error !== null) {
+    // Safe-deploy window: table absent until 0016 is applied → degrade to "no stills".
+    if (error.code === '42P01' || error.code === 'PGRST205') return [];
+    throw new Error(`getMeetingStills: ${error.message}`);
+  }
+  const rows = data ?? [];
+  if (rows.length === 0) return [];
+  if (!(await canAccessKey(rows[0]!.object_key, role))) return [];
+  return rows.map((r) => ({
+    tsSeconds: r.ts_seconds,
+    src: `/api/files/raw?key=${encodeURIComponent(r.object_key)}`,
+  }));
+}
+
+/**
  * Resolved ended-meeting player, assembled ON VIEW (no video is ever stored):
  *   - `videoUrl`  — a FRESH Recall mixed-video URL the browser streams DIRECTLY from
  *                   Recall's S3 (native seeking; ~5h signed, so re-fetched per view).
@@ -132,8 +170,15 @@ export async function resolveMeetingPlayback(
   try {
     urls = await fetchRecallRecordingUrls(meeting.botJobId, options);
   } catch {
-    // Recall unreachable / bot gone → no live playback (page shows "no longer available").
-    return { videoUrl: null, segments: null };
+    // Recall unreachable / bot gone (e.g. 6-month video retention lapsed) → no video,
+    // but our DURABLE transcript copy survives. Fall back to it so the transcript (and
+    // the screen-share stills pinned to it) remain the permanent record.
+    const storedKey = media?.transcriptKey ?? null;
+    const segments =
+      storedKey !== null && (await canAccessKey(storedKey, role))
+        ? await readStoredSegments(storedKey)
+        : null;
+    return { videoUrl: null, segments };
   }
 
   const storedKey = media?.transcriptKey ?? null;

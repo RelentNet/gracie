@@ -41,6 +41,7 @@ import { chunkText } from '../lib/chunk.js';
 import { emailAdminsForAlert } from '../lib/email.js';
 import { generateDocuments, type GeneratedDocument } from '../lib/generate.js';
 import { fetchRecallMedia, fetchRecallTranscript, type RecallMedia } from '../lib/recall.js';
+import { extractScreenShareStills } from '../lib/stills.js';
 import { easternDateString, easternStamp } from './daily-sync.processor.js';
 
 type DocumentTypeEnum = Database['public']['Enums']['document_type'];
@@ -52,6 +53,7 @@ type DocumentInsert = Database['public']['Tables']['documents']['Insert'];
 type TaskInsert = Database['public']['Tables']['tasks']['Insert'];
 type NotificationInsert = Database['public']['Tables']['notifications']['Insert'];
 type MeetingMediaInsert = Database['public']['Tables']['meeting_media']['Insert'];
+type MeetingStillInsert = Database['public']['Tables']['meeting_stills']['Insert'];
 
 /** Outcome of a generation run (returned to BullMQ; visible in Bull Board). */
 export interface GenerateResult {
@@ -691,6 +693,58 @@ async function storeMeetingMedia(
     { meetingId, segments: media.segments.length },
     'generate: stored meeting transcript segments (video is live-pulled, not stored)',
   );
+
+  // Screen-share stills: extract slide/screen-change frames from the (never-stored)
+  // mixed video and keep them FOREVER, so they outlive the video's retention. Its own
+  // try/catch: the segments above are already committed, so a stills failure (ffmpeg
+  // missing, a bad stream) must not undo them.
+  if (media.videoUrl !== null) {
+    try {
+      await storeScreenShareStills(db, log, meetingId, keys, media.videoUrl);
+    } catch (err) {
+      log.warn({ err: err instanceof Error ? err.message : String(err) }, 'generate: stills store failed (best-effort)');
+    }
+  }
+}
+
+/**
+ * Extract screen-share stills from the mixed video and persist them under the meeting's
+ * OCCURRENCE folder (so `canAccessKey` governs them like every other object) plus a
+ * `meeting_stills` row each. Kept indefinitely — the permanent visual record after the
+ * video expires. Idempotent + cheap on re-runs: if this meeting already has stills we
+ * SKIP the expensive ffmpeg pass entirely. Best-effort (the caller swallows failures).
+ */
+async function storeScreenShareStills(
+  db: ServerClient,
+  log: FastifyBaseLogger,
+  meetingId: string,
+  keys: MeetingStorageKeys,
+  videoUrl: string,
+): Promise<void> {
+  const existing = await db.from('meeting_stills').select('id').eq('meeting_id', meetingId).limit(1);
+  if (existing.error !== null) throw new Error(`generate: check meeting_stills: ${existing.error.message}`);
+  if ((existing.data ?? []).length > 0) {
+    log.info({ meetingId }, 'generate: stills already extracted — skipping');
+    return;
+  }
+
+  const stills = await extractScreenShareStills(videoUrl, { log });
+  if (stills.length === 0) {
+    log.info({ meetingId }, 'generate: no screen-share stills detected');
+    return;
+  }
+
+  const rows: MeetingStillInsert[] = [];
+  for (let i = 0; i < stills.length; i += 1) {
+    const still = stills[i];
+    if (still === undefined) continue;
+    const objectKey = `${keys.occurrenceFolderPath}/stills/${String(i).padStart(3, '0')}-${still.tsSeconds}.jpg`;
+    await putObject(objectKey, still.jpeg, 'image/jpeg');
+    rows.push({ meeting_id: meetingId, ts_seconds: still.tsSeconds, object_key: objectKey });
+  }
+  const inserted = await db.from('meeting_stills').insert(rows);
+  if (inserted.error !== null) throw new Error(`generate: insert meeting_stills: ${inserted.error.message}`);
+  log.info({ meetingId, stills: rows.length }, 'generate: stored screen-share stills');
 }
 
 /** Build the generation processor, logging through the worker's Fastify logger. */

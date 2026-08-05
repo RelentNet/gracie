@@ -4,7 +4,13 @@
 # comes from injected env vars (no .env.local in the image).
 FROM node:24-bookworm-slim
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH NODE_ENV=production
-RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+# ffmpeg powers screen-share still extraction (apps/worker/src/lib/stills.ts). Its
+# absence is handled gracefully (stills are best-effort), but this image ships it so
+# stills actually get captured. Rebuild + redeploy the worker to pick this up.
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Install workspace deps first (better layer caching).

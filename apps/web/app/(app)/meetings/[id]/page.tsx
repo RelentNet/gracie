@@ -23,9 +23,11 @@ import {
   getMeetingDocuments,
   getMeetingMasterRecord,
   getMeetingMedia,
+  getMeetingStills,
   getMeetingTasks,
   resolveMeetingPlayback,
   type MeetingPlayback,
+  type MeetingStill,
 } from '@/lib/data/meeting-occurrence';
 import { formatEasternDate, formatEasternDateTime } from '@/lib/format';
 import {
@@ -209,13 +211,21 @@ function DocumentsCard({ documents }: { readonly documents: readonly Document[] 
  */
 function RecordingCard({
   playback,
+  stills,
   hasBot,
 }: {
   readonly playback: MeetingPlayback | null;
+  readonly stills: readonly MeetingStill[];
   readonly hasBot: boolean;
 }): React.JSX.Element | null {
   if (!hasBot) return null;
-  if (playback === null || playback.videoUrl === null) {
+  const videoUrl = playback?.videoUrl ?? null;
+  const segments = playback?.segments ?? null;
+  const hasStills = stills.length > 0;
+  const hasSegments = segments !== null && segments.length > 0;
+
+  // Nothing left at all → the recording (and any stills) are gone.
+  if (videoUrl === null && !hasStills && !hasSegments) {
     return (
       <Card>
         <CardHeader title="Recording" icon={<Video size={20} aria-hidden="true" />} />
@@ -225,27 +235,34 @@ function RecordingCard({
       </Card>
     );
   }
+
+  const description =
+    videoUrl !== null
+      ? 'Play the meeting and click any line to jump to that moment.'
+      : 'The video has expired, but the shared screens and transcript are kept permanently.';
+
   return (
     <Card>
       <CardHeader
         title="Recording"
-        description="Play the meeting and click any line to jump to that moment."
+        description={description}
         icon={<Video size={20} aria-hidden="true" />}
       />
-      <MeetingRecording videoUrl={playback.videoUrl} segments={playback.segments} />
+      <MeetingRecording videoUrl={videoUrl} segments={segments} stills={stills} />
     </Card>
   );
 }
 
 /** Content for a meeting that has ended / been recorded. */
 async function EndedView({ meeting, role }: { readonly meeting: Meeting; readonly role: Role }): Promise<React.JSX.Element> {
-  const [rawDocs, allFolders, tasks, masterRecord, run, media] = await Promise.all([
+  const [rawDocs, allFolders, tasks, masterRecord, run, media, stills] = await Promise.all([
     getMeetingDocuments(meeting.id),
     listFolders(),
     getMeetingTasks(meeting.id),
     getMeetingMasterRecord(meeting.id),
     getLatestPipelineRun(meeting.id),
     getMeetingMedia(meeting.id),
+    getMeetingStills(meeting.id, role),
   ]);
 
   // ACCESS CONTROL: same rule as the Documents area — hide restricted folders/docs
@@ -284,7 +301,7 @@ async function EndedView({ meeting, role }: { readonly meeting: Meeting; readonl
 
   return (
     <>
-      <RecordingCard playback={playback} hasBot={hasRecording} />
+      <RecordingCard playback={playback} stills={stills} hasBot={hasRecording} />
       <PipelineStatusPanel headline={reason.headline} detail={reason.detail} action={linkAction} />
       <DocumentsCard documents={documents} />
       <TasksCard tasks={tasks} />
