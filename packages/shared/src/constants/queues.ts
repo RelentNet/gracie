@@ -36,6 +36,8 @@ export const QUEUE_NAMES = {
   documentsPurge: 'documents-purge',
   /** Resume recording: fire a DELAYED resume after a "pause for N minutes" voice command. */
   resumeRecording: 'resume-recording',
+  /** Task aging: nightly archive of stale, standard-priority tasks (tasks lifecycle). */
+  taskAging: 'task-aging',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -65,6 +67,8 @@ export const JOB_NAMES = {
   documentsPurgeSweep: 'documents-purge.sweep',
   /** Delayed resume — resume a bot's recording after a timed "pause" voice command. */
   resumeRecording: 'resume-recording.resume',
+  /** Nightly task-aging sweep — archive stale standard tasks (tasks lifecycle). */
+  taskAgingSweep: 'task-aging.sweep',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];
@@ -84,6 +88,7 @@ export const JOB_SCHEDULER_IDS = {
   contactSuggestions: 'contact-suggestions.nightly',
   automations: 'automations.every-5m',
   documentsPurge: 'documents-purge.nightly',
+  taskAging: 'task-aging.nightly',
 } as const;
 
 /** Heartbeat repeat interval (ms) — ~every 30s. A liveness signal, not real work. */
@@ -145,3 +150,6 @@ export const AUTOMATIONS_SWEEP_INTERVAL_MS = 5 * 60_000;
 
 /** Documents recycle-bin purge sweep interval (ms) — nightly. */
 export const DOCUMENTS_PURGE_INTERVAL_MS = 24 * 60 * 60_000;
+
+/** Task-aging sweep interval (ms) — nightly. Archives stale standard tasks. */
+export const TASK_AGING_INTERVAL_MS = 24 * 60 * 60_000;

@@ -32,6 +32,7 @@ import type { Database, ServerClient } from '@gracie/db';
 import {
   EMBEDDING_DIMENSIONS,
   resolveGenerationPrompts,
+  type ExtractedTask,
   type GeneratedDocType,
   type GenerationJobPayload,
 } from '@gracie/shared';
@@ -42,6 +43,12 @@ import { emailAdminsForAlert } from '../lib/email.js';
 import { generateDocuments, type GeneratedDocument } from '../lib/generate.js';
 import { fetchRecallMedia, fetchRecallTranscript, type RecallMedia } from '../lib/recall.js';
 import { extractScreenShareStills } from '../lib/stills.js';
+import {
+  decideCapEvictions,
+  decideTaskUpsert,
+  findDuplicateTask,
+  resolveTaskOwner,
+} from '../lib/task-lifecycle.js';
 import { easternDateString, easternStamp } from './daily-sync.processor.js';
 
 type DocumentTypeEnum = Database['public']['Enums']['document_type'];
@@ -576,27 +583,128 @@ async function persistDocuments(
   return ids;
 }
 
-/** Resolve an owner hint to a user id by matching name/email (else null). */
-function resolveOwner(
-  hint: string | null,
-  users: ReadonlyArray<{ id: string; name: string; email: string }>,
-): string | null {
-  if (hint === null) return null;
-  const needle = hint.trim().toLowerCase();
-  if (needle === '') return null;
-  for (const user of users) {
-    const name = user.name.toLowerCase();
-    const email = user.email.toLowerCase();
-    if (needle === name || needle === email || email.split('@')[0] === needle) return user.id;
-  }
-  // Looser: hint is a first name / substring of a full name.
-  for (const user of users) {
-    const name = user.name.toLowerCase();
-    if (name.split(/\s+/).includes(needle) || name.includes(needle) || needle.includes(name)) {
-      return user.id;
+interface TaskLifecycleResult {
+  readonly inserted: number;
+  readonly escalated: number;
+  readonly reactivated: number;
+  readonly evicted: number;
+  readonly hasOpenItems: boolean;
+}
+
+/**
+ * Apply the extracted checklist to the client's task list under the lifecycle rules
+ * (tasks lifecycle core):
+ *   - DEDUP against the client's still-live tasks (active OR archived; completed tasks
+ *     are excluded so a re-mention of finished work is new work). A repeat is NOT
+ *     duplicated — an active match is escalated to HIGH, an archived match is
+ *     reactivated as HIGH. This is what stops the duplicate pile.
+ *   - Owner is set only when a person is clearly named (`resolveTaskOwner`); otherwise
+ *     the task lives under the client, unassigned.
+ *   - After applying, the active list is capped per client — the stalest STANDARD tasks
+ *     are archived (high tasks never auto-evict).
+ * Idempotent per meeting: this meeting's own prior tasks are cleared first, so a re-run
+ * re-derives from the transcript without self-duplicating.
+ */
+async function applyExtractedTasks(
+  db: ServerClient,
+  clientId: string,
+  meetingId: string,
+  extracted: readonly ExtractedTask[],
+  checklistDocId: string | null,
+): Promise<TaskLifecycleResult> {
+  // Idempotent re-runs: drop this meeting's own prior tasks before re-deriving.
+  const cleared = await db.from('tasks').delete().eq('source_meeting_id', meetingId);
+  if (cleared.error !== null) throw new Error(`generate: clear prior tasks: ${cleared.error.message}`);
+
+  // Dedup candidates: this client's still-live tasks — active OR archived, but never
+  // completed (a re-mention of done work should create fresh work).
+  const existing = await db
+    .from('tasks')
+    .select('id, description, archived, status')
+    .eq('client_id', clientId);
+  if (existing.error !== null) throw new Error(`generate: load existing tasks: ${existing.error.message}`);
+  const candidates = (existing.data ?? [])
+    .filter((task) => task.archived || task.status !== 'complete')
+    .map((task) => ({ id: task.id, description: task.description, archived: task.archived }));
+
+  const usersRes = await db.from('users').select('id, name, email');
+  if (usersRes.error !== null) throw new Error(`generate: load users: ${usersRes.error.message}`);
+  const users = usersRes.data ?? [];
+
+  const nowIso = new Date().toISOString();
+  let inserted = 0;
+  let escalated = 0;
+  let reactivated = 0;
+
+  for (const task of extracted) {
+    const match = findDuplicateTask(task.description, candidates);
+    const decision = decideTaskUpsert(task, match);
+    if (decision.kind === 'insert') {
+      const row: TaskInsert = {
+        client_id: clientId,
+        source_meeting_id: meetingId,
+        source_document_id: checklistDocId,
+        description: task.description,
+        owner_user_id: resolveTaskOwner(task.ownerHint, users),
+        due_date: parseDueDate(task.dueHint),
+        priority_flag: decision.high,
+        status: 'open',
+      };
+      const ins = await db.from('tasks').insert(row).select('id').single();
+      if (ins.error !== null) throw new Error(`generate: insert task: ${ins.error.message}`);
+      // Add to candidates so a near-dup later in THIS batch escalates rather than duplicating.
+      candidates.push({ id: ins.data.id, description: task.description, archived: false });
+      inserted += 1;
+    } else if (decision.kind === 'escalate') {
+      const upd = await db
+        .from('tasks')
+        .update({ priority_flag: true, updated_at: nowIso })
+        .eq('id', decision.id);
+      if (upd.error !== null) throw new Error(`generate: escalate task: ${upd.error.message}`);
+      escalated += 1;
+    } else {
+      const upd = await db
+        .from('tasks')
+        .update({ archived: false, status: 'open', priority_flag: true, updated_at: nowIso })
+        .eq('id', decision.id);
+      if (upd.error !== null) throw new Error(`generate: reactivate task: ${upd.error.message}`);
+      // Now active — a later dup in this batch should escalate it, not reactivate again.
+      const entry = candidates.find((candidate) => candidate.id === decision.id);
+      if (entry !== undefined) entry.archived = false;
+      reactivated += 1;
     }
   }
-  return null;
+
+  // Cap the active list per client: archive the stalest STANDARD tasks (never high).
+  const activeRes = await db
+    .from('tasks')
+    .select('id, priority_flag, updated_at, created_at')
+    .eq('client_id', clientId)
+    .eq('archived', false)
+    .neq('status', 'complete');
+  if (activeRes.error !== null) throw new Error(`generate: load active tasks: ${activeRes.error.message}`);
+  const active = (activeRes.data ?? []).map((task) => ({
+    id: task.id,
+    priorityFlag: task.priority_flag,
+    updatedAt: task.updated_at,
+    createdAt: task.created_at,
+  }));
+  const evictIds = decideCapEvictions(active);
+  if (evictIds.length > 0) {
+    const archived = await db
+      .from('tasks')
+      .update({ archived: true, updated_at: nowIso })
+      .in('id', evictIds);
+    if (archived.error !== null) throw new Error(`generate: cap-evict tasks: ${archived.error.message}`);
+  }
+
+  return {
+    inserted,
+    escalated,
+    reactivated,
+    evicted: evictIds.length,
+    hasOpenItems: inserted + escalated + reactivated > 0,
+  };
 }
 
 /** Parse a due hint to YYYY-MM-DD only when it carries an explicit calendar date. */
@@ -864,35 +972,24 @@ export function createGenerateProcessor(
       // 6. Store docs + insert `documents` rows (incl. the visible transcript document).
       const docIds = await persistDocuments(db, meeting, clientId, slug, documents, keys, transcript);
 
-      // 7. Tasks: insert parsed checklist (idempotent: clear prior for this meeting first).
-      const clearedTasks = await db.from('tasks').delete().eq('source_meeting_id', meetingId);
-      if (clearedTasks.error !== null) {
-        throw new Error(`generate: clear prior tasks: ${clearedTasks.error.message}`);
+      // 7. Tasks: apply the parsed checklist under the lifecycle rules (dedup + escalate
+      //    + owner-on-name + per-client cap). `tasks === null` means the checklist JSON
+      //    never parsed (partial run) → clear this meeting's prior tasks, add nothing.
+      const checklistDocId = docIds.get('task_checklist') ?? null;
+      const taskOutcome = await applyExtractedTasks(db, clientId, meetingId, tasks ?? [], checklistDocId);
+      const tasksInserted = taskOutcome.inserted;
+      await patchMeeting(db, meetingId, { has_open_items: taskOutcome.hasOpenItems });
+      if (taskOutcome.escalated + taskOutcome.reactivated + taskOutcome.evicted > 0) {
+        log.info(
+          {
+            inserted: taskOutcome.inserted,
+            escalated: taskOutcome.escalated,
+            reactivated: taskOutcome.reactivated,
+            evicted: taskOutcome.evicted,
+          },
+          'generate: task lifecycle applied (dedup/escalate/cap)',
+        );
       }
-      let tasksInserted = 0;
-      if (tasks !== null && tasks.length > 0) {
-        const { data: users, error: usersError } = await db
-          .from('users')
-          .select('id, name, email');
-        if (usersError !== null) throw new Error(`generate: load users: ${usersError.message}`);
-        const checklistDocId = docIds.get('task_checklist') ?? null;
-        const taskRows: TaskInsert[] = tasks.map((task) => ({
-          client_id: clientId,
-          source_meeting_id: meetingId,
-          source_document_id: checklistDocId,
-          description: task.description,
-          owner_user_id: resolveOwner(task.ownerHint, users ?? []),
-          due_date: parseDueDate(task.dueHint),
-          priority_flag: task.priority,
-          status: 'open',
-        }));
-        const insertedTasks = await db.from('tasks').insert(taskRows);
-        if (insertedTasks.error !== null) {
-          throw new Error(`generate: insert tasks: ${insertedTasks.error.message}`);
-        }
-        tasksInserted = taskRows.length;
-      }
-      await patchMeeting(db, meetingId, { has_open_items: tasksInserted > 0 });
 
       // 8. Master record digest (from the analysis, else the first doc).
       const digestSource =

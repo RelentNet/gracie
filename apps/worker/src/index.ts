@@ -28,6 +28,7 @@ import { createIngestProcessor } from './processors/ingest.processor.js';
 import { createKbIngestProcessor } from './processors/kb-ingest.processor.js';
 import { createRelationshipHealthProcessor } from './processors/relationship-health.processor.js';
 import { createResumeRecordingProcessor } from './processors/resume-recording.processor.js';
+import { createTaskAgingProcessor } from './processors/task-aging.processor.js';
 import { createWatchdogProcessor } from './processors/watchdog.processor.js';
 import { createAutomationsQueue, scheduleAutomations } from './queues/automations.queue.js';
 import { createBotDispatchQueue, scheduleBotDispatch } from './queues/bot-dispatch.queue.js';
@@ -51,6 +52,7 @@ import {
   scheduleRelationshipHealth,
 } from './queues/relationship-health.queue.js';
 import { createResumeRecordingQueue } from './queues/resume-recording.queue.js';
+import { createTaskAgingQueue, scheduleTaskAging } from './queues/task-aging.queue.js';
 import { createWatchdogQueue, scheduleTranscriptWatchdog } from './queues/watchdog.queue.js';
 import { buildServer } from './server.js';
 
@@ -113,6 +115,7 @@ async function start(): Promise<void> {
   const automationsQueue = createAutomationsQueue(connection);
   const documentsPurgeQueue = createDocumentsPurgeQueue(connection);
   const resumeRecordingQueue = createResumeRecordingQueue(connection);
+  const taskAgingQueue = createTaskAgingQueue(connection);
 
   /**
    * Best-effort single-client health recompute, deduped by a `health:<clientId>` job
@@ -151,6 +154,7 @@ async function start(): Promise<void> {
       automationsQueue,
       documentsPurgeQueue,
       resumeRecordingQueue,
+      taskAgingQueue,
     ],
   });
 
@@ -288,6 +292,16 @@ async function start(): Promise<void> {
     app.log.error({ jobId: job?.id, err: error }, 'resume-recording job failed');
   });
 
+  // Task aging: nightly archive of stale, standard-priority tasks (tasks lifecycle).
+  const taskAgingWorker = createWorker(
+    QUEUE_NAMES.taskAging,
+    createTaskAgingProcessor(app.log),
+    connection,
+  );
+  taskAgingWorker.on('failed', (job, error) => {
+    app.log.error({ jobId: job?.id, err: error }, 'task-aging job failed');
+  });
+
   await scheduleHeartbeat(heartbeatQueue);
   await scheduleTranscriptWatchdog(watchdogQueue);
   await scheduleCalendarScan(calendarScanQueue);
@@ -297,6 +311,7 @@ async function start(): Promise<void> {
   await scheduleContactSuggestions(contactSuggestionsQueue);
   await scheduleAutomations(automationsQueue);
   await scheduleDocumentsPurge(documentsPurgeQueue);
+  await scheduleTaskAging(taskAgingQueue);
 
   installShutdown({
     app,
@@ -315,6 +330,7 @@ async function start(): Promise<void> {
       automationsQueue,
       documentsPurgeQueue,
       resumeRecordingQueue,
+      taskAgingQueue,
     ],
     workers: [
       heartbeatWorker,
@@ -330,6 +346,7 @@ async function start(): Promise<void> {
       automationsWorker,
       documentsPurgeWorker,
       resumeRecordingWorker,
+      taskAgingWorker,
     ],
   });
 
