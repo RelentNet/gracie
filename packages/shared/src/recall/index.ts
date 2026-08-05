@@ -114,6 +114,25 @@ export interface RecallDispatchOptions extends RecallFetchOptions {
 const DEFAULT_BOT_NAME = 'Gracie';
 
 /**
+ * Mixed-video layout applied to EVERY bot so screen-share content is captured
+ * cleanly for the inline stills (feat: screen-share-stills). Recall exposes no
+ * screen-share-only track (`media_shortcuts` has `video_mixed` only; "Retrieve
+ * Video Separate" is per-participant), so we shape the mixed video instead:
+ *   - `speaker_view` makes the shared screen the FULL-FRAME dominant content
+ *     (gallery would shrink it to one tile), and
+ *   - `hide` drops participant camera tiles WHILE sharing, so the screen-share
+ *     segments are clean full-screen graphics — better stills and far fewer
+ *     ffmpeg scene-change false positives from moving camera tiles.
+ * Mixed video is on by default; these only shape it. Merged into `recording_config`
+ * at dispatch (sibling of `transcript`/`realtime_endpoints`) so it composes with
+ * whatever {@link buildRecordingConfig} returns.
+ */
+export const SCREEN_SHARE_RECORDING_CONFIG: Readonly<Record<string, unknown>> = {
+  video_mixed_layout: 'speaker_view',
+  video_mixed_participant_video_when_screenshare: 'hide',
+};
+
+/**
  * Map our provider selector to Recall's `recording_config.transcript.provider`
  * wire shape at BOT CREATION (docs: recallai-transcription):
  *   - meeting_captions → `{ meeting_captions: {} }`
@@ -343,10 +362,12 @@ export async function dispatchRecallBot(options: RecallDispatchOptions): Promise
   const body: Record<string, unknown> = {
     meeting_url: options.meetingUrl,
     bot_name: options.botName ?? DEFAULT_BOT_NAME,
+    // Always shape the mixed video for clean screen-share capture (the stills feature),
+    // composed with any transcript/realtime config. Even the record-only `recallai`
+    // path (recordingConfig === null) now carries this — the async transcript is still
+    // requested post-recording via `recording.done`, unaffected by the video layout.
+    recording_config: { ...SCREEN_SHARE_RECORDING_CONFIG, ...(recordingConfig ?? {}) },
   };
-  if (recordingConfig !== null) {
-    body.recording_config = recordingConfig;
-  }
 
   // Static image tile: show it both while recording and before, so the bot always
   // presents Gracie's face rather than a blank participant tile.

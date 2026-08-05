@@ -1,32 +1,85 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { activeSegmentIndex, formatClock, type TranscriptSegment } from '@gracie/shared';
+import {
+  activeSegmentIndex,
+  formatClock,
+  groupStillsBySegment,
+  type TranscriptSegment,
+} from '@gracie/shared';
 
 import { TYPE } from '@/lib/typography';
 
 /**
- * MeetingRecording — the recorded-meeting player (meeting page ended-state). An HTML5
- * `<video>` streams the mixed recording DIRECTLY from Recall's S3 (a fresh signed URL
- * resolved server-side per view — never stored on our infra, never proxied; S3 honors
- * Range so native seeking works), with the timestamped transcript beside it:
+ * MeetingRecording — the recorded-meeting player (meeting page ended-state). When a
+ * video is available an HTML5 `<video>` streams the mixed recording DIRECTLY from
+ * Recall's S3 (a fresh signed URL resolved server-side per view — never stored, never
+ * proxied; S3 honors Range so native seeking works), with the timestamped transcript
+ * beside it:
  *   - click a line  → `video.currentTime = segment.start` and play,
  *   - as it plays   → the active line highlights + scrolls into view (`timeupdate`).
  *
- * The transcript `segments` are resolved server-side (our durable MinIO copy, or a
- * live-pull-and-cache for back-catalog meetings) and passed in directly — the readable
- * transcript also lands as a downloadable document in the meeting's folder. `null`/empty
- * segments render a plain "no transcript" note so a video-only recording still plays.
+ * SCREEN-SHARE STILLS are pinned inline in the transcript at the moment they appeared
+ * (the line closest at/before each still's timestamp), and click-to-enlarge. Stills are
+ * kept forever, so after the 6-month video expires (`videoUrl === null`) the transcript
+ * + stills remain the PERMANENT visual record — the whole point of the feature.
  */
-export interface MeetingRecordingProps {
-  readonly videoUrl: string;
-  readonly segments: readonly TranscriptSegment[] | null;
+export interface RecordingStill {
+  readonly tsSeconds: number;
+  /** Same-origin `/api/files/raw` URL (re-authorized per fetch). */
+  readonly src: string;
 }
 
-export function MeetingRecording({ videoUrl, segments }: MeetingRecordingProps): React.JSX.Element {
+export interface MeetingRecordingProps {
+  /** Fresh mixed-video URL, or null once the recording has expired (stills survive). */
+  readonly videoUrl: string | null;
+  readonly segments: readonly TranscriptSegment[] | null;
+  readonly stills?: readonly RecordingStill[];
+}
+
+/** A row of still thumbnails; clicking one enlarges it. */
+function StillStrip({
+  stills,
+  onOpen,
+}: {
+  readonly stills: readonly RecordingStill[];
+  readonly onOpen: (still: RecordingStill) => void;
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-wrap gap-2 p-2">
+      {stills.map((still, i) => (
+        <button
+          key={`${still.tsSeconds}-${i}`}
+          type="button"
+          onClick={(): void => onOpen(still)}
+          className="overflow-hidden rounded-md border"
+          style={{ borderColor: 'var(--border-subtle)', cursor: 'zoom-in' }}
+          title={`Shared screen at ${formatClock(still.tsSeconds)} — click to enlarge`}
+        >
+          {/* Stills are kilobytes, so the thumbnail IS the full image, just sized down. */}
+          <img
+            src={still.src}
+            alt={`Shared screen at ${formatClock(still.tsSeconds)}`}
+            loading="lazy"
+            className="block h-24 w-auto max-w-[16rem] object-contain"
+            style={{ background: 'var(--surface-muted, #000)' }}
+          />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function MeetingRecording({
+  videoUrl,
+  segments,
+  stills = [],
+}: MeetingRecordingProps): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [enlarged, setEnlarged] = useState<RecordingStill | null>(null);
 
   // Keep the active line in view as playback moves it.
   useEffect(() => {
@@ -48,82 +101,126 @@ export function MeetingRecording({ videoUrl, segments }: MeetingRecordingProps):
     void video.play();
   };
 
+  const openStill = (still: RecordingStill): void => {
+    setEnlarged(still);
+    dialogRef.current?.showModal();
+  };
+  const closeStill = (): void => {
+    dialogRef.current?.close();
+  };
+
   const hasTranscript = segments !== null && segments.length > 0;
+  const placed = groupStillsBySegment(segments ?? [], stills);
 
-  return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-      <video
-        ref={videoRef}
-        src={videoUrl}
-        controls
-        preload="metadata"
-        onTimeUpdate={onTimeUpdate}
-        className="w-full rounded-lg border"
-        style={{ borderColor: 'var(--border-subtle)', background: '#000', maxHeight: '70vh' }}
+  const transcriptPanel = (
+    <div className="relative min-h-0">
+      <div
+        className="flex max-h-[60vh] min-h-[12rem] flex-col overflow-hidden rounded-lg border lg:absolute lg:inset-0 lg:max-h-none lg:min-h-0"
+        style={{ borderColor: 'var(--border-subtle)' }}
       >
-        <track kind="captions" />
-      </video>
-
-      {/* On lg the video (a replaced element) sets the row height; this cell stretches
-          to it. The inner panel is absolutely positioned so its long transcript can't
-          grow the row — making the panel exactly the video's height. Stacked, it flows
-          normally with a max-height so it never dominates. Both scroll internally. */}
-      <div className="relative min-h-0">
-        <div
-          className="flex max-h-[60vh] min-h-[12rem] flex-col overflow-hidden rounded-lg border lg:absolute lg:inset-0 lg:max-h-none lg:min-h-0"
-          style={{ borderColor: 'var(--border-subtle)' }}
-        >
-          <div className="border-b p-3" style={{ borderColor: 'var(--border-subtle)' }}>
-            <span style={TYPE.label}>Transcript</span>
-          </div>
-          <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-2">
-            {!hasTranscript ? (
+        <div className="border-b p-3" style={{ borderColor: 'var(--border-subtle)' }}>
+          <span style={TYPE.label}>Transcript</span>
+        </div>
+        <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-2">
+          {/* Stills before the first timed line (or when the transcript has no timing). */}
+          {placed.leading.length > 0 ? (
+            <StillStrip stills={placed.leading} onOpen={openStill} />
+          ) : null}
+          {!hasTranscript ? (
+            placed.leading.length === 0 ? (
               <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }} className="p-2">
                 No transcript is available for this recording.
               </p>
-            ) : (
-              <ol>
-                {segments.map((segment, i) => {
-                  const isActive = i === activeIndex;
-                  const seekable = segment.start !== null;
-                  return (
-                    <li key={i} data-seg={i}>
-                      <button
-                        type="button"
-                        onClick={(): void => seekTo(segment)}
-                        disabled={!seekable}
-                        aria-current={isActive ? 'true' : undefined}
-                        className="flex w-full gap-2 rounded-md p-2 text-left"
+            ) : null
+          ) : (
+            <ol>
+              {segments.map((segment, i) => {
+                const isActive = i === activeIndex;
+                const seekable = videoUrl !== null && segment.start !== null;
+                const pinned = placed.bySegment.get(i);
+                return (
+                  <li key={i} data-seg={i}>
+                    <button
+                      type="button"
+                      onClick={(): void => seekTo(segment)}
+                      disabled={!seekable}
+                      aria-current={isActive ? 'true' : undefined}
+                      className="flex w-full gap-2 rounded-md p-2 text-left"
+                      style={{
+                        cursor: seekable ? 'pointer' : 'default',
+                        background: isActive ? 'var(--color-blue-100)' : 'transparent',
+                      }}
+                    >
+                      <span
+                        className="shrink-0 font-data tabular-nums"
                         style={{
-                          cursor: seekable ? 'pointer' : 'default',
-                          background: isActive ? 'var(--color-blue-100)' : 'transparent',
+                          ...TYPE.label,
+                          color: 'var(--color-blue-600)',
+                          textTransform: 'none',
                         }}
                       >
-                        <span
-                          className="shrink-0 font-data tabular-nums"
-                          style={{
-                            ...TYPE.label,
-                            color: 'var(--color-blue-600)',
-                            textTransform: 'none',
-                          }}
-                        >
-                          {segment.start !== null ? formatClock(segment.start) : '—'}
-                        </span>
-                        <span className="min-w-0">
-                          {segment.speaker !== '' ? (
-                            <span style={TYPE.bodyStrong}>{segment.speaker}: </span>
-                          ) : null}
-                          <span style={TYPE.body}>{segment.text}</span>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ol>
-            )}
-          </div>
+                        {segment.start !== null ? formatClock(segment.start) : '—'}
+                      </span>
+                      <span className="min-w-0">
+                        {segment.speaker !== '' ? (
+                          <span style={TYPE.bodyStrong}>{segment.speaker}: </span>
+                        ) : null}
+                        <span style={TYPE.body}>{segment.text}</span>
+                      </span>
+                    </button>
+                    {pinned !== undefined ? <StillStrip stills={pinned} onOpen={openStill} /> : null}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {videoUrl !== null ? (
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            controls
+            preload="metadata"
+            onTimeUpdate={onTimeUpdate}
+            className="w-full rounded-lg border"
+            style={{ borderColor: 'var(--border-subtle)', background: '#000', maxHeight: '70vh' }}
+          >
+            <track kind="captions" />
+          </video>
+          {/* On lg the video (a replaced element) sets the row height; this cell stretches
+              to it. The inner panel is absolutely positioned so its long transcript can't
+              grow the row. Stacked, it flows normally with a max-height. Both scroll. */}
+          {transcriptPanel}
+        </div>
+      ) : (
+        // Video expired — stills + transcript stay as the permanent record, full width.
+        transcriptPanel
+      )}
+
+      {/* Click-to-enlarge lightbox. Native <dialog> gives Esc-to-close + focus trap;
+          clicking anywhere (backdrop or image) dismisses it. */}
+      <dialog
+        ref={dialogRef}
+        onClose={(): void => setEnlarged(null)}
+        onClick={closeStill}
+        className="m-auto max-h-[90vh] max-w-[90vw] rounded-lg border p-0 backdrop:bg-black/70"
+        style={{ borderColor: 'var(--border-subtle)' }}
+      >
+        {enlarged !== null ? (
+          <img
+            src={enlarged.src}
+            alt={`Shared screen at ${formatClock(enlarged.tsSeconds)}`}
+            className="block max-h-[90vh] max-w-[90vw] object-contain"
+          />
+        ) : null}
+      </dialog>
+    </>
   );
 }
