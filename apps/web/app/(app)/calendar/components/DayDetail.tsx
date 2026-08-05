@@ -288,66 +288,74 @@ function MeetingCard({
 
       {m.attendees.length > 0 ? <PeopleRow people={m.attendees} /> : null}
 
+      {/* External attendees — long lists live behind a collapsed dropdown. The
+          "create client / prospect / lead / partner" + link actions live INSIDE
+          it (kept for prospecting); the visible "No client" badge above still
+          flags meetings that need assignment even while this is collapsed. */}
       {m.externalAttendees.length > 0 ? (
-        <div className="flex flex-col gap-1">
-          <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>External attendees</span>
-          <ExternalAttendeesList people={m.externalAttendees} />
-        </div>
-      ) : null}
+        <details>
+          <summary style={{ ...TYPE.label, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+            External attendees ({m.externalAttendees.length})
+          </summary>
+          <div className="mt-2 flex flex-col gap-2">
+            <ExternalAttendeesList people={m.externalAttendees} />
 
-      {editable && (m.unknownOrgDomains.length > 0 || m.orgs.length === 0) && !m.isInternal ? (
-        <div
-          className="flex flex-col gap-2 rounded-lg border p-2"
-          style={{ borderColor: 'var(--color-amber-200, var(--border-subtle))' }}
-        >
-          {m.unknownOrgDomains.length > 0 ? (
-            <div className="flex flex-col gap-1">
-              <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-                Unrecognized {m.unknownOrgDomains.length === 1 ? 'domain' : 'domains'}
-              </span>
-              {m.unknownOrgDomains.map((domain) => (
-                <div key={domain} className="flex flex-wrap items-center gap-2">
-                  <span
-                    className="font-data"
-                    style={{ ...TYPE.label, color: 'var(--text-primary)' }}
-                  >
-                    {domain}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={(): void => setCreate({ domain, type: 'client' })}
-                  >
-                    Create new client
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-          {/* Always offer BOTH create + link. When a domain is already flagged
-              above, its per-domain button is the create path, so the generic
-              "Create a new client" only shows when nothing was flagged. */}
-          <div className="flex flex-wrap items-center gap-3">
-            {m.unknownOrgDomains.length === 0 && createDomain !== null ? (
-              <button
-                type="button"
-                onClick={(): void => setCreate({ domain: createDomain, type: 'client' })}
-                className="inline-flex w-fit items-center gap-1"
-                style={{ ...TYPE.label, color: 'var(--color-blue-600)', cursor: 'pointer' }}
+            {editable && (m.unknownOrgDomains.length > 0 || m.orgs.length === 0) && !m.isInternal ? (
+              <div
+                className="flex flex-col gap-2 rounded-lg border p-2"
+                style={{ borderColor: 'var(--color-amber-200, var(--border-subtle))' }}
               >
-                <Building2 size={13} aria-hidden="true" /> Create a new client
-              </button>
+                {m.unknownOrgDomains.length > 0 ? (
+                  <div className="flex flex-col gap-1">
+                    <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+                      Unrecognized {m.unknownOrgDomains.length === 1 ? 'domain' : 'domains'}
+                    </span>
+                    {m.unknownOrgDomains.map((domain) => (
+                      <div key={domain} className="flex flex-wrap items-center gap-2">
+                        <span
+                          className="font-data"
+                          style={{ ...TYPE.label, color: 'var(--text-primary)' }}
+                        >
+                          {domain}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={(): void => setCreate({ domain, type: 'client' })}
+                        >
+                          Create new client
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {/* Always offer BOTH create + link. When a domain is already flagged
+                    above, its per-domain button is the create path, so the generic
+                    "Create a new client" only shows when nothing was flagged. */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {m.unknownOrgDomains.length === 0 && createDomain !== null ? (
+                    <button
+                      type="button"
+                      onClick={(): void => setCreate({ domain: createDomain, type: 'client' })}
+                      className="inline-flex w-fit items-center gap-1"
+                      style={{ ...TYPE.label, color: 'var(--color-blue-600)', cursor: 'pointer' }}
+                    >
+                      <Building2 size={13} aria-hidden="true" /> Create a new client
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={(): void => setLinkOpen(true)}
+                    className="inline-flex w-fit items-center gap-1"
+                    style={{ ...TYPE.label, color: 'var(--color-blue-600)', cursor: 'pointer' }}
+                  >
+                    <Link2 size={13} aria-hidden="true" /> Link an existing org
+                  </button>
+                </div>
+              </div>
             ) : null}
-            <button
-              type="button"
-              onClick={(): void => setLinkOpen(true)}
-              className="inline-flex w-fit items-center gap-1"
-              style={{ ...TYPE.label, color: 'var(--color-blue-600)', cursor: 'pointer' }}
-            >
-              <Link2 size={13} aria-hidden="true" /> Link an existing org
-            </button>
           </div>
-        </div>
+        </details>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">
