@@ -179,3 +179,19 @@ export interface DocumentsPurgeJobPayload {
   /** Logical origin — e.g. `'scheduler'` for the repeatable nightly sweep. */
   readonly source: string;
 }
+
+/**
+ * Payload for a DELAYED resume job (`QUEUE_NAMES.resumeRecording`). Enqueued by the
+ * transcript webhook when a "pause recording for N minutes" voice command fires, with
+ * a BullMQ `delay` of N minutes so it survives a worker restart and fires on time (a
+ * plain setTimeout would not). The processor resumes the bot's recording — a no-op if
+ * the bot already resumed or left. Not a repeatable schedule; one job per pause.
+ */
+export interface ResumeRecordingJobPayload {
+  /** Recall `bot_job_id` to resume. */
+  readonly botJobId: string;
+  /** Meeting this resume is for — logging/observability only. */
+  readonly meetingId: string;
+  /** Logical origin — e.g. `'voice-command'`. */
+  readonly source: string;
+}

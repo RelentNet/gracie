@@ -39,6 +39,8 @@
  */
 import type { TranscriptSegment } from '../types/meeting.js';
 
+export * from './voice-commands.js';
+
 export interface RecallFetchOptions {
   readonly apiKey: string;
   /** Recall region subdomain (env `RECALL_REGION`); defaults to `us-west-2`. */
@@ -695,4 +697,77 @@ export async function classifyRecallRecoverability(
   options: RecallFetchOptions,
 ): Promise<RecallRecoverability> {
   return classifyRecordings(await retrieveBot(botJobId, options));
+}
+
+// ── In-meeting bot controls (voice commands) ────────────────────────────────
+// Four thin POSTs mirroring createRecallAsyncTranscript above: same auth header,
+// same throw-on-non-OK contract. Used by the voice-command path — a participant
+// says "hey Gracie, leave / stop listening" and the transcript webhook fires one
+// of these. Kept here so the SAME definitions serve a sibling bot-controls PR
+// (expected overlap — identical signatures).
+
+/** POST a bot control action with the standard Recall auth header; throws on non-OK. */
+async function postBotAction(
+  botJobId: string,
+  action: string,
+  options: RecallFetchOptions,
+  body?: Record<string, unknown>,
+): Promise<Response> {
+  const res = await fetch(`${baseUrl(options.region)}/bot/${botJobId}/${action}/`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Token ${options.apiKey}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    throw new Error(
+      `Recall ${action} failed for bot ${botJobId} (HTTP ${res.status}): ${errBody.slice(0, 300)}`,
+    );
+  }
+  return res;
+}
+
+/** Make the bot leave the call now (`POST /bot/{id}/leave_call/`). Throws on non-OK. */
+export async function leaveRecallBot(botJobId: string, options: RecallFetchOptions): Promise<void> {
+  await postBotAction(botJobId, 'leave_call', options);
+}
+
+/** Pause the bot's recording (`POST /bot/{id}/pause_recording/`). Throws on non-OK. */
+export async function pauseRecallBot(botJobId: string, options: RecallFetchOptions): Promise<void> {
+  await postBotAction(botJobId, 'pause_recording', options);
+}
+
+/**
+ * Resume the bot's recording (`POST /bot/{id}/resume_recording/`). Throws on non-OK
+ * like its siblings; the resume PROCESSOR treats a failure as a harmless no-op
+ * (by the time a delayed resume fires the bot may have already resumed or left).
+ */
+export async function resumeRecallBot(botJobId: string, options: RecallFetchOptions): Promise<void> {
+  await postBotAction(botJobId, 'resume_recording', options);
+}
+
+/** Options for {@link sendRecallChatMessage} — Recall's in-meeting chat targeting. */
+export interface RecallChatOptions extends RecallFetchOptions {
+  /** `everyone` (default) or a specific participant id (`to` in Recall's API). */
+  readonly to?: string;
+}
+
+/**
+ * Post a message into the meeting's chat as the bot
+ * (`POST /bot/{id}/send_chat_message/`). Used to visibly CONFIRM a voice command
+ * before acting on it, so a spoken "leave" / "pause" never happens silently.
+ * Throws on non-OK.
+ */
+export async function sendRecallChatMessage(
+  botJobId: string,
+  text: string,
+  options: RecallChatOptions,
+): Promise<void> {
+  const body: Record<string, unknown> = { message: text };
+  if (typeof options.to === 'string' && options.to !== '') body.to = options.to;
+  await postBotAction(botJobId, 'send_chat_message', options, body);
 }

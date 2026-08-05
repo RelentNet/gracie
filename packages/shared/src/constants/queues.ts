@@ -34,6 +34,8 @@ export const QUEUE_NAMES = {
   automations: 'automations',
   /** Documents purge: destroy recycle-bin items past the retention window. */
   documentsPurge: 'documents-purge',
+  /** Resume recording: fire a DELAYED resume after a "pause for N minutes" voice command. */
+  resumeRecording: 'resume-recording',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -61,6 +63,8 @@ export const JOB_NAMES = {
   automationsRun: 'automations.run',
   /** Nightly purge sweep — permanently remove recycle-bin items past retention. */
   documentsPurgeSweep: 'documents-purge.sweep',
+  /** Delayed resume — resume a bot's recording after a timed "pause" voice command. */
+  resumeRecording: 'resume-recording.resume',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];

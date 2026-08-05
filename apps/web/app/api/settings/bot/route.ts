@@ -38,6 +38,7 @@ function toClient(config: BotConfig): Record<string, unknown> {
     avatarEnabled: config.avatarEnabled,
     transcriptProvider: config.transcriptProvider,
     realtimeTranscript: config.realtimeTranscript,
+    voiceCommands: config.voiceCommands,
     autoLeave: config.autoLeave,
     hasAvatar: config.avatarJpegB64 !== null,
     avatarDataUrl: config.avatarJpegB64 !== null ? `data:image/jpeg;base64,${config.avatarJpegB64}` : null,
@@ -59,6 +60,7 @@ interface BotPatchBody {
   readonly avatarEnabled?: unknown;
   readonly transcriptProvider?: unknown;
   readonly realtimeTranscript?: unknown;
+  readonly voiceCommands?: unknown;
   readonly autoLeave?: unknown;
   readonly avatar?: unknown;
 }
@@ -101,6 +103,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       avatarEnabled?: boolean;
       transcriptProvider?: BotTranscriptProvider;
       realtimeTranscript?: boolean;
+      voiceCommands?: boolean;
       autoLeave?: {
         everyoneLeftSec: number | null;
         waitingRoomSec: number | null;
@@ -132,6 +135,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         return badRequest('realtimeTranscript must be a boolean.');
       }
       patch.realtimeTranscript = body.realtimeTranscript;
+    }
+    if (body.voiceCommands !== undefined) {
+      if (typeof body.voiceCommands !== 'boolean') {
+        return badRequest('voiceCommands must be a boolean.');
+      }
+      patch.voiceCommands = body.voiceCommands;
     }
     if (body.autoLeave !== undefined) {
       if (body.autoLeave === null || typeof body.autoLeave !== 'object' || Array.isArray(body.autoLeave)) {

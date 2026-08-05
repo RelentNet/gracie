@@ -33,6 +33,7 @@ interface BotConfigView {
   readonly avatarEnabled: boolean;
   readonly transcriptProvider: TranscriptProvider;
   readonly realtimeTranscript: boolean;
+  readonly voiceCommands: boolean;
   readonly autoLeave: AutoLeave;
   readonly hasAvatar: boolean;
   readonly avatarDataUrl: string | null;
@@ -87,6 +88,7 @@ export function BotSettingsPanel(): React.JSX.Element {
   const [avatarEnabled, setAvatarEnabled] = useState(false);
   const [transcriptProvider, setTranscriptProvider] = useState<TranscriptProvider>('recallai');
   const [realtimeTranscript, setRealtimeTranscript] = useState(false);
+  const [voiceCommands, setVoiceCommands] = useState(false);
   const [autoLeaveStr, setAutoLeaveStr] = useState<Record<AutoLeaveField, string>>({
     everyoneLeftSec: '',
     waitingRoomSec: '',
@@ -106,6 +108,7 @@ export function BotSettingsPanel(): React.JSX.Element {
     setAvatarEnabled(c.avatarEnabled);
     setTranscriptProvider(c.transcriptProvider);
     setRealtimeTranscript(c.realtimeTranscript);
+    setVoiceCommands(c.voiceCommands);
     setAutoLeaveStr({
       everyoneLeftSec: c.autoLeave.everyoneLeftSec?.toString() ?? '',
       waitingRoomSec: c.autoLeave.waitingRoomSec?.toString() ?? '',
@@ -169,6 +172,7 @@ export function BotSettingsPanel(): React.JSX.Element {
       avatarEnabled,
       transcriptProvider,
       realtimeTranscript,
+      voiceCommands,
       autoLeave: {
         everyoneLeftSec: parseSeconds(autoLeaveStr.everyoneLeftSec),
         waitingRoomSec: parseSeconds(autoLeaveStr.waitingRoomSec),
@@ -197,6 +201,7 @@ export function BotSettingsPanel(): React.JSX.Element {
     avatarEnabled,
     transcriptProvider,
     realtimeTranscript,
+    voiceCommands,
     autoLeaveStr,
     pendingDataUrl,
     removeAvatar,
@@ -295,6 +300,37 @@ export function BotSettingsPanel(): React.JSX.Element {
             transcription for that meeting instead of after-the-meeting transcription. Leave off to
             keep the recommended after-the-meeting transcript.
           </span>
+        </div>
+
+        {/* Voice commands (opt-in, layered on realtime) */}
+        <div className="flex max-w-md flex-col gap-1">
+          <ToggleSwitch
+            checked={voiceCommands}
+            onChange={setVoiceCommands}
+            disabled={saving || !realtimeTranscript}
+            label="Let hosts control Gracie by voice"
+            ariaLabel="Enable in-meeting voice commands"
+          />
+          <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+            When on, a host can say <em>“Hey Gracie, leave the meeting”</em> to make the bot leave,
+            or <em>“Hey Gracie, stop listening for 5 minutes”</em> to pause the recording (it resumes
+            on its own). Gracie always posts a short chat note before acting, so nothing happens
+            silently. Only the meeting <strong>host</strong> is obeyed — guests and clients are
+            ignored.
+          </span>
+          {!realtimeTranscript ? (
+            <span style={{ ...TYPE.label, color: 'var(--color-amber-600)' }}>
+              Requires the live transcript above — turn that on first. Voice commands ride the live
+              transcript, which replaces the more reliable after-the-meeting transcript, so only
+              enable this if you accept that trade-off.
+            </span>
+          ) : (
+            <span style={{ ...TYPE.label, color: 'var(--color-amber-600)' }}>
+              Reminder: this relies on the live transcript, which replaces the recommended
+              after-the-meeting transcript. That transcription trade-off applies whenever live
+              transcript is on.
+            </span>
+          )}
         </div>
 
         {/* Avatar */}
@@ -409,9 +445,19 @@ export function BotSettingsPanel(): React.JSX.Element {
             style={{ color: 'var(--text-secondary)', marginTop: 2 }}
           />
           <span style={{ ...TYPE.secondary, color: 'var(--text-primary)' }}>
-            <strong>Observe-only.</strong> Gracie never chats, speaks, or reacts in a meeting — she
-            only records for notes. This can’t be turned on, so she can never disrupt or engage your
-            customers.
+            {voiceCommands ? (
+              <>
+                <strong>Observe-only, with one exception.</strong> Gracie never speaks aloud or joins
+                the conversation. The only thing she ever posts is a one-line chat note confirming a
+                host’s voice command (leaving or pausing) — turned on by “Let hosts control Gracie by
+                voice” above. Turn that off to keep her fully silent.
+              </>
+            ) : (
+              <>
+                <strong>Observe-only.</strong> Gracie never chats, speaks, or reacts in a meeting —
+                she only records for notes, so she can never disrupt or engage your customers.
+              </>
+            )}
           </span>
         </div>
 
