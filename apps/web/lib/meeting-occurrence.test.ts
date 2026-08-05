@@ -10,6 +10,7 @@ import {
   deriveMeetingFleetState,
   deriveOccurrenceState,
   selectPriorMeetings,
+  splitClientMeetings,
 } from './meeting-occurrence';
 
 const NOW = new Date('2026-07-20T15:00:00Z');
@@ -129,6 +130,25 @@ test('prior-meeting selection: excludes self, keeps earlier only, newest-first, 
 test('prior-meeting selection: none on file → empty', () => {
   const prior = selectPriorMeetings([{ id: 'now', dateTime: '2026-07-20T16:00:00Z' }], 'now', '2026-07-20T16:00:00Z');
   assert.deepEqual(prior, []);
+});
+
+test('client meetings split: 2 nearest upcoming (soonest-first) + 6 recent previous (newest-first)', () => {
+  const meetings = [
+    { id: 'p1', dateTime: '2026-07-19T16:00:00Z' },
+    { id: 'u2', dateTime: '2026-07-25T16:00:00Z' },
+    { id: 'p2', dateTime: '2026-07-10T16:00:00Z' },
+    { id: 'u1', dateTime: '2026-07-21T16:00:00Z' },
+    { id: 'u3', dateTime: '2026-08-15T16:00:00Z' },
+    { id: 'p3', dateTime: '2026-07-01T16:00:00Z' },
+    { id: 'p4', dateTime: '2026-06-20T16:00:00Z' },
+    { id: 'p5', dateTime: '2026-06-10T16:00:00Z' },
+    { id: 'p6', dateTime: '2026-06-01T16:00:00Z' },
+    { id: 'p7', dateTime: '2026-05-01T16:00:00Z' },
+    { id: 'bad', dateTime: 'not-a-date' },
+  ];
+  const { upcoming, previous } = splitClientMeetings(meetings, NOW);
+  assert.deepEqual(upcoming.map((m) => m.id), ['u1', 'u2']); // soonest-first, capped 2
+  assert.deepEqual(previous.map((m) => m.id), ['p1', 'p2', 'p3', 'p4', 'p5', 'p6']); // newest-first, capped 6
 });
 
 // --- Transcript source resolution (the "do both" rule) -----------------------------

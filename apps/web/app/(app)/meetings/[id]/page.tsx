@@ -7,6 +7,7 @@ import type { Document, MasterRecordEntry, Meeting, Role, Task } from '@gracie/s
 import { FileList } from '@/components/FileBrowser/FileList';
 import { LiveTranscript } from '@/components/meetings/LiveTranscript';
 import { MeetingRecording } from '@/components/meetings/MeetingRecording';
+import { StateChip } from '@/components/meetings/StateChip';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { PageContainer } from '@/components/ui/PageContainer';
@@ -30,26 +31,10 @@ import {
   deriveMeetingFleetState,
   deriveOccurrenceState,
   selectPriorMeetings,
-  type OccurrenceState,
 } from '@/lib/meeting-occurrence';
 import { describePipelineState } from '@/lib/pipeline-reason';
 import { getCurrentUser } from '@/lib/server-auth';
 import { TYPE } from '@/lib/typography';
-
-/** Plain-language chip for the occurrence state (never a raw pipeline enum). */
-function StateChip({ state }: { readonly state: OccurrenceState }): React.JSX.Element {
-  const map: Record<OccurrenceState, { label: string; bg: string; fg: string }> = {
-    upcoming: { label: 'Upcoming', bg: 'var(--color-blue-100)', fg: 'var(--color-blue-700)' },
-    in_session: { label: 'In session', bg: '#dcfce7', fg: '#166534' },
-    ended: { label: 'Recorded', bg: 'var(--color-slate-100)', fg: 'var(--color-slate-600)' },
-  };
-  const s = map[state];
-  return (
-    <Badge bg={s.bg} fg={s.fg}>
-      {s.label}
-    </Badge>
-  );
-}
 
 /** One prior-meeting link (the "last 3 summaries" cockpit). */
 function PriorMeetingLink({ meeting }: { readonly meeting: Meeting }): React.JSX.Element {
