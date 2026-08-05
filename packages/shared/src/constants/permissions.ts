@@ -49,6 +49,7 @@ export const PERMISSIONS = [
   'calendar.configure',
   'automations.externalSend',
   'scoring.configure',
+  'task.manageBoard',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -104,6 +105,9 @@ export const PERMISSION_MATRIX: Readonly<
   'automations.externalSend': { admin: true, standard: false, viewer: false },
   // Scoring (P9): tune the global relationship-health algorithm config.
   'scoring.configure': { admin: true, standard: false, viewer: false },
+  // Tasks lifecycle: the cross-client Task Board is an admin triage surface. Regular
+  // users act on tasks only via the per-client Tasks panel (complete-own + archive).
+  'task.manageBoard': { admin: true, standard: false, viewer: false },
 } as const;
 
 /** Returns true if `role` holds `permission`. */

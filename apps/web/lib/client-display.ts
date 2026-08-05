@@ -180,11 +180,15 @@ interface PriorityBadge {
   readonly fg: string;
 }
 
-/** Priority badge (docs/08 §5): HIGH red · MEDIUM amber · LOW blue. */
+/**
+ * Priority badge (tasks lifecycle): two priorities only — HIGH (red) and STANDARD
+ * (slate). `priority_flag` is the storage: true = high (explicitly important, or
+ * escalated on a repeat), false = standard (the default).
+ */
 export function priorityBadge(hasPriorityFlag: boolean): PriorityBadge {
   return hasPriorityFlag
     ? { label: 'HIGH', bg: 'var(--color-red-100)', fg: 'var(--color-red-600)' }
-    : { label: 'MEDIUM', bg: 'var(--color-amber-100)', fg: 'var(--color-amber-600)' };
+    : { label: 'STANDARD', bg: 'var(--color-slate-100)', fg: 'var(--color-slate-600)' };
 }
 
 // --- Task due-date urgency (Task Board) ------------------------------------

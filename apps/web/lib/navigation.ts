@@ -72,7 +72,9 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { label: 'Calendar', href: '/calendar', Icon: Calendar },
       { label: 'Daily Sync', href: '/daily-sync', Icon: Sunrise },
-      { label: 'Task Board', href: '/tasks', Icon: ListTodo },
+      // Task Board is an admin-only triage surface (tasks lifecycle). Regular users act
+      // on tasks via each client's Tasks panel, not a global list they must manage.
+      { label: 'Task Board', href: '/tasks', Icon: ListTodo, requires: 'task.manageBoard' },
     ],
   },
   {

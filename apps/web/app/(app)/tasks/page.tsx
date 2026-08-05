@@ -32,6 +32,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { FormError, SelectField, TextField } from '@/components/ui/Field';
 import { PageContainer } from '@/components/ui/PageContainer';
+import { PagePlaceholder } from '@/components/ui/PagePlaceholder';
 import { Table, THead, TBody, TRow, TH, TCell } from '@/components/ui/Table';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
 
@@ -113,6 +114,27 @@ function displayInitials(users: UsersById, id: string | null): string {
 }
 
 export default function TasksPage(): React.JSX.Element {
+  const { can } = useAuth();
+
+  // The cross-client Task Board is an admin triage surface (tasks lifecycle). Regular
+  // users manage tasks per-client, not here — the API enforces this too (GET is admin).
+  // Gate lives in this thin wrapper so TaskBoard's hooks stay unconditional.
+  if (!can('task.manageBoard')) {
+    return (
+      <PageContainer>
+        <PagePlaceholder
+          title="Task Board"
+          description="Cross-client task triage."
+          emptyTitle="Administrators only"
+          emptyDescription="The global Task Board is available to administrators. Tasks for each client appear on that client's Tasks panel, where you can complete and archive them."
+        />
+      </PageContainer>
+    );
+  }
+  return <TaskBoard />;
+}
+
+function TaskBoard(): React.JSX.Element {
   const { user, canEdit } = useAuth();
   const editable = canEdit();
   const currentUserId = user.internalId;
@@ -247,7 +269,7 @@ export default function TasksPage(): React.JSX.Element {
     applyUpdate(task);
   }
 
-  // Quick row action (complete/reopen/archive/restore/delete): one row at a time,
+  // Quick row action (complete/reopen/archive/restore): one row at a time,
   // errors surface in the page-level banner.
   async function rowPatch(taskId: string, patch: Record<string, unknown>): Promise<void> {
     if (rowBusyId !== null) return;
@@ -257,6 +279,22 @@ export default function TasksPage(): React.JSX.Element {
       await submitPatch(taskId, patch);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Action failed. Try again.');
+    } finally {
+      setRowBusyId(null);
+    }
+  }
+
+  // Hard delete (admin-only, tasks lifecycle): permanently removes the task, then drops
+  // it from the board. Archive stays the recoverable path; this is the permanent one.
+  async function rowDelete(taskId: string): Promise<void> {
+    if (rowBusyId !== null) return;
+    setRowBusyId(taskId);
+    setActionError(null);
+    try {
+      await apiClient.del(`/api/tasks/${taskId}`);
+      setTasks((prev) => (prev === null ? prev : prev.filter((t) => t.id !== taskId)));
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Delete failed. Try again.');
     } finally {
       setRowBusyId(null);
     }
@@ -313,7 +351,7 @@ export default function TasksPage(): React.JSX.Element {
           onChange={(value): void => setPriorityFilter(value as PriorityFilter)}
           allLabel="All priorities"
           options={[
-            { value: 'priority', label: 'Priority flag' },
+            { value: 'priority', label: 'High' },
             { value: 'standard', label: 'Standard' },
           ]}
         />
@@ -409,17 +447,17 @@ export default function TasksPage(): React.JSX.Element {
               onClick={(): void => {
                 const target = deleteTask;
                 setDeleteTask(null);
-                if (target !== null) void rowPatch(target.id, { archived: true });
+                if (target !== null) void rowDelete(target.id);
               }}
             >
-              Delete
+              Delete permanently
             </Button>
           </>
         }
       >
         <p style={TYPE.body}>
-          This moves the task to archived. It is not permanently erased — turn on
-          “Show archived” to find and restore it.
+          This permanently deletes the task and cannot be undone. To keep it recoverable,
+          close this and use Archive instead — archived tasks stay under “Show archived”.
         </p>
       </Modal>
     </PageContainer>

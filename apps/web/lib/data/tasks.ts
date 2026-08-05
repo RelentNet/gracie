@@ -76,6 +76,17 @@ export async function updateTask(id: string, patch: TaskPatch): Promise<Task> {
 }
 
 /**
+ * Permanently delete a task (admin-only, enforced at the API layer). This is the ONE
+ * hard-delete path — regular flows only archive (a recoverable status). `task_notes`
+ * cascade-delete via their FK. Idempotent: deleting an unknown id is a no-op.
+ */
+export async function deleteTask(id: string): Promise<void> {
+  const db = getServerClient();
+  const { error } = await db.from('tasks').delete().eq('id', id);
+  if (error !== null) throw new Error(`deleteTask: ${error.message}`);
+}
+
+/**
  * List tasks ordered by due date (asc, nulls last). Archived tasks are excluded
  * by default; pass `{ includeArchived: true }` to include them (M6 toggle).
  */

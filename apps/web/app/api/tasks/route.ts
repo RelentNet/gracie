@@ -10,7 +10,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-import { getRequestUser, isEditor } from '@/lib/api-auth';
+import { getRequestUser, isAdmin, isEditor } from '@/lib/api-auth';
 import { createTask, listTasks } from '@/lib/data/tasks';
 import { enqueueRelationshipHealth } from '@/lib/queue';
 
@@ -21,7 +21,14 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    await getRequestUser();
+    // The cross-client list backs the admin-only Task Board (tasks lifecycle). Regular
+    // users read tasks per-client (server-rendered) — never this global list.
+    if (!isAdmin(await getRequestUser())) {
+      return NextResponse.json(
+        { error: { code: 'forbidden', message: 'Administrator access required' } },
+        { status: 403 },
+      );
+    }
     const includeArchived = request.nextUrl.searchParams.get('archived') === 'true';
     const tasks = await listTasks({ includeArchived });
     return NextResponse.json({ tasks });

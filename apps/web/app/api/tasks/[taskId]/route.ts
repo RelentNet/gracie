@@ -12,8 +12,8 @@ import { NextResponse } from 'next/server';
 import { TASK_STATUSES } from '@gracie/shared';
 import type { TaskStatus } from '@gracie/shared';
 
-import { getRequestUser, isEditor } from '@/lib/api-auth';
-import { updateTask, type TaskPatch } from '@/lib/data/tasks';
+import { getRequestUser, isAdmin, isEditor } from '@/lib/api-auth';
+import { deleteTask, updateTask, type TaskPatch } from '@/lib/data/tasks';
 import { enqueueRelationshipHealth } from '@/lib/queue';
 
 // bullmq/ioredis (the recompute enqueue) are Node-only — force the Node.js runtime.
@@ -92,5 +92,33 @@ export async function PATCH(
     const message = error instanceof Error ? error.message : 'Unknown error';
     const status = message === 'Unknown task' ? 404 : 500;
     return NextResponse.json({ error: { code: 'task_update_failed', message } }, { status });
+  }
+}
+
+/**
+ * DELETE /api/tasks/:taskId — permanently delete a task (ADMIN ONLY, tasks lifecycle).
+ *
+ * The delete/archive split: regular users only Archive (a recoverable status); admins
+ * get a real, permanent delete — the escape hatch for clearing duplicate/junk tasks.
+ * ponytail: no health recompute here — hard-delete is rare admin cleanup (usually of
+ * already-archived rows) and the nightly health sweep is the backstop.
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ taskId: string }> },
+): Promise<NextResponse> {
+  try {
+    if (!isAdmin(await getRequestUser())) {
+      return NextResponse.json(
+        { error: { code: 'forbidden', message: 'Administrator access required' } },
+        { status: 403 },
+      );
+    }
+    const { taskId } = await params;
+    await deleteTask(taskId);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: { code: 'task_delete_failed', message } }, { status: 500 });
   }
 }

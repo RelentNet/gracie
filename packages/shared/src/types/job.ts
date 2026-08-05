@@ -195,3 +195,14 @@ export interface ResumeRecordingJobPayload {
   /** Logical origin — e.g. `'voice-command'`. */
   readonly source: string;
 }
+
+/**
+ * Payload for the nightly task-aging sweep (`QUEUE_NAMES.taskAging`, tasks
+ * lifecycle). No per-item data — each run archives every standard-priority task
+ * with no activity past the aging window. High-priority tasks are never touched
+ * (they persist until done). Archive is a status change, never a delete.
+ */
+export interface TaskAgingJobPayload {
+  /** Logical origin — e.g. `'scheduler'` for the repeatable nightly sweep. */
+  readonly source: string;
+}
