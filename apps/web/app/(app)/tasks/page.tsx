@@ -12,11 +12,10 @@ import {
   Trash2,
   UserPlus,
 } from 'lucide-react';
-import type { Task, TaskNote, TaskStatus } from '@gracie/shared';
+import type { Client, Task, TaskNote, TaskStatus } from '@gracie/shared';
 import { TASK_STATUSES } from '@gracie/shared';
 
 import { apiClient } from '@/lib/api-client';
-import { getClientName } from '@/lib/mock';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
 import { formatDate, formatDateTime } from '@/lib/format';
@@ -53,7 +52,9 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews
  * Tasks are fetched from `GET /api/tasks` (real Supabase data); the archived toggle
  * re-fetches with `?archived=true`. Owner names resolve from `GET /api/users` (the
  * non-admin assignable-users list) so the assign picker works for standard editors
- * and owners render correctly. Every action calls `PATCH /api/tasks/:id` and updates
+ * and owners render correctly. Client names resolve from `GET /api/clients?type=all`
+ * (every non-internal org); a task whose org isn't in that set — an internal GA-org
+ * task — renders as "Internal". Every action calls `PATCH /api/tasks/:id` and updates
  * the board in place from the response — no full-page reload. "Delete" is a soft
  * delete (archive) — alpha keeps every row recoverable via "Show archived" → Restore.
  */
@@ -88,11 +89,21 @@ const URGENCY_TONE: Readonly<Record<TaskUrgency, 'critical' | 'warning' | 'defau
 };
 
 type UsersById = ReadonlyMap<string, AssignableUser>;
+type ClientNamesById = ReadonlyMap<string, string>;
 
 /** Owner/author display name — "Unassigned" for null, "Unknown" for an unknown id. */
 function displayName(users: UsersById, id: string | null): string {
   if (id === null) return 'Unassigned';
   return users.get(id)?.name ?? 'Unknown';
+}
+
+/**
+ * Client display name from the real roster. A task's org that isn't in the
+ * non-internal roster (`/api/clients?type=all`) is an internal GA-org task, so it
+ * reads "Internal" rather than the old mock's "Unknown Client".
+ */
+function clientName(clients: ClientNamesById, id: string): string {
+  return clients.get(id) ?? 'Internal';
 }
 
 /** Owner/author avatar initials — "—" for null or unknown. */
@@ -108,6 +119,7 @@ export default function TasksPage(): React.JSX.Element {
 
   const [tasks, setTasks] = useState<readonly Task[] | null>(null);
   const [users, setUsers] = useState<readonly AssignableUser[]>([]);
+  const [clients, setClients] = useState<readonly Client[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [rowBusyId, setRowBusyId] = useState<string | null>(null);
@@ -158,14 +170,35 @@ export default function TasksPage(): React.JSX.Element {
     };
   }, []);
 
+  // Real client roster drives the client column + filter (replaces the mock resolver).
+  // Non-fatal: a failed load leaves every task labelled "Internal", never a crash.
+  useEffect(() => {
+    let active = true;
+    apiClient
+      .get<{ clients: readonly Client[] }>('/api/clients?type=all')
+      .then((data) => {
+        if (active) setClients(data.clients);
+      })
+      .catch(() => {
+        /* Non-fatal: client names fall back to "Internal". */
+      });
+    return (): void => {
+      active = false;
+    };
+  }, []);
+
   const usersById = useMemo<UsersById>(() => new Map(users.map((u) => [u.id, u])), [users]);
+  const clientNamesById = useMemo<ClientNamesById>(
+    () => new Map(clients.map((c) => [c.id, c.name])),
+    [clients],
+  );
 
   const baseTasks = useMemo<readonly Task[]>(() => tasks ?? [], [tasks]);
 
   // Distinct clients/owners present in the base set drive the filter dropdowns.
   const clientOptions = useMemo<readonly string[]>(
-    () => uniqueSorted(baseTasks.map((task) => task.clientId), getClientName),
-    [baseTasks],
+    () => uniqueSorted(baseTasks.map((task) => task.clientId), (id) => clientName(clientNamesById, id)),
+    [baseTasks, clientNamesById],
   );
   const ownerOptions = useMemo<readonly string[]>(
     () =>
@@ -258,7 +291,7 @@ export default function TasksPage(): React.JSX.Element {
           value={clientFilter}
           onChange={setClientFilter}
           allLabel="All clients"
-          options={clientOptions.map((id) => ({ value: id, label: getClientName(id) }))}
+          options={clientOptions.map((id) => ({ value: id, label: clientName(clientNamesById, id) }))}
         />
         <FilterSelect
           label="Owner"
@@ -327,6 +360,7 @@ export default function TasksPage(): React.JSX.Element {
                 editable={editable}
                 currentUserId={currentUserId}
                 usersById={usersById}
+                clientNamesById={clientNamesById}
                 busy={rowBusyId === task.id}
                 isExpanded={expandedTaskId === task.id}
                 onToggleExpand={(): void =>
@@ -397,6 +431,7 @@ function TaskRow({
   editable,
   currentUserId,
   usersById,
+  clientNamesById,
   busy,
   isExpanded,
   onToggleExpand,
@@ -409,6 +444,7 @@ function TaskRow({
   readonly editable: boolean;
   readonly currentUserId: string | null;
   readonly usersById: UsersById;
+  readonly clientNamesById: ClientNamesById;
   readonly busy: boolean;
   readonly isExpanded: boolean;
   readonly onToggleExpand: () => void;
@@ -460,7 +496,7 @@ function TaskRow({
         </TCell>
         <TCell>
           <Badge bg="var(--color-slate-100)" fg="var(--color-slate-600)">
-            {getClientName(task.clientId)}
+            {clientName(clientNamesById, task.clientId)}
           </Badge>
         </TCell>
         <TCell>
