@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
 import {
   cadenceLabel,
+  clientLogoSrc,
   feeTierDisplay,
   healthColor,
   healthLabel,
@@ -243,7 +244,11 @@ function ClientCard({
     <Link href={`/clients/${client.id}`} className="block h-full rounded-lg">
       <Card className="flex h-full flex-col gap-4 p-5 transition-shadow hover:shadow-md">
         <div className="flex items-start gap-3">
-          <ClientAvatar initials={client.initials} size="lg" />
+          <ClientAvatar
+            initials={client.initials}
+            size="lg"
+            logoSrc={clientLogoSrc(client.id, client.logoKey)}
+          />
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="flex items-center gap-2">
               <span className="truncate" style={TYPE.bodyStrong}>

@@ -30,6 +30,9 @@ export function mapClient(row: ClientRow): Client {
     relationshipTrend: row.relationship_trend,
     lastMeetingAt: row.last_meeting_at,
     driveFolderUrl: row.drive_folder_url,
+    // `?? null` so the app degrades cleanly if deployed before migration 0015 —
+    // the column is absent → undefined → treated as "no logo" (initials shown).
+    logoKey: row.logo_key ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
