@@ -1,7 +1,7 @@
 # Per-user time zones — device-local UI, profile-tz email
 
 **Status:** built on `feat/per-user-timezone` (PR open, not merged).
-**Migration:** `0016_users_timezone.sql` — additive, NOT yet applied (coordinate with the orchestrator).
+**Migration:** `0017_users_timezone.sql` — additive, NOT yet applied (coordinate with the orchestrator). (Renumbered from 0016 after #104 `0016_meeting_stills` merged first.)
 
 ## The decision (operator)
 
@@ -18,7 +18,7 @@ value is *displayed* in.
 
 ### 1. Profile timezone field + self-service + browser default
 - `users.timezone text NULL` (IANA id; null → `America/New_York`). Migration
-  `0016`, DB types hand-updated.
+  `0017`, DB types hand-updated.
 - Data layer (`lib/data/users.ts`): `getTimezoneByLogtoId`, `setTimezoneByLogtoId`.
 - Self-service endpoint `PATCH/GET /api/profile/timezone` — **any role, self only**
   (keyed off the verified session, never a client-supplied id). IANA validated at

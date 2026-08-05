@@ -15,7 +15,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { activeSegmentIndex, formatClock } from '@gracie/shared';
+import { activeSegmentIndex, formatClock, groupStillsBySegment } from '@gracie/shared';
+import type { TranscriptSegment } from '@gracie/shared';
 import {
   DEFAULT_TRANSCRIPT_PROVIDER,
   buildTranscriptProviderConfig,
@@ -81,9 +82,12 @@ test('dispatchRecallBot sends NO transcript config for the default (recallai) pr
       assert.equal(id, 'bot_123');
     },
   );
-  // Record-only: recording_config must be absent entirely — an empty transcript
-  // block or a null provider would 400 at Recall.
-  assert.equal(sent?.recording_config, undefined);
+  // Record-only: NO transcript block (an empty one / null provider would 400 at Recall),
+  // but recording_config still carries the screen-share capture layout (stills feature).
+  const rc = sent?.recording_config as Record<string, unknown> | undefined;
+  assert.equal(rc?.transcript, undefined);
+  assert.equal(rc?.video_mixed_layout, 'speaker_view');
+  assert.equal(rc?.video_mixed_participant_video_when_screenshare, 'hide');
 });
 
 test('dispatchRecallBot honors an explicit provider', async () => {
@@ -97,8 +101,12 @@ test('dispatchRecallBot honors an explicit provider', async () => {
       await dispatchRecallBot({ meetingUrl: 'https://x', apiKey: 'k', transcriptProvider: 'meeting_captions' });
     },
   );
-  const recordingConfig = sent?.recording_config as { transcript?: { provider?: unknown } } | undefined;
+  const recordingConfig = sent?.recording_config as
+    | { transcript?: { provider?: unknown }; video_mixed_layout?: unknown }
+    | undefined;
   assert.deepEqual(recordingConfig?.transcript?.provider, { meeting_captions: {} });
+  // The screen-share layout composes with the transcript config.
+  assert.equal(recordingConfig?.video_mixed_layout, 'speaker_view');
 });
 
 test('flattenRecallTranscript flattens the current download shape', () => {
@@ -493,4 +501,32 @@ test('formatClock: m:ss under an hour, h:mm:ss past it', () => {
   assert.equal(formatClock(75), '1:15');
   assert.equal(formatClock(3661), '1:01:01');
   assert.equal(formatClock(-5), '0:00');
+});
+
+test('groupStillsBySegment: pins each still to the line at/before its timestamp', () => {
+  const segs: TranscriptSegment[] = [
+    { start: 0, end: 4, speaker: 'A', text: 'one' },
+    { start: 10, end: 14, speaker: 'B', text: 'two' },
+    { start: 20, end: 24, speaker: 'A', text: 'three' },
+  ];
+  const stills = [{ tsSeconds: 12 }, { tsSeconds: 21 }, { tsSeconds: 11 }];
+  const placed = groupStillsBySegment(segs, stills);
+  assert.deepEqual(placed.leading, []);
+  // 11 and 12 fall on segment 1 (sorted by time), 21 on segment 2. Segment 0 gets none.
+  assert.deepEqual(placed.bySegment.get(1), [{ tsSeconds: 11 }, { tsSeconds: 12 }]);
+  assert.deepEqual(placed.bySegment.get(2), [{ tsSeconds: 21 }]);
+  assert.equal(placed.bySegment.get(0), undefined);
+});
+
+test('groupStillsBySegment: stills before the first timed line (or untimed transcript) go to leading', () => {
+  const segs: TranscriptSegment[] = [{ start: 30, end: 34, speaker: 'A', text: 'late' }];
+  const placed = groupStillsBySegment(segs, [{ tsSeconds: 5 }, { tsSeconds: 40 }]);
+  assert.deepEqual(placed.leading, [{ tsSeconds: 5 }]);
+  assert.deepEqual(placed.bySegment.get(0), [{ tsSeconds: 40 }]);
+
+  // No timestamps at all → every still lands in leading (still rendered, never lost).
+  const untimed: TranscriptSegment[] = [{ start: null, end: null, speaker: '', text: 'x' }];
+  const all = groupStillsBySegment(untimed, [{ tsSeconds: 1 }, { tsSeconds: 2 }]);
+  assert.deepEqual(all.leading, [{ tsSeconds: 1 }, { tsSeconds: 2 }]);
+  assert.equal(all.bySegment.size, 0);
 });

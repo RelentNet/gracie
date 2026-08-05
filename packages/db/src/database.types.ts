@@ -1143,6 +1143,37 @@ export type Database = {
           },
         ]
       }
+      meeting_stills: {
+        Row: {
+          created_at: string
+          id: string
+          meeting_id: string
+          object_key: string
+          ts_seconds: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          meeting_id: string
+          object_key: string
+          ts_seconds: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          meeting_id?: string
+          object_key?: string
+          ts_seconds?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_stills_meeting_id_fkey"
+            columns: ["meeting_id"]
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meeting_type_rules: {
         Row: {
           created_at: string

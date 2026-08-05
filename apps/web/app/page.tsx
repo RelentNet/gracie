@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation';
 
 /**
- * Root entry. Phase 1A: redirect into the authenticated app shell. Phase 1B:
- * an unauthenticated visitor will be redirected to /login by Logto middleware
- * instead.
+ * Root entry. Redirects into the authenticated app shell landing (/home — the
+ * assistant + command-center tiles). An unauthenticated visitor is bounced to
+ * /login by the app-layout guard.
  */
 export default function RootPage(): never {
-  redirect('/dashboard');
+  redirect('/home');
 }

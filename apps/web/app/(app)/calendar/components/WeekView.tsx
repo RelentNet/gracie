@@ -10,9 +10,10 @@ import { meetingNeedsAttention } from '../lib/calendar-meeting';
 import { MeetingPill } from './MeetingPill';
 
 /**
- * The 7 days of the selected week as columns (desktop) that stack into rows on
- * mobile. Each day lists all its meetings (reusing the month grid's `MeetingPill`)
- * and is itself the day selector — clicking a column opens the shared DayDetail.
+ * The work week (Mon–Fri) of the selected week as columns (desktop) that stack
+ * into rows on mobile. Saturday and Sunday are dropped. Each day lists all its
+ * meetings (reusing the month grid's `MeetingPill`) and is itself the day
+ * selector — clicking a column opens the shared DayDetail.
  */
 export function WeekView({
   cells,
@@ -27,9 +28,12 @@ export function WeekView({
   readonly onSelect: (key: string) => void;
   readonly loading: boolean;
 }): React.JSX.Element {
+  // The week grid is Sun-start (7 cells); slice to the work week Mon–Fri
+  // (indices 1–5). WEEKDAYS is indexed the same way, hence WEEKDAYS[i + 1].
+  const workdays = cells.slice(1, 6);
   return (
-    <div className="grid grid-cols-1 gap-1 sm:grid-cols-7">
-      {cells.map((cell, i) => {
+    <div className="grid grid-cols-1 gap-1 sm:grid-cols-5">
+      {workdays.map((cell, i) => {
         const dayMeetings = [...(meetingsByDay.get(cell.key) ?? [])].sort(
           (a, b) => Date.parse(a.dateTime) - Date.parse(b.dateTime),
         );
@@ -49,7 +53,7 @@ export function WeekView({
             }}
           >
             <span className="flex items-center justify-between">
-              <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>{WEEKDAYS[i]}</span>
+              <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>{WEEKDAYS[i + 1]}</span>
               <span className="flex items-center gap-1">
                 {hasAttention ? (
                   <AlertTriangle
