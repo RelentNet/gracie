@@ -103,8 +103,8 @@ export function Sidebar(): React.JSX.Element {
         <div className="flex flex-col gap-1">
           <div className="mb-3 flex items-center gap-2">
             <Link
-              href="/dashboard"
-              aria-label="GA App — dashboard"
+              href="/home"
+              aria-label="GA App — home"
               className={`flex-1 px-3 py-2 ${collapsed ? 'md:flex md:justify-center md:px-0' : ''}`}
               style={{ ...TYPE.sectionHeader, color: 'var(--text-primary)' }}
             >

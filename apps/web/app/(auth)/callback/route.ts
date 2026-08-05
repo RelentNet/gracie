@@ -22,5 +22,5 @@ export async function GET(request: Request): Promise<NextResponse> {
   // Build the redirect from the app's known public origin, NOT request.url —
   // behind the Traefik/NPM proxy request.url is the internal http://localhost:3000,
   // which would bounce the browser to a dead localhost address after sign-in.
-  return NextResponse.redirect(new URL('/dashboard', baseUrl));
+  return NextResponse.redirect(new URL('/home', baseUrl));
 }
