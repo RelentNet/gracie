@@ -28,6 +28,9 @@ import {
   fetchRecallTranscript,
   findVideoMixedUrl,
   flattenRecallTranscript,
+  leaveRecallBot,
+  pauseRecallBot,
+  resumeRecallBot,
   shapeTranscriptSegments,
 } from '@gracie/shared/recall';
 
@@ -263,6 +266,39 @@ test('classifyRecordings: a done transcript on ANY recording wins over an earlie
   });
   assert.equal(rec.state, 'regenerate');
 });
+
+// --- Live bot controls: leave / pause / resume (meeting-page bot controls) ---------
+
+for (const [name, fn, path] of [
+  ['leaveRecallBot', leaveRecallBot, 'leave_call'],
+  ['pauseRecallBot', pauseRecallBot, 'pause_recording'],
+  ['resumeRecallBot', resumeRecallBot, 'resume_recording'],
+] as const) {
+  test(`${name}: POSTs /bot/{id}/${path}/ with the Recall auth header`, async () => {
+    let seen: { url: string; method?: string; auth?: string } | undefined;
+    await withFetch(
+      (url, init) => {
+        seen = { url, method: init?.method, auth: (init?.headers as Record<string, string>)?.Authorization };
+        return Promise.resolve(jsonResponse({}));
+      },
+      async () => {
+        await fn('bot_live', { apiKey: 'k', region: 'us-west-2' });
+      },
+    );
+    assert.equal(seen?.url, `https://us-west-2.recall.ai/api/v1/bot/bot_live/${path}/`);
+    assert.equal(seen?.method, 'POST');
+    assert.equal(seen?.auth, 'Token k');
+  });
+
+  test(`${name}: throws on a non-OK Recall response`, async () => {
+    await withFetch(
+      () => Promise.resolve(jsonResponse({ detail: 'nope' }, false, 400)),
+      async () => {
+        await assert.rejects(fn('bot_x', { apiKey: 'k' }), /HTTP 400/);
+      },
+    );
+  });
+}
 
 // --- Phase C recorded-media helpers -----------------------------------------------
 
