@@ -8,7 +8,7 @@ import type { OccurrenceState } from '@/lib/meeting-occurrence';
  */
 const STATE_STYLES: Record<OccurrenceState, { label: string; bg: string; fg: string }> = {
   upcoming: { label: 'Upcoming', bg: 'var(--color-blue-100)', fg: 'var(--color-blue-700)' },
-  in_session: { label: 'In session', bg: '#dcfce7', fg: '#166534' },
+  in_session: { label: 'In session', bg: 'var(--color-emerald-100)', fg: 'var(--color-emerald-700)' },
   ended: { label: 'Recorded', bg: 'var(--color-slate-100)', fg: 'var(--color-slate-600)' },
 };
 

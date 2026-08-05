@@ -141,7 +141,7 @@ export function ApiSettingsPanel(): React.JSX.Element {
                 <div className="flex flex-wrap items-center gap-2">
                   <span style={TYPE.bodyStrong}>{item.label}</span>
                   {item.isSet ? (
-                    <Badge bg="#e7f6ec" fg="#166534">
+                    <Badge bg="var(--color-emerald-100)" fg="var(--color-emerald-700)">
                       Configured
                     </Badge>
                   ) : (
@@ -150,11 +150,11 @@ export function ApiSettingsPanel(): React.JSX.Element {
                     </Badge>
                   )}
                   {item.lastTestOk === true ? (
-                    <Badge bg="#e7f6ec" fg="#166534">
+                    <Badge bg="var(--color-emerald-100)" fg="var(--color-emerald-700)">
                       Tested OK
                     </Badge>
                   ) : item.lastTestOk === false ? (
-                    <Badge bg="#fdecea" fg="var(--color-red-500)">
+                    <Badge bg="var(--color-red-100)" fg="var(--color-red-700)">
                       Test failed
                     </Badge>
                   ) : null}

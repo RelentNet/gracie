@@ -52,7 +52,7 @@ export function MonthGrid({
                 backgroundColor: isSelected
                   ? 'var(--color-blue-100)'
                   : cell.inMonth
-                    ? '#ffffff'
+                    ? 'var(--color-white)'
                     : 'var(--color-slate-100)',
                 opacity: cell.inMonth ? 1 : 0.6,
                 cursor: 'pointer',

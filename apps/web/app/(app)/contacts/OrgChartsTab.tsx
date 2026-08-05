@@ -216,7 +216,7 @@ export function OrgChartsTab({
                   download
                   className="inline-flex items-center justify-center gap-2 rounded-lg border shadow-sm transition-shadow hover:shadow-md"
                   style={{
-                    backgroundColor: '#ffffff',
+                    backgroundColor: 'var(--color-white)',
                     color: 'var(--text-primary)',
                     borderColor: 'var(--border-subtle)',
                     padding: '0.25rem 0.625rem',

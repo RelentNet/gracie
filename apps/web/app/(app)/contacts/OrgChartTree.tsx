@@ -73,7 +73,7 @@ function OrgChartNode({
         className="flex items-center gap-3 rounded-lg border p-3"
         style={{
           borderColor: keyVacant ? 'var(--color-amber-600)' : 'var(--border-subtle)',
-          backgroundColor: keyVacant ? 'var(--color-amber-100)' : '#ffffff',
+          backgroundColor: keyVacant ? 'var(--color-amber-100)' : 'var(--color-white)',
         }}
       >
         {hasChildren ? (

@@ -197,7 +197,7 @@ export function SetHolderModal({
                 className="rounded-lg border px-3 py-1.5 transition-colors"
                 style={{
                   borderColor: active ? 'var(--color-blue-500)' : 'var(--border-subtle)',
-                  backgroundColor: active ? 'var(--color-blue-100)' : '#ffffff',
+                  backgroundColor: active ? 'var(--color-blue-100)' : 'var(--color-white)',
                   color: active ? 'var(--color-blue-700)' : 'var(--text-secondary)',
                   ...TYPE.bodyStrong,
                   cursor: submitting ? 'not-allowed' : 'pointer',

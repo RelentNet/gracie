@@ -32,9 +32,11 @@ function etTime(iso: string): string {
 /** Health badge colors by band. */
 function healthBadge(health: number | null): { bg: string; fg: string; label: string } {
   if (health === null) return { bg: 'var(--color-slate-100)', fg: 'var(--text-secondary)', label: 'n/a' };
-  if (health >= 67) return { bg: '#dcfce7', fg: '#166534', label: `${health}` };
-  if (health >= 34) return { bg: '#fef3c7', fg: '#92400e', label: `${health}` };
-  return { bg: '#fee2e2', fg: '#991b1b', label: `${health}` };
+  if (health >= 67)
+    return { bg: 'var(--color-emerald-100)', fg: 'var(--color-emerald-700)', label: `${health}` };
+  if (health >= 34)
+    return { bg: 'var(--color-amber-100)', fg: 'var(--color-amber-700)', label: `${health}` };
+  return { bg: 'var(--color-red-100)', fg: 'var(--color-red-700)', label: `${health}` };
 }
 
 /** One stat tile in the yesterday rollup. */
