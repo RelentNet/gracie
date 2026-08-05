@@ -56,13 +56,228 @@
  * INLINE styles per docs/08 §3 — so we set only the family + sensible defaults
  * here, not size utilities.
  */
-:root {
+/*
+ * ===== Themeable palette (light + dark) =====
+ *
+ * The `@theme` block above declares the Tailwind color tokens so the utility
+ * classes get generated (`bg-slate-100`, `text-red-600`, …). Tailwind v4
+ * compiles those utilities to `background-color: var(--color-slate-100)` etc.,
+ * so re-declaring the SAME `--color-*` variables here — per theme — retints
+ * every utility class AND every inline `style={{ color: 'var(--color-…)' }}`
+ * usage across the app at once, no component edits required.
+ *
+ * Cascade: light values live on `:root` (the default) and `:root[data-theme=light]`.
+ * Dark values apply when the OS prefers dark (unless force-light) AND, with higher
+ * specificity, whenever `data-theme="dark"` is set — so the in-app toggle always
+ * wins over the OS preference in both directions. An inline <head> script stamps
+ * `data-theme` before first paint (see the app shell) to avoid a flash.
+ *
+ * Palette source: the approved design direction (indigo brand, blue-biased slate
+ * neutrals, red RESERVED for genuinely-critical states). Text pairs verified to
+ * meet WCAG-AA in both themes.
+ */
+:root,
+:root[data-theme='light'] {
   color-scheme: light;
-  --surface: #ffffff;
-  --surface-muted: var(--color-slate-100);
-  --text-primary: var(--color-navy-900);
-  --text-secondary: var(--color-slate-500);
-  --border-subtle: #e2e8f0;
+
+  /* ground */
+  --bg-0: #e7ebf7;
+  --bg-grad: radial-gradient(1100px 620px at 12% -8%, #eaf0ff 0%, rgba(234, 240, 255, 0) 60%),
+    radial-gradient(900px 560px at 108% 4%, #e6f6f2 0%, rgba(230, 246, 242, 0) 55%),
+    linear-gradient(160deg, #eef2fc 0%, #e3e8f6 100%);
+
+  /* frosted-glass surfaces */
+  --surface: rgba(255, 255, 255, 0.6);
+  --surface-2: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.72);
+  --hair: rgba(26, 36, 70, 0.1);
+  --shadow: 0 10px 34px rgba(30, 45, 90, 0.1), 0 2px 6px rgba(30, 45, 90, 0.05);
+  --blur: saturate(150%) blur(18px);
+
+  /* semantic aliases used app-wide (inline styles) */
+  --surface-muted: #e7ebf7;
+  --text-primary: #171d2e;
+  --text-secondary: #535d79;
+  --text-3: #6b7590;
+  --border-subtle: rgba(26, 36, 70, 0.1);
+
+  /* brand + semantic accents */
+  --brand: #4a5fd0;
+  --brand-ink: #3a49b8;
+  --brand-soft: rgba(74, 95, 208, 0.12);
+  --good: #1f9d63;
+  --good-soft: rgba(31, 157, 99, 0.14);
+  --warn: #c47a17;
+  --warn-soft: rgba(196, 122, 23, 0.15);
+  --crit: #d5434e;
+  --crit-soft: rgba(213, 67, 78, 0.13);
+
+  /* Tailwind ramp overrides — retint utilities + inline var() together */
+  --color-white: #ffffff;
+  --color-slate-100: #f1f5f9;
+  --color-slate-500: #535d79;
+  --color-slate-600: #475569;
+  --color-navy-900: #0f172a;
+  --color-navy-800: #1e293b;
+  --color-navy-700: #1e293b;
+  --color-blue-50: #eef1fd;
+  --color-blue-100: #e5e8fb;
+  --color-blue-400: #6f83e6;
+  --color-blue-500: #4a5fd0;
+  --color-blue-600: #4257c9;
+  --color-blue-700: #3a49b8;
+  --color-emerald-50: #eafaf1;
+  --color-emerald-100: #d6f0e2;
+  --color-emerald-500: #1f9d63;
+  --color-emerald-600: #0e7a4a;
+  --color-emerald-700: #0a6b40;
+  --color-amber-50: #fbf4e6;
+  --color-amber-100: #f6ebd2;
+  --color-amber-300: #e6c079;
+  --color-amber-500: #c47a17;
+  --color-amber-600: #946008;
+  --color-amber-700: #7f520a;
+  --color-red-50: #fdeef0;
+  --color-red-100: #f7dcde;
+  --color-red-500: #d5434e;
+  --color-red-600: #c22f3b;
+  --color-red-700: #a52531;
+  --color-sky-50: #f0f9ff;
+  --color-sky-700: #0369a1;
+}
+
+/* Dark values — shared by the OS-dark default (unless force-light) and the
+   explicit toggle. Kept in sync between the two selectors below. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg-0: #0b0f1d;
+    --bg-grad: radial-gradient(1100px 640px at 10% -10%, rgba(88, 108, 220, 0.2) 0%, rgba(88, 108, 220, 0) 58%),
+      radial-gradient(880px 560px at 110% 2%, rgba(40, 150, 130, 0.14) 0%, rgba(40, 150, 130, 0) 55%),
+      linear-gradient(160deg, #0d1224 0%, #0a0e1b 100%);
+    --surface: rgba(28, 36, 60, 0.55);
+    --surface-2: rgba(34, 44, 72, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.09);
+    --hair: rgba(255, 255, 255, 0.09);
+    --shadow: 0 14px 40px rgba(0, 0, 0, 0.42), 0 2px 6px rgba(0, 0, 0, 0.3);
+    --surface-muted: #141a2b;
+    --text-primary: #e8ecf8;
+    --text-secondary: #9aa4c2;
+    --text-3: #8a93b4;
+    --border-subtle: rgba(255, 255, 255, 0.09);
+    --brand: #8296ff;
+    --brand-ink: #a3b3ff;
+    --brand-soft: rgba(130, 150, 255, 0.16);
+    --good: #37c184;
+    --good-soft: rgba(55, 193, 132, 0.16);
+    --warn: #e3a24c;
+    --warn-soft: rgba(227, 162, 76, 0.16);
+    --crit: #ff6b73;
+    --crit-soft: rgba(255, 107, 115, 0.15);
+    --color-white: #1b2236;
+    --color-slate-100: #232d45;
+    --color-slate-500: #9aa4c2;
+    --color-slate-600: #aab4d0;
+    --color-navy-900: #0f172a;
+    --color-navy-800: #263248;
+    --color-navy-700: #2b3a57;
+    --color-blue-50: #1b2447;
+    --color-blue-100: #2b3566;
+    --color-blue-400: #8296ff;
+    --color-blue-500: #5567db;
+    --color-blue-600: #5468dc;
+    --color-blue-700: #a9b7ff;
+    --color-emerald-50: #10291b;
+    --color-emerald-100: #123a26;
+    --color-emerald-500: #37c184;
+    --color-emerald-600: #4cce93;
+    --color-emerald-700: #5bd6a0;
+    --color-amber-50: #2a2010;
+    --color-amber-100: #3a2c12;
+    --color-amber-300: #5a4620;
+    --color-amber-500: #e3a24c;
+    --color-amber-600: #ecb057;
+    --color-amber-700: #f0bd6e;
+    --color-red-50: #2c1416;
+    --color-red-100: #3a1c1f;
+    --color-red-500: #ff6b73;
+    --color-red-600: #ff7f86;
+    --color-red-700: #ff9aa0;
+    --color-sky-50: #0b2536;
+    --color-sky-700: #7dd3fc;
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-0: #0b0f1d;
+  --bg-grad: radial-gradient(1100px 640px at 10% -10%, rgba(88, 108, 220, 0.2) 0%, rgba(88, 108, 220, 0) 58%),
+    radial-gradient(880px 560px at 110% 2%, rgba(40, 150, 130, 0.14) 0%, rgba(40, 150, 130, 0) 55%),
+    linear-gradient(160deg, #0d1224 0%, #0a0e1b 100%);
+  --surface: rgba(28, 36, 60, 0.55);
+  --surface-2: rgba(34, 44, 72, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --hair: rgba(255, 255, 255, 0.09);
+  --shadow: 0 14px 40px rgba(0, 0, 0, 0.42), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --surface-muted: #141a2b;
+  --text-primary: #e8ecf8;
+  --text-secondary: #9aa4c2;
+  --text-3: #8a93b4;
+  --border-subtle: rgba(255, 255, 255, 0.09);
+  --brand: #8296ff;
+  --brand-ink: #a3b3ff;
+  --brand-soft: rgba(130, 150, 255, 0.16);
+  --good: #37c184;
+  --good-soft: rgba(55, 193, 132, 0.16);
+  --warn: #e3a24c;
+  --warn-soft: rgba(227, 162, 76, 0.16);
+  --crit: #ff6b73;
+  --crit-soft: rgba(255, 107, 115, 0.15);
+  --color-white: #1b2236;
+  --color-slate-100: #232d45;
+  --color-slate-500: #9aa4c2;
+  --color-slate-600: #aab4d0;
+  --color-navy-900: #0f172a;
+  --color-navy-800: #263248;
+  --color-navy-700: #2b3a57;
+  --color-blue-50: #1b2447;
+  --color-blue-100: #2b3566;
+  --color-blue-400: #8296ff;
+  --color-blue-500: #5567db;
+  --color-blue-600: #5468dc;
+  --color-blue-700: #a9b7ff;
+  --color-emerald-50: #10291b;
+  --color-emerald-100: #123a26;
+  --color-emerald-500: #37c184;
+  --color-emerald-600: #4cce93;
+  --color-emerald-700: #5bd6a0;
+  --color-amber-50: #2a2010;
+  --color-amber-100: #3a2c12;
+  --color-amber-300: #5a4620;
+  --color-amber-500: #e3a24c;
+  --color-amber-600: #ecb057;
+  --color-amber-700: #f0bd6e;
+  --color-red-50: #2c1416;
+  --color-red-100: #3a1c1f;
+  --color-red-500: #ff6b73;
+  --color-red-600: #ff7f86;
+  --color-red-700: #ff9aa0;
+  --color-sky-50: #0b2536;
+  --color-sky-700: #7dd3fc;
+}
+
+/* Frosted-glass surface helper — used by the app shell, sidebar and cards. */
+.glass {
+  background: var(--surface);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border-color: var(--glass-border);
+  box-shadow: var(--shadow);
+}
+
+/* Sidebar nav hover highlight. Inactive items leave their inline background
+   unset so this rule can supply the tint; active items set it inline (wins). */
+.nav-item:hover {
+  background: var(--brand-soft);
 }
 
 html,
@@ -88,9 +303,25 @@ body {
 body {
   font-family: var(--font-sans);
   color: var(--text-primary);
-  background-color: var(--surface-muted);
+  /* Tinted gradient "ground"; the app shell's glass surfaces sit over it. Fixed
+     so it stays put while `<main>` scrolls internally. */
+  background-color: var(--bg-0);
+  background-image: var(--bg-grad);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Respect reduced-motion: neutralise transitions/animations (docs/08 §11). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 code,

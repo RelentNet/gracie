@@ -264,7 +264,7 @@ export function SetHolderModal({
                         className="flex w-full items-center gap-3 rounded-md border p-2 text-left transition-colors"
                         style={{
                           borderColor: 'var(--border-subtle)',
-                          background: '#ffffff',
+                          background: 'var(--color-white)',
                           cursor: submitting ? 'not-allowed' : 'pointer',
                         }}
                       >

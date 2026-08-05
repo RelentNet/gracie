@@ -14,9 +14,10 @@ import { ClientAvatar } from '@/components/ClientAvatar';
 import { useNavCollapse } from '@/components/ui/nav-collapse';
 
 /**
- * Sidebar (docs/08 §6) — the primary nav. Navy background, role-filtered items
- * (Settings hidden for non-admins), active highlighting, and a bottom user
- * section (avatar/role/calendar dot/Sign Out).
+ * Sidebar (docs/08 §6) — the primary nav. Frosted-glass surface over the tinted
+ * ground (theme-aware, light + dark), role-filtered items (Settings hidden for
+ * non-admins), brand-soft active highlighting, and a bottom user section
+ * (avatar/role/calendar dot/Sign Out).
  *
  * RL responsive foundation — three states, sharing {@link useNavCollapse}:
  *  - **Expanded** (`w-60`) — default on `md`+ screens.
@@ -69,7 +70,13 @@ export function Sidebar(): React.JSX.Element {
         className={`fixed inset-y-0 left-0 z-50 flex h-dvh w-60 shrink-0 flex-col justify-between p-3 transition-[transform,width] duration-200 ease-in-out md:relative md:z-auto md:translate-x-0 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         } ${collapsed ? 'md:w-16' : 'md:w-60'}`}
-        style={{ backgroundColor: 'var(--color-navy-900)', color: '#ffffff' }}
+        style={{
+          background: 'var(--surface)',
+          WebkitBackdropFilter: 'var(--blur)',
+          backdropFilter: 'var(--blur)',
+          borderRight: '1px solid var(--hair)',
+          color: 'var(--text-primary)',
+        }}
       >
         {/* Desktop-only rail toggle, on the sidebar's right edge. */}
         <button
@@ -79,9 +86,11 @@ export function Sidebar(): React.JSX.Element {
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className="absolute right-0 top-6 z-10 hidden size-6 translate-x-1/2 items-center justify-center rounded-full border shadow-sm transition-colors md:flex"
           style={{
-            backgroundColor: 'var(--color-navy-800)',
-            borderColor: 'var(--color-navy-700)',
-            color: '#ffffff',
+            backgroundColor: 'var(--surface-2)',
+            WebkitBackdropFilter: 'var(--blur)',
+            backdropFilter: 'var(--blur)',
+            borderColor: 'var(--hair)',
+            color: 'var(--text-secondary)',
           }}
         >
           {collapsed ? (
@@ -97,7 +106,7 @@ export function Sidebar(): React.JSX.Element {
               href="/dashboard"
               aria-label="GA App — dashboard"
               className={`flex-1 px-3 py-2 ${collapsed ? 'md:flex md:justify-center md:px-0' : ''}`}
-              style={{ ...TYPE.sectionHeader, color: '#ffffff' }}
+              style={{ ...TYPE.sectionHeader, color: 'var(--text-primary)' }}
             >
               {brandLogoKey !== null ? (
                 // Configured brand logo (Settings → Company → Branding). Rendered
@@ -124,7 +133,7 @@ export function Sidebar(): React.JSX.Element {
               onClick={closeMobile}
               aria-label="Close navigation menu"
               className="flex size-8 shrink-0 items-center justify-center rounded-lg md:hidden"
-              style={{ color: 'var(--color-slate-100)' }}
+              style={{ color: 'var(--text-secondary)' }}
             >
               <X aria-hidden="true" size={18} />
             </button>
@@ -138,15 +147,13 @@ export function Sidebar(): React.JSX.Element {
                 // stays in the collapsed rail (only the header text hides), so
                 // icons remain grouped by separators.
                 className={groupIndex > 0 ? 'mt-2 border-t pt-2' : ''}
-                style={
-                  groupIndex > 0 ? { borderColor: 'var(--color-navy-800)' } : undefined
-                }
+                style={groupIndex > 0 ? { borderColor: 'var(--hair)' } : undefined}
               >
                 {group.header ? (
                   <div
                     // Muted small-caps section header; hidden in the collapsed rail.
                     className={`px-3 pb-1 ${labelHidden}`}
-                    style={{ ...TYPE.label, color: 'var(--color-slate-500)' }}
+                    style={{ ...TYPE.label, color: 'var(--text-3)' }}
                   >
                     {group.header}
                   </div>
@@ -169,10 +176,12 @@ export function Sidebar(): React.JSX.Element {
                           rel={item.external ? 'noopener noreferrer' : undefined}
                           prefetch={item.external ? false : undefined}
                           aria-current={isActive ? 'page' : undefined}
-                          className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${linkJustify}`}
+                          className={`nav-item flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${linkJustify}`}
                           style={{
-                            backgroundColor: isActive ? 'var(--color-navy-800)' : 'transparent',
-                            color: isActive ? '#ffffff' : 'var(--color-slate-100)',
+                            // Inactive items leave bg unset so the `.nav-item:hover`
+                            // rule (theme.css) can supply the brand-soft highlight.
+                            backgroundColor: isActive ? 'var(--brand-soft)' : undefined,
+                            color: isActive ? 'var(--brand-ink)' : 'var(--text-secondary)',
                             ...TYPE.bodyStrong,
                           }}
                         >
@@ -189,13 +198,13 @@ export function Sidebar(): React.JSX.Element {
         </div>
 
         <div
-          className={`flex flex-col gap-3 rounded-lg p-3 ${collapsed ? 'md:p-2' : ''}`}
-          style={{ backgroundColor: 'var(--color-navy-800)' }}
+          className={`flex flex-col gap-3 rounded-lg border p-3 ${collapsed ? 'md:p-2' : ''}`}
+          style={{ backgroundColor: 'var(--surface-2)', borderColor: 'var(--hair)' }}
         >
           <div className={`flex items-center gap-3 ${collapsed ? 'md:justify-center' : ''}`}>
-            <ClientAvatar initials={user.initials} size="md" color="var(--color-blue-700)" />
+            <ClientAvatar initials={user.initials} size="md" color="var(--color-blue-600)" />
             <div className={`flex min-w-0 flex-col ${labelHidden}`}>
-              <span className="truncate" style={{ ...TYPE.bodyStrong, color: '#ffffff' }}>
+              <span className="truncate" style={{ ...TYPE.bodyStrong, color: 'var(--text-primary)' }}>
                 {user.name}
               </span>
               <span className="flex items-center gap-2">
@@ -213,7 +222,7 @@ export function Sidebar(): React.JSX.Element {
                     {roleBadge.label}
                   </span>
                 ) : (
-                  <span style={{ ...TYPE.secondary, color: 'var(--color-slate-100)' }}>
+                  <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
                     {roleBadge.label}
                   </span>
                 )}
@@ -227,7 +236,7 @@ export function Sidebar(): React.JSX.Element {
                         : 'var(--color-slate-500)',
                     }}
                   />
-                  <span style={{ ...TYPE.secondary, color: 'var(--color-slate-100)' }}>
+                  <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
                     {user.isCalendarConnected ? 'Calendar' : 'Offline'}
                   </span>
                 </span>
@@ -240,7 +249,7 @@ export function Sidebar(): React.JSX.Element {
             href="/sign-out"
             title={collapsed ? 'Sign Out' : undefined}
             className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors ${linkJustify}`}
-            style={{ color: 'var(--color-slate-100)', ...TYPE.bodyStrong }}
+            style={{ color: 'var(--text-secondary)', ...TYPE.bodyStrong }}
           >
             <LogOut aria-hidden="true" size={16} className="shrink-0" />
             <span className={labelHidden}>Sign Out</span>
