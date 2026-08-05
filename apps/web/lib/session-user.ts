@@ -20,10 +20,12 @@ import { getRequestUser } from './api-auth';
 import { MOCK_IDENTITIES } from './auth-shared';
 import { isLogtoConfigured } from './logto';
 
-/** The resolved actor: a real `users.id` plus the request role. */
+/** The resolved actor: a real `users.id`, the request role, and profile timezone. */
 export interface SessionUser {
   readonly id: string;
   readonly role: Role;
+  /** Profile IANA timezone (null → America/New_York), for SSR timestamp rendering. */
+  readonly timezone: string | null;
 }
 
 /** Email of the mock identity whose id matches `userId` ('' if none). */
@@ -43,7 +45,7 @@ export async function getSessionUser(): Promise<SessionUser> {
   const request = await getRequestUser();
   const db = getServerClient();
 
-  const query = db.from('users').select('id');
+  const query = db.from('users').select('id, timezone');
   const { data, error } = await (isLogtoConfigured()
     ? query.eq('logto_id', request.userId)
     : query.eq('email', mockEmailFor(request.userId))
@@ -52,5 +54,5 @@ export async function getSessionUser(): Promise<SessionUser> {
   if (error !== null) throw new Error(`resolve user: ${error.message}`);
   if (data === null) throw new Error('No matching user account for this request.');
 
-  return { id: data.id, role: request.role };
+  return { id: data.id, role: request.role, timezone: data.timezone };
 }

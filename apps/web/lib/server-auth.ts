@@ -6,7 +6,7 @@ import 'server-only';
 
 import type { AuthUser } from './auth-shared';
 import { GUEST_USER, MOCK_USER, deriveInitials } from './auth-shared';
-import { getRoleByLogtoId, getUserIdByLogtoId } from './data/users';
+import { getRoleByLogtoId, getTimezoneByLogtoId, getUserIdByLogtoId } from './data/users';
 import { isLogtoConfigured, logtoConfig, resolveRole, safeGetLogtoContext } from './logto';
 
 /**
@@ -34,9 +34,10 @@ export async function getCurrentUser(): Promise<AuthUser> {
   // back to the claim on the bootstrap window / a transient DB error.
   // Resolved alongside the role (both are `users` lookups keyed by logto_id). The
   // uuid is what ownership checks compare against — see AuthUser.internalId.
-  const [dbRole, internalId] = await Promise.all([
+  const [dbRole, internalId, timezone] = await Promise.all([
     getRoleByLogtoId(claims.sub).catch(() => null),
     getUserIdByLogtoId(claims.sub).catch(() => null),
+    getTimezoneByLogtoId(claims.sub).catch(() => null),
   ]);
 
   return {
@@ -49,5 +50,8 @@ export async function getCurrentUser(): Promise<AuthUser> {
     // Calendar connection = membership in the MS access group (docs/02 D5),
     // not a Logto attribute — resolved in a later phase.
     isCalendarConnected: false,
+    // Profile timezone (null → America/New_York downstream). Drives the SSR/profile
+    // fallback for server-rendered timestamps; the client UI renders device-local.
+    timezone,
   };
 }

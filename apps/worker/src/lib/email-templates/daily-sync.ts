@@ -21,12 +21,15 @@ import {
 
 import { box, button, escapeHtml, h2, muted, p, preText, renderEmailLayout, statRow, ul } from './layout.js';
 
-/** Format an ISO instant as an Eastern-time clock label (e.g. "9:00 AM"). */
-function formatEtTime(iso: string): string {
+/** The fallback zone when a recipient has no profile timezone set. */
+const DEFAULT_TIME_ZONE = 'America/New_York';
+
+/** Format an ISO instant as a clock label (e.g. "9:00 AM") in `timeZone` (null → Eastern). */
+function formatClockTime(iso: string, timeZone: string | null | undefined): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
   return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
+    timeZone: timeZone ?? DEFAULT_TIME_ZONE,
     hour: 'numeric',
     minute: '2-digit',
   }).format(date);
@@ -49,11 +52,17 @@ export interface DailySyncEmailInput {
   readonly appUrl: string;
   /** The editable body template (blank/absent → the shared default). */
   readonly template?: string;
+  /**
+   * The recipient's profile IANA timezone for clock times (null/absent → Eastern).
+   * The email is server-rendered and can't read the device, so each recipient's
+   * meeting times render in their own zone.
+   */
+  readonly timeZone?: string | null;
 }
 
-/** A short meeting line: "9:00 AM — Title (Client) · lead Name". */
-function meetingLine(m: DailySyncContent['todayMeetings'][number]): string {
-  const time = formatEtTime(m.timeIso);
+/** A short meeting line: "9:00 AM — Title (Client) · lead Name" in the recipient's zone. */
+function meetingLine(m: DailySyncContent['todayMeetings'][number], timeZone: string | null | undefined): string {
+  const time = formatClockTime(m.timeIso, timeZone);
   const who = m.isInternal ? 'Internal' : (m.clientName ?? 'Unassigned');
   const lead = m.leadName !== null ? ` · lead ${m.leadName}` : '';
   return `${time} — ${m.title} (${who})${lead}`;
@@ -155,25 +164,25 @@ const RENDERERS: Record<DailySyncShortcode, ShortcodeRenderer> = {
     },
   },
   todays_meetings: {
-    html: (c) =>
+    html: (c, i) =>
       h2("Today's meetings") +
       (c.todayMeetings.length > 0
-        ? ul(c.todayMeetings.map(meetingLine))
+        ? ul(c.todayMeetings.map((m) => meetingLine(m, i.timeZone)))
         : muted('No meetings scheduled today.')),
-    text: (c) =>
-      ["Today's meetings:", ...(c.todayMeetings.length > 0 ? c.todayMeetings.map((m) => `  - ${meetingLine(m)}`) : ['  (none)'])].join(
+    text: (c, i) =>
+      ["Today's meetings:", ...(c.todayMeetings.length > 0 ? c.todayMeetings.map((m) => `  - ${meetingLine(m, i.timeZone)}`) : ['  (none)'])].join(
         '\n',
       ),
   },
   tomorrows_meetings: {
     // Same shape as today's, over the next-day window — so nothing tomorrow is a surprise.
-    html: (c) => {
+    html: (c, i) => {
       const rows = c.tomorrowMeetings ?? [];
-      return h2("Tomorrow's meetings") + (rows.length > 0 ? ul(rows.map(meetingLine)) : muted('No meetings scheduled tomorrow.'));
+      return h2("Tomorrow's meetings") + (rows.length > 0 ? ul(rows.map((m) => meetingLine(m, i.timeZone))) : muted('No meetings scheduled tomorrow.'));
     },
-    text: (c) => {
+    text: (c, i) => {
       const rows = c.tomorrowMeetings ?? [];
-      return ["Tomorrow's meetings:", ...(rows.length > 0 ? rows.map((m) => `  - ${meetingLine(m)}`) : ['  (none)'])].join('\n');
+      return ["Tomorrow's meetings:", ...(rows.length > 0 ? rows.map((m) => `  - ${meetingLine(m, i.timeZone)}`) : ['  (none)'])].join('\n');
     },
   },
   team_out: {

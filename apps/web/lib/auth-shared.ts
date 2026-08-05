@@ -31,6 +31,13 @@ export interface AuthUser {
   readonly initials: string;
   readonly role: Role;
   readonly isCalendarConnected: boolean;
+  /**
+   * The user's profile IANA timezone, or null when unset (falls back to
+   * America/New_York). Used as the SSR/profile fallback for server-rendered
+   * timestamps; the client UI otherwise renders in the device's local zone.
+   * Auto-defaulted from the browser on first app load (see TimezoneAutoDefault).
+   */
+  readonly timezone: string | null;
 }
 
 /**
@@ -52,6 +59,7 @@ export const MOCK_IDENTITIES: Readonly<Record<Role, AuthUser>> = {
     initials: 'AG',
     role: 'admin',
     isCalendarConnected: true,
+    timezone: 'America/New_York',
   },
   standard: {
     id: 'usr_sarah',
@@ -61,6 +69,7 @@ export const MOCK_IDENTITIES: Readonly<Record<Role, AuthUser>> = {
     initials: 'SC',
     role: 'standard',
     isCalendarConnected: true,
+    timezone: 'America/Chicago',
   },
   viewer: {
     id: 'usr_john',
@@ -70,6 +79,7 @@ export const MOCK_IDENTITIES: Readonly<Record<Role, AuthUser>> = {
     initials: 'JS',
     role: 'viewer',
     isCalendarConnected: false,
+    timezone: null,
   },
 } as const;
 
@@ -89,6 +99,7 @@ export const GUEST_USER: AuthUser = {
   initials: 'G',
   role: 'viewer',
   isCalendarConnected: false,
+  timezone: null,
 };
 
 /** Two-letter initials from a display name (falls back to the email local part). */

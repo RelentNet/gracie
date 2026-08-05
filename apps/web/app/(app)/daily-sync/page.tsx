@@ -22,11 +22,11 @@ function longEtDate(dateStr: string): string {
   return formatEasternDate(`${dateStr}T12:00:00Z`);
 }
 
-/** ET clock label for a meeting start. */
-function etTime(iso: string): string {
+/** Clock label for a meeting start, in the viewer's profile zone (null → Eastern). */
+function clockTime(iso: string, zone?: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return new Intl.DateTimeFormat('en-US', { timeZone: ET, hour: 'numeric', minute: '2-digit' }).format(d);
+  return new Intl.DateTimeFormat('en-US', { timeZone: zone ?? ET, hour: 'numeric', minute: '2-digit' }).format(d);
 }
 
 /** Health badge colors by band. */
@@ -50,7 +50,13 @@ function Stat({ label, value }: { readonly label: string; readonly value: number
 }
 
 /** A single today's-meeting row. */
-function MeetingRow({ m }: { readonly m: DailySyncMeeting }): React.JSX.Element {
+function MeetingRow({
+  m,
+  timeZone,
+}: {
+  readonly m: DailySyncMeeting;
+  readonly timeZone?: string | null;
+}): React.JSX.Element {
   const who = m.isInternal ? 'Internal' : (m.clientName ?? 'Unassigned');
   return (
     <li
@@ -62,7 +68,7 @@ function MeetingRow({ m }: { readonly m: DailySyncMeeting }): React.JSX.Element 
           {m.title}
         </span>
         <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          {etTime(m.timeIso)} · {who}
+          {clockTime(m.timeIso, timeZone)} · {who}
           {m.leadName !== null ? ` · lead ${m.leadName}` : ''}
         </span>
       </span>
@@ -84,10 +90,13 @@ function DailySyncView({
   record,
   dateLabel,
   showHealth,
+  timeZone,
 }: {
   readonly record: DailySyncRecord | null;
   readonly dateLabel: string;
   readonly showHealth: boolean;
+  /** Viewer's profile zone for event/meeting times (null → Eastern). */
+  readonly timeZone?: string | null;
 }): React.JSX.Element {
   const content: DailySyncContent | null = record?.content ?? null;
   if (content === null) {
@@ -111,9 +120,9 @@ function DailySyncView({
     <div className="flex flex-col gap-4">
       <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
         {record?.generatedAt !== null && record?.generatedAt !== undefined
-          ? `Generated ${formatEasternDateTime(record.generatedAt)}`
+          ? `Generated ${formatEasternDateTime(record.generatedAt, timeZone)}`
           : 'Generated —'}
-        {delivered !== null ? ` · Emailed staff ${formatEasternDateTime(delivered)}` : ' · Not yet emailed'}
+        {delivered !== null ? ` · Emailed staff ${formatEasternDateTime(delivered, timeZone)}` : ' · Not yet emailed'}
       </p>
 
       {quiet ? <p style={TYPE.body}>Quiet day — nothing scheduled.</p> : null}
@@ -135,7 +144,7 @@ function DailySyncView({
           <CardHeader title="Today's meetings" icon={<CalendarClock size={20} aria-hidden="true" />} />
           <ul>
             {content.todayMeetings.map((m) => (
-              <MeetingRow key={m.meetingId} m={m} />
+              <MeetingRow key={m.meetingId} m={m} timeZone={timeZone} />
             ))}
           </ul>
         </Card>
@@ -228,7 +237,12 @@ export default async function DailySyncPage(): Promise<React.JSX.Element> {
         </div>
         {user.role === 'admin' ? <GenerateSyncButton /> : null}
       </header>
-      <DailySyncView record={today} dateLabel={longEtDate(todayDate)} showHealth={showHealth} />
+      <DailySyncView
+        record={today}
+        dateLabel={longEtDate(todayDate)}
+        showHealth={showHealth}
+        timeZone={user.timezone}
+      />
     </PageContainer>
   );
 }

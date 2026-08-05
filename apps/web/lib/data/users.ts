@@ -134,6 +134,41 @@ export async function getUserIdByLogtoId(logtoId: string): Promise<string | null
   return data?.id ?? null;
 }
 
+/**
+ * The caller's profile timezone (IANA id), or `null` when unset / no profile row.
+ * Read by the SSR identity resolver (server-auth) so server-rendered timestamps
+ * can format in the viewer's zone; null falls back to America/New_York downstream.
+ */
+export async function getTimezoneByLogtoId(logtoId: string): Promise<string | null> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('users')
+    .select('timezone')
+    .eq('logto_id', logtoId)
+    .maybeSingle();
+  if (error) throw new Error(`timezone lookup: ${error.message}`);
+  return data?.timezone ?? null;
+}
+
+/**
+ * Set the caller's OWN profile timezone (any role — self-service). `timezone` must
+ * already be a validated IANA id (the route validates). Returns `updated: false`
+ * when the session maps to no `users` row (e.g. local mock auth) so the route 404s.
+ */
+export async function setTimezoneByLogtoId(
+  logtoId: string,
+  timezone: string,
+): Promise<{ updated: boolean }> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('users')
+    .update({ timezone })
+    .eq('logto_id', logtoId)
+    .select('id');
+  if (error) throw new Error(`set timezone: ${error.message}`);
+  return { updated: (data ?? []).length > 0 };
+}
+
 /** Every user for Settings → Users, ordered by name. Admin-only surface. */
 export async function listUsers(): Promise<UserListItem[]> {
   const db = getServerClient();
