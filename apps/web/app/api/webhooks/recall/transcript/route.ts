@@ -24,6 +24,7 @@ import { parseRealtimeTranscript } from '@gracie/shared/recall';
 
 import { publishLiveUtterance } from '@/lib/live-transcript';
 import { readSvixHeaders, verifyRecallSignature } from '@/lib/recall-webhook';
+import { handleVoiceCommand } from '@/lib/voice-commands';
 
 // ioredis + node:crypto are Node-only — force the Node.js runtime.
 export const runtime = 'nodejs';
@@ -65,6 +66,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (utterance === null) {
     return NextResponse.json({ accepted: true, ignored: true }, { status: 200 });
   }
+
+  // 3b. Voice commands (opt-in). FIRE-AND-FORGET so the ack still returns in ms:
+  // handleVoiceCommand parses the utterance (pure) and only touches config/DB/Recall
+  // on a rare positive match. It never throws. We deliberately do NOT await it — this
+  // hot path must not wait on the (occasional) follow-up Recall calls.
+  void handleVoiceCommand(meetingId, payload, utterance.text);
 
   // 4. Relay to any live viewer via Redis pub/sub. Best-effort: live transcript is
   // ephemeral, so a Redis blip drops this line rather than failing the request

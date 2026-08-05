@@ -74,6 +74,14 @@ export interface BotConfig {
    * `@gracie/shared/recall` for the async-transcript interaction). Kill-switch.
    */
   readonly realtimeTranscript: boolean;
+  /**
+   * In-meeting VOICE commands (default OFF). When true AND `realtimeTranscript` is
+   * on, a HOST saying "hey Gracie, leave / stop listening for N minutes" makes the
+   * bot leave or pause. Inert unless BOTH are on — voice commands ride the realtime
+   * transcript stream, so they inherit its reliability trade-off (realtime
+   * supersedes the async transcript; see `buildRecordingConfig`). Kill-switch.
+   */
+  readonly voiceCommands: boolean;
 }
 
 /** Coerce an unknown to a non-negative integer number of seconds, or null. */
@@ -103,6 +111,7 @@ function parseConfig(raw: Json | undefined): Omit<BotConfig, 'avatarJpegB64'> {
     avatarEnabled,
     transcriptProvider: toTranscriptProvider(obj.transcriptProvider),
     realtimeTranscript: obj.realtimeTranscript === true,
+    voiceCommands: obj.voiceCommands === true,
     autoLeave: {
       everyoneLeftSec: toSeconds(al.everyoneLeftSec),
       waitingRoomSec: toSeconds(al.waitingRoomSec),
@@ -131,6 +140,7 @@ export interface BotConfigPatch {
   readonly avatarEnabled?: boolean;
   readonly transcriptProvider?: BotTranscriptProvider;
   readonly realtimeTranscript?: boolean;
+  readonly voiceCommands?: boolean;
   readonly autoLeave?: Partial<BotAutoLeave>;
 }
 
@@ -151,6 +161,7 @@ export async function setBotConfig(patch: BotConfigPatch): Promise<BotConfig> {
         ? toTranscriptProvider(patch.transcriptProvider)
         : current.transcriptProvider,
     realtimeTranscript: patch.realtimeTranscript ?? current.realtimeTranscript,
+    voiceCommands: patch.voiceCommands ?? current.voiceCommands,
     autoLeave: {
       everyoneLeftSec:
         patch.autoLeave?.everyoneLeftSec !== undefined

@@ -39,6 +39,8 @@
  */
 import type { TranscriptSegment } from '../types/meeting.js';
 
+export * from './voice-commands.js';
+
 export interface RecallFetchOptions {
   readonly apiKey: string;
   /** Recall region subdomain (env `RECALL_REGION`); defaults to `us-west-2`. */
@@ -740,4 +742,43 @@ export async function classifyRecallRecoverability(
   options: RecallFetchOptions,
 ): Promise<RecallRecoverability> {
   return classifyRecordings(await retrieveBot(botJobId, options));
+}
+
+/** Options for {@link sendRecallChatMessage} — Recall's in-meeting chat targeting. */
+export interface RecallChatOptions extends RecallFetchOptions {
+  /** `everyone` (default) or a specific participant id (`to` in Recall's API). */
+  readonly to?: string;
+}
+
+/**
+ * Post a message into the meeting's chat as the bot
+ * (`POST /bot/{id}/send_chat_message/`). Used by the voice-command path to visibly
+ * CONFIRM a spoken "leave" / "pause" before acting, so nothing happens silently.
+ *
+ * Standalone rather than reusing {@link leaveRecallBot}'s `postBotAction` wrapper:
+ * that helper (added by the bot-controls PR) is deliberately no-body, and this call
+ * needs a JSON `{ message }` body. Mirrors the same auth + throw-on-non-OK shape.
+ */
+export async function sendRecallChatMessage(
+  botJobId: string,
+  text: string,
+  options: RecallChatOptions,
+): Promise<void> {
+  const body: Record<string, unknown> = { message: text };
+  if (typeof options.to === 'string' && options.to !== '') body.to = options.to;
+  const res = await fetch(`${baseUrl(options.region)}/bot/${botJobId}/send_chat_message/`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Token ${options.apiKey}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    throw new Error(
+      `Recall send_chat_message failed for bot ${botJobId} (HTTP ${res.status}): ${errBody.slice(0, 300)}`,
+    );
+  }
 }

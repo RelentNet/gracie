@@ -70,3 +70,16 @@ export async function readBufferedUtterances(meetingId: string): Promise<string[
 export function createLiveSubscriber(): Redis {
   return new Redis(redisUrl(), { maxRetriesPerRequest: null });
 }
+
+/**
+ * Atomic "first-caller-wins" claim with a TTL, reusing the shared publisher
+ * connection. `SET key 1 EX ttl NX` returns 'OK' only for the first caller within
+ * the window; later callers get null. Used to DEBOUNCE voice commands — the STT
+ * emits the same utterance several times in a row, so overlapping/duplicate
+ * detections collapse to one action per meeting+command within the window. Distributed
+ * (cross-process), so two web replicas can't both fire. Best-effort by the caller.
+ */
+export async function claimOnce(key: string, ttlSeconds: number): Promise<boolean> {
+  const res = await getPublisher().set(key, '1', 'EX', ttlSeconds, 'NX');
+  return res === 'OK';
+}

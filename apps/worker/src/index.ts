@@ -27,6 +27,7 @@ import { createHeartbeatProcessor } from './processors/heartbeat.processor.js';
 import { createIngestProcessor } from './processors/ingest.processor.js';
 import { createKbIngestProcessor } from './processors/kb-ingest.processor.js';
 import { createRelationshipHealthProcessor } from './processors/relationship-health.processor.js';
+import { createResumeRecordingProcessor } from './processors/resume-recording.processor.js';
 import { createWatchdogProcessor } from './processors/watchdog.processor.js';
 import { createAutomationsQueue, scheduleAutomations } from './queues/automations.queue.js';
 import { createBotDispatchQueue, scheduleBotDispatch } from './queues/bot-dispatch.queue.js';
@@ -49,6 +50,7 @@ import {
   createRelationshipHealthQueue,
   scheduleRelationshipHealth,
 } from './queues/relationship-health.queue.js';
+import { createResumeRecordingQueue } from './queues/resume-recording.queue.js';
 import { createWatchdogQueue, scheduleTranscriptWatchdog } from './queues/watchdog.queue.js';
 import { buildServer } from './server.js';
 
@@ -110,6 +112,7 @@ async function start(): Promise<void> {
   const contactSuggestionsQueue = createContactSuggestionsQueue(connection);
   const automationsQueue = createAutomationsQueue(connection);
   const documentsPurgeQueue = createDocumentsPurgeQueue(connection);
+  const resumeRecordingQueue = createResumeRecordingQueue(connection);
 
   /**
    * Best-effort single-client health recompute, deduped by a `health:<clientId>` job
@@ -147,6 +150,7 @@ async function start(): Promise<void> {
       contactSuggestionsQueue,
       automationsQueue,
       documentsPurgeQueue,
+      resumeRecordingQueue,
     ],
   });
 
@@ -273,6 +277,17 @@ async function start(): Promise<void> {
     app.log.error({ jobId: job?.id, err: error }, 'documents-purge job failed');
   });
 
+  // Resume recording: delayed resume after a "stop listening for N minutes" voice
+  // command (produced by the web transcript webhook). Best-effort — see the processor.
+  const resumeRecordingWorker = createWorker(
+    QUEUE_NAMES.resumeRecording,
+    createResumeRecordingProcessor(app.log),
+    connection,
+  );
+  resumeRecordingWorker.on('failed', (job, error) => {
+    app.log.error({ jobId: job?.id, err: error }, 'resume-recording job failed');
+  });
+
   await scheduleHeartbeat(heartbeatQueue);
   await scheduleTranscriptWatchdog(watchdogQueue);
   await scheduleCalendarScan(calendarScanQueue);
@@ -299,6 +314,7 @@ async function start(): Promise<void> {
       contactSuggestionsQueue,
       automationsQueue,
       documentsPurgeQueue,
+      resumeRecordingQueue,
     ],
     workers: [
       heartbeatWorker,
@@ -313,6 +329,7 @@ async function start(): Promise<void> {
       contactSuggestionsWorker,
       automationsWorker,
       documentsPurgeWorker,
+      resumeRecordingWorker,
     ],
   });
 

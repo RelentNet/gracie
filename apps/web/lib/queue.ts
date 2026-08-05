@@ -22,6 +22,7 @@ import {
   type IngestJobPayload,
   type KbIngestJobPayload,
   type RelationshipHealthJobPayload,
+  type ResumeRecordingJobPayload,
 } from '@gracie/shared';
 
 /** Mirrors apps/worker queues/factory.ts DEFAULT_JOB_OPTIONS. */
@@ -40,6 +41,7 @@ let calendarScanQueue: Queue<CalendarScanJobPayload> | undefined;
 let relationshipHealthQueue: Queue<RelationshipHealthJobPayload> | undefined;
 let dailySyncQueue: Queue<DailySyncJobPayload> | undefined;
 let automationsQueue: Queue<AutomationJobPayload> | undefined;
+let resumeRecordingQueue: Queue<ResumeRecordingJobPayload> | undefined;
 
 function getConnection(): Redis {
   if (connection !== undefined) return connection;
@@ -193,5 +195,32 @@ export async function enqueueAutomationRun(automationId: string): Promise<string
     source: 'manual',
     automationId,
   });
+  return job.id ?? '';
+}
+
+function getResumeRecordingQueue(): Queue<ResumeRecordingJobPayload> {
+  if (resumeRecordingQueue !== undefined) return resumeRecordingQueue;
+  resumeRecordingQueue = new Queue<ResumeRecordingJobPayload>(QUEUE_NAMES.resumeRecording, {
+    connection: getConnection(),
+    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+  });
+  return resumeRecordingQueue;
+}
+
+/**
+ * Enqueue a DELAYED resume for a paused bot, `minutes` from now (voice command
+ * "stop listening for N minutes"). BullMQ persists the delay in Redis, so it fires
+ * on time even across a worker restart — unlike a setTimeout. Returns the job id.
+ */
+export async function enqueueResumeRecording(
+  botJobId: string,
+  meetingId: string,
+  minutes: number,
+): Promise<string> {
+  const job = await getResumeRecordingQueue().add(
+    JOB_NAMES.resumeRecording,
+    { botJobId, meetingId, source: 'voice-command' },
+    { delay: Math.max(1, Math.floor(minutes)) * 60_000 },
+  );
   return job.id ?? '';
 }
