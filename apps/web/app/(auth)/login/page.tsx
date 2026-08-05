@@ -4,7 +4,8 @@ import { TYPE } from '@/lib/typography';
 
 /**
  * Login (Module 10, docs/08 §8). Centered card, GA wordmark, "Sign in with
- * Microsoft", dark navy gradient.
+ * Microsoft", over the themed gradient ground (inherited from <body>, so it
+ * flips light/dark like the rest of the app).
  *
  * Phase 1B: the button initiates the Logto → Microsoft Entra sign-in flow
  * (docs/07 §5). In Phase 1A it links into the app shell so the scaffold is
@@ -12,13 +13,7 @@ import { TYPE } from '@/lib/typography';
  */
 export default function LoginPage(): React.JSX.Element {
   return (
-    <main
-      className="flex min-h-dvh items-center justify-center p-6"
-      style={{
-        background:
-          'linear-gradient(160deg, var(--color-navy-900) 0%, var(--color-navy-800) 100%)',
-      }}
-    >
+    <main className="flex min-h-dvh items-center justify-center p-6">
       <div
         className="flex w-full max-w-sm flex-col items-center gap-6 rounded-lg bg-white p-8 shadow-xl"
       >

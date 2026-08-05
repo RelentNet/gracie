@@ -94,7 +94,7 @@ export function ConversationList({
           onChange={(event): void => onSearchChange(event.target.value)}
           placeholder="Search"
           className="w-full rounded-lg border py-2 pl-9 pr-3"
-          style={{ borderColor: 'var(--border-subtle)', backgroundColor: '#ffffff', ...TYPE.secondary }}
+          style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--color-white)', ...TYPE.secondary }}
         />
       </label>
 

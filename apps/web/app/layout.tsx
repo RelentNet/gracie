@@ -20,6 +20,14 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+/*
+ * No-flash theme init. Runs synchronously in <head> before first paint: applies
+ * the saved theme (localStorage) or the OS preference so `data-theme` is already
+ * on <html> when the CSS resolves — no light→dark flip on load. The in-app toggle
+ * (next to the notification bell) owns the value afterwards.
+ */
+const THEME_INIT_SCRIPT = `(function(){try{var d=document.documentElement,t=localStorage.getItem('theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}d.setAttribute('data-theme',t);}catch(e){}})();`;
+
 export default async function RootLayout({
   children,
 }: {
@@ -34,7 +42,12 @@ export default async function RootLayout({
     getBrandLogoKey().catch(() => null),
   ]);
   return (
-    <html lang="en">
+    // `suppressHydrationWarning`: the init script sets `data-theme` on <html>
+    // before React hydrates, so the server/client attribute differs by design.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       {/* `overflow-x-hidden` is the global guard against horizontal body scroll;
           `min-w-0` lets flex descendants shrink so wide content scrolls inside its
           own container rather than pushing the shell wider. */}

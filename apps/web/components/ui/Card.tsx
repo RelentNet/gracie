@@ -34,9 +34,9 @@ export function Card({
   const accentBorder = ACCENT_BORDER[accent];
   return (
     <div
-      className={`rounded-lg border bg-white shadow-sm ${className}`}
+      className={`glass rounded-lg border ${className}`}
       style={{
-        borderColor: 'var(--border-subtle)',
+        borderColor: 'var(--glass-border)',
         borderLeft: accentBorder !== undefined ? `3px solid ${accentBorder}` : undefined,
         ...style,
       }}

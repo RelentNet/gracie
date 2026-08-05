@@ -44,7 +44,7 @@ export function WeekView({
             className="flex min-h-[8rem] flex-col gap-1 rounded-lg border p-1.5 text-left transition-colors"
             style={{
               borderColor: isSelected ? 'var(--color-blue-500)' : 'var(--border-subtle)',
-              backgroundColor: isSelected ? 'var(--color-blue-100)' : '#ffffff',
+              backgroundColor: isSelected ? 'var(--color-blue-100)' : 'var(--color-white)',
               cursor: 'pointer',
             }}
           >

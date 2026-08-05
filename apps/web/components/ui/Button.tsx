@@ -19,7 +19,7 @@ interface VariantStyle {
 
 const VARIANT_STYLES: Readonly<Record<ButtonVariant, VariantStyle>> = {
   primary: { bg: 'var(--color-blue-500)', fg: '#ffffff', border: 'var(--color-blue-500)' },
-  secondary: { bg: '#ffffff', fg: 'var(--text-primary)', border: 'var(--border-subtle)' },
+  secondary: { bg: 'var(--color-white)', fg: 'var(--text-primary)', border: 'var(--border-subtle)' },
   ghost: { bg: 'transparent', fg: 'var(--text-secondary)', border: 'transparent' },
   danger: { bg: 'var(--color-red-500)', fg: '#ffffff', border: 'var(--color-red-500)' },
 };

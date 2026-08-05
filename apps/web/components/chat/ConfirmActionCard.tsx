@@ -84,7 +84,7 @@ export function ConfirmActionCard({ action }: { readonly action: AutomationPropo
   return (
     <div
       className="mt-2 flex flex-col gap-2 rounded-lg border p-3"
-      style={{ borderColor: 'var(--border-subtle)', backgroundColor: '#ffffff' }}
+      style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--color-white)' }}
     >
       <div className="flex items-center gap-2">
         <CalendarClock size={15} aria-hidden="true" style={{ color: 'var(--color-blue-700)' }} />

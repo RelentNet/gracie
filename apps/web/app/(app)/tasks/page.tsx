@@ -588,7 +588,7 @@ function TaskRow({
       </TRow>
       {isExpanded ? (
         <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-          <td colSpan={COLUMN_COUNT} className="px-4 py-3" style={{ backgroundColor: '#f8fafc' }}>
+          <td colSpan={COLUMN_COUNT} className="px-4 py-3" style={{ backgroundColor: 'var(--color-slate-100)' }}>
             <TaskNotes taskId={task.id} usersById={usersById} />
           </td>
         </tr>

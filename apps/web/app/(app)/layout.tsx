@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import { NotificationBell } from '@/components/NotificationBell';
 import { Sidebar } from '@/components/Sidebar';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { MobileNavToggle } from '@/components/ui/MobileNavToggle';
 import { NavCollapseProvider } from '@/components/ui/nav-collapse';
 import { isLogtoConfigured, logtoConfig, safeGetLogtoContext } from '@/lib/logto';
@@ -35,11 +36,12 @@ export default async function AppLayout({
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <header
-            className="flex h-14 shrink-0 items-center gap-3 border-b bg-white px-4 sm:px-6 md:px-8"
-            style={{ borderColor: 'var(--border-subtle)' }}
+            className="glass flex h-14 shrink-0 items-center gap-1 border-b px-4 sm:px-6 md:px-8"
+            style={{ borderColor: 'var(--hair)', borderRadius: 0, boxShadow: 'none' }}
           >
             <MobileNavToggle />
             <div className="flex-1" />
+            <ThemeToggle />
             <NotificationBell />
           </header>
           {/* Sole owner of page padding (PageContainer adds none, so no doubling).

@@ -53,7 +53,7 @@ export function ChatComposer({
             placeholder={placeholder}
             disabled={disabled}
             className="w-full resize-none rounded-lg border p-3"
-            style={{ borderColor: 'var(--border-subtle)', backgroundColor: '#ffffff', ...TYPE.body }}
+            style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--color-white)', ...TYPE.body }}
           />
         </label>
         <button
