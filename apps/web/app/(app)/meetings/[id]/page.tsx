@@ -6,6 +6,7 @@ import type { Document, MasterRecordEntry, Meeting, Role, Task } from '@gracie/s
 
 import { FileList } from '@/components/FileBrowser/FileList';
 import { LiveTranscript } from '@/components/meetings/LiveTranscript';
+import { MeetingBotControls } from '@/components/meetings/MeetingBotControls';
 import { MeetingRecording } from '@/components/meetings/MeetingRecording';
 import { StateChip } from '@/components/meetings/StateChip';
 import { Badge } from '@/components/ui/Badge';
@@ -319,6 +320,10 @@ async function PrepView({
             This meeting is within its scheduled time and a Gracie bot was dispatched. Documents appear
             here once it ends.
           </p>
+          {/* Live bot controls: shown only when a bot is actually in the call. */}
+          {meeting.botJobId !== null && meeting.botJobId !== '' ? (
+            <MeetingBotControls meetingId={meeting.id} />
+          ) : null}
           <LiveTranscript meetingId={meeting.id} />
         </Card>
       ) : null}

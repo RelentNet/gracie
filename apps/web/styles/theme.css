@@ -280,6 +280,33 @@
   background: var(--brand-soft);
 }
 
+/*
+ * Theme-conditional brand-logo variants (Sidebar). Both <img> render in the DOM;
+ * CSS shows the one matching the active theme, so the correct logo is right
+ * before hydration (no flash) and follows the in-app toggle. Uses the SAME
+ * selector cascade as the palette above: light is the default; dark applies on
+ * OS-dark (unless force-light) AND, at higher specificity, on data-theme=dark.
+ * The Sidebar only emits both when a dark logo exists (else a single untagged
+ * <img>), so these rules are inert in the single-logo case.
+ */
+.logo-dark {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .logo-light {
+    display: none;
+  }
+  :root:not([data-theme='light']) .logo-dark {
+    display: inline;
+  }
+}
+:root[data-theme='dark'] .logo-light {
+  display: none;
+}
+:root[data-theme='dark'] .logo-dark {
+  display: inline;
+}
+
 html,
 body {
   margin: 0;

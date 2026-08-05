@@ -29,7 +29,7 @@ import { useNavCollapse } from '@/components/ui/nav-collapse';
  *    Always renders fully expanded regardless of the desktop collapsed state.
  */
 export function Sidebar(): React.JSX.Element {
-  const { user, can, brandLogoKey } = useAuth();
+  const { user, can, brandLogoKey, brandLogoDarkKey } = useAuth();
   const pathname = usePathname();
   const { collapsed, toggleCollapsed, mobileOpen, closeMobile } = useNavCollapse();
 
@@ -114,12 +114,34 @@ export function Sidebar(): React.JSX.Element {
                 // the browser's secure static mode (can't execute script). The
                 // ?v=<key> busts the cache when the logo is replaced. Constrained
                 // height, aspect preserved; a wide wordmark shrinks in the rail.
-                <img
-                  src={`/api/brand/logo?v=${encodeURIComponent(brandLogoKey)}`}
-                  alt="GA App"
-                  className="max-w-full object-contain"
-                  style={{ height: '2rem', width: 'auto' }}
-                />
+                //
+                // With an optional dark-theme logo set, both variants render and
+                // the theme-conditional `.logo-light`/`.logo-dark` CSS shows the
+                // right one — correct before hydration, no flash (theme.css). No
+                // dark logo → a single untagged <img>, unchanged single-logo case.
+                brandLogoDarkKey !== null ? (
+                  <>
+                    <img
+                      src={`/api/brand/logo?v=${encodeURIComponent(brandLogoKey)}`}
+                      alt="GA App"
+                      className="logo-light max-w-full object-contain"
+                      style={{ height: '2rem', width: 'auto' }}
+                    />
+                    <img
+                      src={`/api/brand/logo?variant=dark&v=${encodeURIComponent(brandLogoDarkKey)}`}
+                      alt="GA App"
+                      className="logo-dark max-w-full object-contain"
+                      style={{ height: '2rem', width: 'auto' }}
+                    />
+                  </>
+                ) : (
+                  <img
+                    src={`/api/brand/logo?v=${encodeURIComponent(brandLogoKey)}`}
+                    alt="GA App"
+                    className="max-w-full object-contain"
+                    style={{ height: '2rem', width: 'auto' }}
+                  />
+                )
               ) : (
                 <>
                   <span className={labelHidden}>GA App</span>

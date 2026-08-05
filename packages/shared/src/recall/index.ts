@@ -600,6 +600,51 @@ export async function createRecallAsyncTranscript(
   }
 }
 
+/**
+ * POST a no-body bot lifecycle action (leave / pause / resume). Shared by
+ * {@link leaveRecallBot}/{@link pauseRecallBot}/{@link resumeRecallBot}; mirrors
+ * {@link createRecallAsyncTranscript}'s auth + throw-on-non-OK shape. These are
+ * pure Recall bot-API calls — they act on ANY bot regardless of the transcript
+ * provider, and touch nothing about the realtime/transcript config.
+ */
+async function postBotAction(
+  botJobId: string,
+  action: 'leave_call' | 'pause_recording' | 'resume_recording',
+  options: RecallFetchOptions,
+): Promise<void> {
+  const res = await fetch(`${baseUrl(options.region)}/bot/${botJobId}/${action}/`, {
+    method: 'POST',
+    headers: { Authorization: `Token ${options.apiKey}`, Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(
+      `Recall bot ${action} failed for bot ${botJobId} (HTTP ${res.status}): ${body.slice(0, 300)}`,
+    );
+  }
+}
+
+/**
+ * Make Gracie's bot LEAVE the call now (docs: bot/leave_call). Irreversible — the
+ * bot will not rejoin — so the caller confirms first. Throws on a non-OK response.
+ */
+export async function leaveRecallBot(botJobId: string, options: RecallFetchOptions): Promise<void> {
+  await postBotAction(botJobId, 'leave_call', options);
+}
+
+/**
+ * PAUSE the bot's recording (docs: bot/pause_recording). The bot stays in the call
+ * but stops capturing until {@link resumeRecallBot}. Throws on a non-OK response.
+ */
+export async function pauseRecallBot(botJobId: string, options: RecallFetchOptions): Promise<void> {
+  await postBotAction(botJobId, 'pause_recording', options);
+}
+
+/** RESUME a paused bot's recording (docs: bot/resume_recording). Throws on a non-OK response. */
+export async function resumeRecallBot(botJobId: string, options: RecallFetchOptions): Promise<void> {
+  await postBotAction(botJobId, 'resume_recording', options);
+}
+
 /** Outcome of {@link ensureAsyncTranscript}, for webhook logging/response. */
 export type EnsureAsyncTranscriptResult = 'created' | 'already_requested' | 'no_recording';
 
