@@ -166,7 +166,9 @@ export default function CalendarPage(): React.JSX.Element {
   }).format(new Date(Date.UTC(viewYear, viewMonth, 1)));
   const headerLabel =
     view === 'week'
-      ? weekRangeLabel(weekGrid.cells[0]?.key ?? selectedDay, weekGrid.cells[6]?.key ?? selectedDay)
+      ? // Work week Mon–Fri: label spans Monday (cell 1) to Friday (cell 5) of the
+        // Sun-start week grid; Sat/Sun are hidden in the Week view (WeekView).
+        weekRangeLabel(weekGrid.cells[1]?.key ?? selectedDay, weekGrid.cells[5]?.key ?? selectedDay)
       : monthLabel;
 
   const goToMonth = useCallback((delta: number): void => {
@@ -210,7 +212,7 @@ export default function CalendarPage(): React.JSX.Element {
   }, []);
 
   return (
-    <PageContainer className="flex flex-col gap-6">
+    <PageContainer width="2xl" className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Calendar</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
@@ -269,8 +271,21 @@ export default function CalendarPage(): React.JSX.Element {
         />
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+      {/* Day agenda on the LEFT (narrow sidebar); wide calendar on the RIGHT. */}
+      <div className="grid gap-6 lg:grid-cols-4">
+        <div className="flex flex-col gap-6 lg:col-span-1">
+          <DayDetail
+            dayKey={selectedDay}
+            meetings={selectedMeetings}
+            loading={meetings === null}
+            editable={editable}
+            canRedispatch={true}
+            onChanged={reload}
+          />
+          <ConnectionPanel isAdmin={isAdmin} onSynced={reload} />
+        </div>
+
+        <div className="lg:col-span-3">
           <Card>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 style={TYPE.sectionHeader}>{headerLabel}</h2>
@@ -316,18 +331,6 @@ export default function CalendarPage(): React.JSX.Element {
               />
             )}
           </Card>
-        </div>
-
-        <div className="flex flex-col gap-6">
-          <DayDetail
-            dayKey={selectedDay}
-            meetings={selectedMeetings}
-            loading={meetings === null}
-            editable={editable}
-            canRedispatch={true}
-            onChanged={reload}
-          />
-          <ConnectionPanel isAdmin={isAdmin} onSynced={reload} />
         </div>
       </div>
 
