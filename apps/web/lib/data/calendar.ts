@@ -760,6 +760,40 @@ export interface JoinedMeeting {
 }
 
 /**
+ * Dispatch a Recall bot to `url` for meeting `meetingId` and return its job id.
+ * The shared dispatch core reused by on-demand join AND manual re-dispatch. Reads
+ * the Recall key + bot config, streams live when realtime is enabled, and returns
+ * the new `bot_job_id`. Does NOT persist it — callers store it with their own
+ * rollback/update semantics.
+ *
+ * ponytail: default app URL duplicated from worker notify-config (web can't import
+ * worker); update both if the prod host changes.
+ */
+async function dispatchBotForMeeting(meetingId: string, url: string): Promise<string> {
+  const apiKey = await getCredential('recall');
+  if (apiKey === null || apiKey === '') {
+    throw new Error('No Recall API key is configured. Add it in Admin → API Settings.');
+  }
+  const botConfig = await getBotConfig();
+  const realtimeTranscriptUrl = botConfig.realtimeTranscript
+    ? buildRealtimeTranscriptUrl(
+        process.env.APP_BASE_URL?.trim() || 'https://gracie.graceandassociates.com',
+        meetingId,
+      )
+    : null;
+  return dispatchRecallBot({
+    meetingUrl: url,
+    apiKey,
+    region: process.env.RECALL_REGION,
+    botName: botConfig.name,
+    botAvatarJpegB64: botConfig.avatarEnabled ? botConfig.avatarJpegB64 : null,
+    autoLeave: botConfig.autoLeave,
+    transcriptProvider: botConfig.transcriptProvider,
+    realtimeTranscriptUrl,
+  });
+}
+
+/**
  * On-demand meeting join (P4.2): create a `source: 'manual'` meeting NOW and
  * dispatch a Recall bot to it SYNCHRONOUSLY, so the caller gets instant success/
  * failure. Deliberately BYPASSES the auto kill-switch AND the bot-eligibility
@@ -822,32 +856,7 @@ export async function joinMeetingNow(input: JoinMeetingInput): Promise<JoinedMee
   try {
     if (clientId !== null) await linkMeetingOrgRow(db, meetingId, clientId);
 
-    const apiKey = await getCredential('recall');
-    if (apiKey === null || apiKey === '') {
-      throw new Error('No Recall API key is configured. Add it in Admin → API Settings.');
-    }
-
-    const botConfig = await getBotConfig();
-    // Phase D: an on-demand join is a meeting happening right now — the prime
-    // live-transcript case — so it streams live too when realtime is enabled.
-    // ponytail: default app URL duplicated from worker notify-config (web can't
-    // import worker); update both if the prod host changes.
-    const realtimeTranscriptUrl = botConfig.realtimeTranscript
-      ? buildRealtimeTranscriptUrl(
-          process.env.APP_BASE_URL?.trim() || 'https://gracie.graceandassociates.com',
-          meetingId,
-        )
-      : null;
-    const botJobId = await dispatchRecallBot({
-      meetingUrl: url,
-      apiKey,
-      region: process.env.RECALL_REGION,
-      botName: botConfig.name,
-      botAvatarJpegB64: botConfig.avatarEnabled ? botConfig.avatarJpegB64 : null,
-      autoLeave: botConfig.autoLeave,
-      transcriptProvider: botConfig.transcriptProvider,
-      realtimeTranscriptUrl,
-    });
+    const botJobId = await dispatchBotForMeeting(meetingId, url);
 
     const stored = await db
       .from('meetings')
@@ -869,6 +878,38 @@ export async function joinMeetingNow(input: JoinMeetingInput): Promise<JoinedMee
     }
     throw error instanceof Error ? error : new Error(message);
   }
+}
+
+/**
+ * Manual re-dispatch: fire a FRESH Recall bot at an EXISTING meeting's stored join
+ * link and overwrite its `bot_job_id`. The operator uses this when the auto bot
+ * timed out / auto-left (a late-starting meeting) so there's no recording — hence
+ * it DELIBERATELY ignores `bot_dispatched`: an already-dispatched meeting must
+ * still be re-dispatchable. Rejects a meeting with no join link. Same gate as the
+ * on-demand join (admin + `manual_join_enabled`), enforced at the route.
+ *
+ * No rollback: the meeting already exists, so a failed dispatch leaves the row
+ * untouched (its old `bot_job_id`/state stand). If the bot reaches Recall but the
+ * id-store fails, we surface it (bot is live) rather than orphan the recording.
+ */
+export async function redispatchMeetingBot(meetingId: string): Promise<{ meetingId: string; botJobId: string }> {
+  const db = getServerClient();
+  const res = await db.from('meetings').select('id, video_link').eq('id', meetingId).maybeSingle();
+  if (res.error !== null) throw new Error(`redispatchMeetingBot: ${res.error.message}`);
+  if (res.data === null) throw new Error('Unknown meeting');
+  const url = (res.data.video_link ?? '').trim();
+  if (url === '') throw new Error('This meeting has no join link.');
+
+  const botJobId = await dispatchBotForMeeting(meetingId, url);
+
+  const stored = await db
+    .from('meetings')
+    .update({ bot_job_id: botJobId, bot_dispatched: true })
+    .eq('id', meetingId);
+  if (stored.error !== null) {
+    throw new Error(`redispatchMeetingBot: bot dispatched but storing job id failed: ${stored.error.message}`);
+  }
+  return { meetingId, botJobId };
 }
 
 /** Read the caller's auto-join preference (defaults to true when no profile row). */

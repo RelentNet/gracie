@@ -30,12 +30,15 @@ export function DayDetail({
   meetings,
   loading,
   editable,
+  canRedispatch,
   onChanged,
 }: {
   readonly dayKey: string;
   readonly meetings: readonly CalendarMeeting[];
   readonly loading: boolean;
   readonly editable: boolean;
+  /** Show the manual "Send Gracie" re-dispatch action (admin + on-demand-join on). */
+  readonly canRedispatch: boolean;
   readonly onChanged: () => void;
 }): React.JSX.Element {
   return (
@@ -56,7 +59,12 @@ export function DayDetail({
               className="border-t pt-4 first:border-t-0 first:pt-0"
               style={{ borderColor: 'var(--border-subtle)' }}
             >
-              <MeetingCard meeting={m} editable={editable} onChanged={onChanged} />
+              <MeetingCard
+                meeting={m}
+                editable={editable}
+                canRedispatch={canRedispatch}
+                onChanged={onChanged}
+              />
             </li>
           ))}
         </ul>
@@ -137,14 +145,63 @@ function ExternalAttendeesList({
   );
 }
 
+/**
+ * Manual "Send Gracie" — re-dispatch a fresh Recall bot to THIS meeting's stored
+ * join link on demand (e.g. the auto bot timed out on a late-starting meeting).
+ * Confirms, POSTs to the redispatch route, and shows a sending→Sent state.
+ * Disabled (with a tooltip) when the meeting has no join link.
+ */
+function RedispatchButton({ meeting }: { readonly meeting: CalendarMeeting }): React.JSX.Element {
+  const hasLink = meeting.videoLink !== null && meeting.videoLink !== '';
+  const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [error, setError] = useState<string | null>(null);
+
+  const send = useCallback((): void => {
+    if (!window.confirm('Send Gracie to this meeting now?')) return;
+    setState('sending');
+    setError(null);
+    apiClient
+      .post(`/api/calendar/meetings/${meeting.id}/redispatch`)
+      .then(() => setState('sent'))
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : 'Failed to send Gracie');
+        setState('idle');
+      });
+  }, [meeting.id]);
+
+  return (
+    <div className="flex flex-col gap-1">
+      {/* Wrap in a title span so the tooltip shows even when the button is disabled. */}
+      <span title={hasLink ? 'Send a fresh notetaker bot to this meeting now' : 'No join link on this meeting'}>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={!hasLink || state !== 'idle'}
+          icon={<Video size={13} aria-hidden="true" />}
+          onClick={send}
+        >
+          {state === 'sending' ? 'Sending…' : state === 'sent' ? 'Sent' : 'Send Gracie'}
+        </Button>
+      </span>
+      {error !== null ? (
+        <span role="alert" style={{ ...TYPE.label, color: 'var(--color-red-600)' }}>
+          {error}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 /** One meeting in the day-detail: status, org chips, external people, org actions. */
 function MeetingCard({
   meeting,
   editable,
+  canRedispatch,
   onChanged,
 }: {
   readonly meeting: CalendarMeeting;
   readonly editable: boolean;
+  readonly canRedispatch: boolean;
   readonly onChanged: () => void;
 }): React.JSX.Element {
   const m = meeting;
@@ -293,17 +350,20 @@ function MeetingCard({
         </div>
       ) : null}
 
-      {m.videoLink !== null ? (
-        <a
-          href={m.videoLink}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="inline-flex w-fit items-center gap-1"
-          style={{ ...TYPE.label, color: 'var(--color-blue-600)' }}
-        >
-          <Video size={13} aria-hidden="true" /> Join link
-        </a>
-      ) : null}
+      <div className="flex flex-wrap items-center gap-3">
+        {m.videoLink !== null ? (
+          <a
+            href={m.videoLink}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex w-fit items-center gap-1"
+            style={{ ...TYPE.label, color: 'var(--color-blue-600)' }}
+          >
+            <Video size={13} aria-hidden="true" /> Join link
+          </a>
+        ) : null}
+        {canRedispatch ? <RedispatchButton meeting={m} /> : null}
+      </div>
 
       {error !== null ? (
         <span role="alert" style={{ ...TYPE.label, color: 'var(--color-red-600)' }}>
