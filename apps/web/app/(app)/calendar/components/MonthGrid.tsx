@@ -5,8 +5,9 @@ import type { CalendarMeeting } from '@gracie/shared';
 
 import { TYPE } from '@/lib/typography';
 
-import { WEEKDAYS, localTime, type GridCell } from '../lib/calendar-dates';
-import { meetingGridLabel, meetingNeedsAttention } from '../lib/calendar-meeting';
+import { WEEKDAYS, type GridCell } from '../lib/calendar-dates';
+import { meetingNeedsAttention } from '../lib/calendar-meeting';
+import { MeetingPill } from './MeetingPill';
 
 export function MonthGrid({
   grid,
@@ -79,28 +80,9 @@ export function MonthGrid({
               </span>
               {loading ? null : dayMeetings.length > 0 ? (
                 <span className="flex flex-col gap-0.5">
-                  {dayMeetings.slice(0, 2).map((m) => {
-                    const attention = meetingNeedsAttention(m);
-                    const bg = attention
-                      ? 'var(--color-amber-100)'
-                      : m.isInternal
-                        ? 'var(--color-slate-100)'
-                        : 'var(--color-blue-100)';
-                    const fg = attention
-                      ? 'var(--color-amber-600)'
-                      : m.isInternal
-                        ? 'var(--color-slate-600)'
-                        : 'var(--color-blue-700)';
-                    return (
-                      <span
-                        key={m.id}
-                        className="truncate rounded px-1"
-                        style={{ ...TYPE.label, backgroundColor: bg, color: fg }}
-                      >
-                        {localTime(m.dateTime)} {meetingGridLabel(m)}
-                      </span>
-                    );
-                  })}
+                  {dayMeetings.slice(0, 2).map((m) => (
+                    <MeetingPill key={m.id} meeting={m} />
+                  ))}
                   {dayMeetings.length > 2 ? (
                     <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
                       +{dayMeetings.length - 2} more

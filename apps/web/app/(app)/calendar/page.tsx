@@ -12,9 +12,16 @@ import { Card } from '@/components/ui/Card';
 import { PageContainer } from '@/components/ui/PageContainer';
 import { ErrorState } from '@/components/ui/StateViews';
 
-import { buildMonthGrid, localDayKey } from './lib/calendar-dates';
+import {
+  buildMonthGrid,
+  buildWeekGrid,
+  localDayKey,
+  shiftDayKey,
+  weekRangeLabel,
+} from './lib/calendar-dates';
 import type { ManualJoinStateResponse, MeetingsResponse } from './types';
 import { MonthGrid } from './components/MonthGrid';
+import { WeekView } from './components/WeekView';
 import { DayDetail } from './components/DayDetail';
 import { ConnectionPanel } from './components/ConnectionPanel';
 import { AmbiguousSection } from './components/AmbiguousSection';
@@ -48,6 +55,7 @@ export default function CalendarPage(): React.JSX.Element {
   const [viewYear, setViewYear] = useState<number>(nowY ?? 2026);
   const [viewMonth, setViewMonth] = useState<number>((nowM ?? 1) - 1);
   const [selectedDay, setSelectedDay] = useState<string>(nowKey);
+  const [view, setView] = useState<'month' | 'week'>('month');
 
   const [meetings, setMeetings] = useState<readonly CalendarMeeting[] | null>(null);
   const [meetingsError, setMeetingsError] = useState<string | null>(null);
@@ -81,15 +89,19 @@ export default function CalendarPage(): React.JSX.Element {
   const [memberFilter, setMemberFilter] = useState<string>('');
   const [seenMembers, setSeenMembers] = useState<Map<string, CalendarPerson>>(() => new Map());
 
-  const grid = useMemo(() => buildMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
+  const monthGrid = useMemo(() => buildMonthGrid(viewYear, viewMonth), [viewYear, viewMonth]);
+  // Week view is anchored on the selected day (the week that contains it).
+  const weekGrid = useMemo(() => buildWeekGrid(selectedDay), [selectedDay]);
+  // Same fetch, different window: month grid span vs. the 7-day week.
+  const range = view === 'week' ? weekGrid : monthGrid;
 
-  // Meetings for the visible grid — refetched on month change or after an edit.
+  // Meetings for the visible range — refetched on range change or after an edit.
   useEffect(() => {
     let active = true;
     setMeetings(null);
     setMeetingsError(null);
     apiClient
-      .get<MeetingsResponse>(`/api/calendar?from=${grid.fromIso}&to=${grid.toIso}`)
+      .get<MeetingsResponse>(`/api/calendar?from=${range.fromIso}&to=${range.toIso}`)
       .then((data) => {
         if (active) setMeetings(data.meetings);
       })
@@ -99,7 +111,7 @@ export default function CalendarPage(): React.JSX.Element {
     return (): void => {
       active = false;
     };
-  }, [grid.fromIso, grid.toIso, reloadToken]);
+  }, [range.fromIso, range.toIso, reloadToken]);
 
   // Accumulate the set of GA people seen across visited months for the filter.
   useEffect(() => {
@@ -152,6 +164,10 @@ export default function CalendarPage(): React.JSX.Element {
     month: 'long',
     year: 'numeric',
   }).format(new Date(Date.UTC(viewYear, viewMonth, 1)));
+  const headerLabel =
+    view === 'week'
+      ? weekRangeLabel(weekGrid.cells[0]?.key ?? selectedDay, weekGrid.cells[6]?.key ?? selectedDay)
+      : monthLabel;
 
   const goToMonth = useCallback((delta: number): void => {
     setViewMonth((prevMonth) => {
@@ -161,6 +177,26 @@ export default function CalendarPage(): React.JSX.Element {
       return nextMonth;
     });
   }, []);
+
+  // Week nav shifts the selected day by whole weeks; keep the month state in sync
+  // so toggling back to Month lands on the same period.
+  const goToWeek = useCallback((delta: number): void => {
+    setSelectedDay((prev) => {
+      const next = shiftDayKey(prev, delta * 7);
+      const [y, mo] = next.split('-').map(Number);
+      if (y !== undefined && mo !== undefined) {
+        setViewYear(y);
+        setViewMonth(mo - 1);
+      }
+      return next;
+    });
+  }, []);
+
+  const goToday = useCallback((): void => {
+    setViewYear(nowY ?? 2026);
+    setViewMonth((nowM ?? 1) - 1);
+    setSelectedDay(nowKey);
+  }, [nowKey, nowY, nowM]);
 
   // Navigate the whole view (month + selected day) to a given day key — used by
   // the "needs a client" pointer to jump to the earliest such meeting's day.
@@ -236,34 +272,43 @@ export default function CalendarPage(): React.JSX.Element {
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Card>
-            <div className="mb-4 flex items-center justify-between">
-              <h2 style={TYPE.sectionHeader}>{monthLabel}</h2>
-              <div className="flex items-center gap-1">
-                <IconNavButton label="Previous month" onClick={(): void => goToMonth(-1)}>
-                  <ChevronLeft size={18} aria-hidden="true" />
-                </IconNavButton>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={(): void => {
-                    setViewYear(nowY ?? 2026);
-                    setViewMonth((nowM ?? 1) - 1);
-                    setSelectedDay(nowKey);
-                  }}
-                >
-                  Today
-                </Button>
-                <IconNavButton label="Next month" onClick={(): void => goToMonth(1)}>
-                  <ChevronRight size={18} aria-hidden="true" />
-                </IconNavButton>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 style={TYPE.sectionHeader}>{headerLabel}</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <ViewToggle view={view} onChange={setView} />
+                <div className="flex items-center gap-1">
+                  <IconNavButton
+                    label={view === 'week' ? 'Previous week' : 'Previous month'}
+                    onClick={(): void => (view === 'week' ? goToWeek(-1) : goToMonth(-1))}
+                  >
+                    <ChevronLeft size={18} aria-hidden="true" />
+                  </IconNavButton>
+                  <Button variant="secondary" size="sm" onClick={goToday}>
+                    Today
+                  </Button>
+                  <IconNavButton
+                    label={view === 'week' ? 'Next week' : 'Next month'}
+                    onClick={(): void => (view === 'week' ? goToWeek(1) : goToMonth(1))}
+                  >
+                    <ChevronRight size={18} aria-hidden="true" />
+                  </IconNavButton>
+                </div>
               </div>
             </div>
 
             {meetingsError !== null ? (
               <ErrorState title="Couldn’t load the calendar" description={meetingsError} />
+            ) : view === 'week' ? (
+              <WeekView
+                cells={weekGrid.cells}
+                meetingsByDay={meetingsByDay}
+                selectedDay={selectedDay}
+                onSelect={setSelectedDay}
+                loading={meetings === null}
+              />
             ) : (
               <MonthGrid
-                grid={grid}
+                grid={monthGrid}
                 meetingsByDay={meetingsByDay}
                 selectedDay={selectedDay}
                 onSelect={setSelectedDay}
@@ -289,6 +334,42 @@ export default function CalendarPage(): React.JSX.Element {
       {isAdmin ? <AmbiguousSection onJump={jumpToDay} /> : null}
       <CadenceSection />
     </PageContainer>
+  );
+}
+
+/** Month / Week segmented toggle (same tablist styling as the Clients party tabs). */
+function ViewToggle({
+  view,
+  onChange,
+}: {
+  readonly view: 'month' | 'week';
+  readonly onChange: (v: 'month' | 'week') => void;
+}): React.JSX.Element {
+  return (
+    <div className="flex items-center gap-1" role="tablist" aria-label="Calendar view">
+      {(['month', 'week'] as const).map((v) => {
+        const active = view === v;
+        return (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={(): void => onChange(v)}
+            className="rounded-lg border px-3 py-1.5 capitalize transition-colors"
+            style={{
+              borderColor: active ? 'var(--color-blue-500)' : 'var(--border-subtle)',
+              backgroundColor: active ? 'var(--color-blue-100)' : '#ffffff',
+              color: active ? 'var(--color-blue-700)' : 'var(--text-secondary)',
+              ...TYPE.bodyStrong,
+              cursor: 'pointer',
+            }}
+          >
+            {v}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

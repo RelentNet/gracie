@@ -69,3 +69,55 @@ export function buildMonthGrid(
   const toIso = new Date(Date.UTC(year, month, 1 - firstWeekday + 42, 0)).toISOString();
   return { cells, fromIso, toIso };
 }
+
+/** Shift a viewer-local day key (YYYY-MM-DD) by N calendar days. */
+export function shiftDayKey(dayKey: string, days: number): string {
+  const [y, m, d] = dayKey.split('-').map(Number);
+  const anchor = new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, (d ?? 1) + days, 16));
+  return localDayKey(anchor.toISOString());
+}
+
+/** Build the 7-day (Sun-start) week grid for the week containing `dayKey`. */
+export function buildWeekGrid(dayKey: string): {
+  cells: GridCell[];
+  fromIso: string;
+  toIso: string;
+} {
+  const todayKey = localDayKey(new Date().toISOString());
+  const [y, m, d] = dayKey.split('-').map(Number);
+  const yy = y ?? 1970;
+  const mm = (m ?? 1) - 1;
+  const dd = d ?? 1;
+  const weekday = new Date(Date.UTC(yy, mm, dd, 16)).getUTCDay(); // 0=Sun
+  const cells: GridCell[] = [];
+  for (let i = 0; i < 7; i += 1) {
+    const key = localDayKey(new Date(Date.UTC(yy, mm, dd - weekday + i, 16)).toISOString());
+    const [, cm, cd] = key.split('-').map(Number);
+    cells.push({ key, dayOfMonth: cd ?? 1, inMonth: (cm ?? 1) - 1 === mm, isToday: key === todayKey });
+  }
+  const fromIso = new Date(Date.UTC(yy, mm, dd - weekday, 0)).toISOString();
+  const toIso = new Date(Date.UTC(yy, mm, dd - weekday + 7, 0)).toISOString();
+  return { cells, fromIso, toIso };
+}
+
+/** Compact label for a week spanning two day keys (e.g. "Aug 3 – 9, 2026"). */
+export function weekRangeLabel(firstKey: string, lastKey: string): string {
+  const at = (k: string): Date => {
+    const [y, m, d] = k.split('-').map(Number);
+    return new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1, 16));
+  };
+  const a = at(firstKey);
+  const b = at(lastKey);
+  const md = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' });
+  const mdy = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  if (a.getUTCFullYear() !== b.getUTCFullYear()) return `${mdy.format(a)} – ${mdy.format(b)}`;
+  if (a.getUTCMonth() === b.getUTCMonth()) {
+    return `${md.format(a)} – ${b.getUTCDate()}, ${b.getUTCFullYear()}`;
+  }
+  return `${md.format(a)} – ${mdy.format(b)}`;
+}
