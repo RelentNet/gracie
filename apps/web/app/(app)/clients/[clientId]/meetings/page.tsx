@@ -10,6 +10,7 @@ import { getClientMeetings } from '@/lib/data/client-detail';
 import { listAssignableUsers } from '@/lib/data/users';
 import { formatEasternDateTime } from '@/lib/format';
 import { deriveOccurrenceState, splitClientMeetings } from '@/lib/meeting-occurrence';
+import { getSessionUser } from '@/lib/session-user';
 import { TYPE } from '@/lib/typography';
 
 /**
@@ -22,9 +23,11 @@ import { TYPE } from '@/lib/typography';
 function MeetingRow({
   meeting,
   leadName,
+  timeZone,
 }: {
   readonly meeting: Meeting;
   readonly leadName: string | null;
+  readonly timeZone?: string | null;
 }): React.JSX.Element {
   return (
     <Link
@@ -41,7 +44,7 @@ function MeetingRow({
           style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}
         >
           <CalendarClock size={14} aria-hidden="true" />
-          {formatEasternDateTime(meeting.dateTime)}
+          {formatEasternDateTime(meeting.dateTime, timeZone)}
           {leadName !== null ? ` · ${leadName}` : null}
         </span>
       </span>
@@ -58,8 +61,13 @@ export default async function ClientMeetingsPage({
   readonly params: Promise<{ clientId: string }>;
 }): Promise<React.JSX.Element> {
   const { clientId } = await params;
-  const [meetings, users] = await Promise.all([getClientMeetings(clientId), listAssignableUsers()]);
+  const [meetings, users, viewer] = await Promise.all([
+    getClientMeetings(clientId),
+    listAssignableUsers(),
+    getSessionUser().catch(() => null),
+  ]);
   const { upcoming, previous } = splitClientMeetings(meetings);
+  const timeZone = viewer?.timezone;
 
   const nameById = new Map(users.map((u) => [u.id, u.name]));
   const leadNameOf = (m: Meeting): string | null =>
@@ -72,7 +80,7 @@ export default async function ClientMeetingsPage({
         {upcoming.length > 0 ? (
           <div className="flex flex-col gap-2">
             {upcoming.map((m) => (
-              <MeetingRow key={m.id} meeting={m} leadName={leadNameOf(m)} />
+              <MeetingRow key={m.id} meeting={m} leadName={leadNameOf(m)} timeZone={timeZone} />
             ))}
           </div>
         ) : (
@@ -88,7 +96,7 @@ export default async function ClientMeetingsPage({
         {previous.length > 0 ? (
           <div className="flex flex-col gap-2">
             {previous.map((m) => (
-              <MeetingRow key={m.id} meeting={m} leadName={leadNameOf(m)} />
+              <MeetingRow key={m.id} meeting={m} leadName={leadNameOf(m)} timeZone={timeZone} />
             ))}
           </div>
         ) : (

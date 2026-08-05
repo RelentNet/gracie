@@ -376,7 +376,7 @@ export default async function MeetingOccurrencePage({
           style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}
         >
           <CalendarClock size={15} aria-hidden="true" />
-          {formatEasternDateTime(meeting.dateTime)}
+          {formatEasternDateTime(meeting.dateTime, user.timezone)}
           {durationLabel}
           {' · '}
           {client !== null ? (

@@ -15,11 +15,11 @@ import type { DailySyncContent, DailySyncMeeting, Task } from '@gracie/shared';
 
 const ET = 'America/New_York';
 
-/** ET clock label for a meeting start (mirrors the Daily Sync page). */
-function etTime(iso: string): string {
+/** Clock label for a meeting start, in the viewer's profile zone (null → Eastern). */
+function clockTime(iso: string, zone?: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return new Intl.DateTimeFormat('en-US', { timeZone: ET, hour: 'numeric', minute: '2-digit' }).format(d);
+  return new Intl.DateTimeFormat('en-US', { timeZone: zone ?? ET, hour: 'numeric', minute: '2-digit' }).format(d);
 }
 
 /** Compact ET due-date label for a `YYYY-MM-DD` (noon-anchored to dodge the TZ rollback). */
@@ -80,7 +80,13 @@ function DailySyncBanner({ content }: { readonly content: DailySyncContent | nul
 }
 
 /** Tile 1 — today's meetings, each linking to its occurrence page. */
-function TodayMeetingsTile({ meetings }: { readonly meetings: readonly DailySyncMeeting[] }): React.JSX.Element {
+function TodayMeetingsTile({
+  meetings,
+  timeZone,
+}: {
+  readonly meetings: readonly DailySyncMeeting[];
+  readonly timeZone?: string | null;
+}): React.JSX.Element {
   const shown = meetings.slice(0, 6);
   return (
     <Card>
@@ -104,7 +110,7 @@ function TodayMeetingsTile({ meetings }: { readonly meetings: readonly DailySync
                       {m.title}
                     </span>
                     <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-                      {etTime(m.timeIso)} · {who}
+                      {clockTime(m.timeIso, timeZone)} · {who}
                       {m.leadName !== null ? ` · lead ${m.leadName}` : ''}
                     </span>
                   </span>
@@ -254,10 +260,10 @@ export default async function DashboardPage(): Promise<React.JSX.Element> {
       <DailySyncBanner content={content} />
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Daily Command Center</h1>
-        <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>{todayEastern()}</p>
+        <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>{todayEastern(viewer?.timezone)}</p>
       </header>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <TodayMeetingsTile meetings={meetings} />
+        <TodayMeetingsTile meetings={meetings} timeZone={viewer?.timezone} />
         <MyTasksTile tasks={myTasks} />
         <NeedsAttentionTile rows={attention} />
       </div>

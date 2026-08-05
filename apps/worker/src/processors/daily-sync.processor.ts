@@ -137,17 +137,20 @@ interface UserRow {
   readonly name: string;
   readonly email: string;
   readonly deactivated: boolean;
+  /** Profile IANA timezone (null → America/New_York) — the recipient's email clock zone. */
+  readonly timezone: string | null;
 }
 
 /** Load all users once (name map for rendering + active-staff recipient list). */
 async function loadUsers(db: ServerClient): Promise<UserRow[]> {
-  const { data, error } = await db.from('users').select('id, name, email, deactivated_at');
+  const { data, error } = await db.from('users').select('id, name, email, deactivated_at, timezone');
   if (error !== null) throw new Error(`daily-sync: load users: ${error.message}`);
   return (data ?? []).map((u) => ({
     id: u.id,
     name: u.name,
     email: u.email,
     deactivated: u.deactivated_at !== null,
+    timezone: u.timezone,
   }));
 }
 
@@ -630,6 +633,9 @@ export function createDailySyncProcessor(logger: FastifyBaseLogger): Processor<D
             content,
             appUrl,
             template: templateCfg.template,
+            // Clock times render in the recipient's own zone (null → America/New_York);
+            // the syncDateLabel/subject stays the ET business date of the digest.
+            timeZone: staff.timezone,
           });
           const res = await sendTeamEmail(
             { to: [staff.email], subject: email.subject, html: email.html, text: email.text },

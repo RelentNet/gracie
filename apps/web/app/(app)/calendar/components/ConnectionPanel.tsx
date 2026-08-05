@@ -12,6 +12,7 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { SettingToggle } from '@/components/ui/SettingToggle';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 
+import { TimezoneSetting } from './TimezoneSetting';
 import type { ConnectionsResponse } from '../types';
 
 /**
@@ -184,6 +185,7 @@ export function ConnectionPanel({
             label="Auto-join meetings I lead"
             description="When off, the meeting bot won’t auto-join meetings where you’re the lead."
           />
+          <TimezoneSetting />
         </div>
       )}
     </Card>

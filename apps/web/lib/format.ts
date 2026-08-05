@@ -1,66 +1,65 @@
 /**
- * Formatting helpers.
+ * Formatting helpers — timezone policy.
  *
- * Timestamps render in the VIEWER's timezone (`formatDateTime`/`formatDate`
- * pass no `timeZone`, so Intl uses the device's). Every caller is a client
- * component that renders after a client-side fetch, so the device timezone is
- * always the user's — never the server's. The `formatEastern*` variants pin
- * Eastern for ET-anchored business artifacts (the daily sync mirrors the
- * 6:00 AM ET email) and for SERVER components, where the runtime timezone is
- * the container's (UTC), not the viewer's.
+ * Canonical timestamps are always stored UTC/ISO; these helpers only pick the
+ * WALL CLOCK a value is DISPLAYED in:
+ *
+ *   • CLIENT (browser), no explicit zone → the device's local zone. This is the
+ *     app-wide default — "App UI → device-local" (the operator decision). Client
+ *     components keep calling these with no zone argument.
+ *   • SERVER (SSR), no explicit zone → `DEFAULT_TIME_ZONE` (America/New_York),
+ *     the profile fallback — SSR can't read the device. A server component that
+ *     knows the viewer's profile timezone passes it as `zone` (the user's
+ *     `timezone`, itself falling back to America/New_York when unset), so the
+ *     server HTML renders in the viewer's zone.
+ *   • Any caller may pass an explicit IANA `zone` to override.
+ *
+ * The `formatEastern*` names are kept (no repo-wide rename) but no longer pin
+ * Eastern unconditionally — Eastern is now only the SSR/profile fallback.
  */
 
-const EASTERN_TIME_ZONE = 'America/New_York';
+/** The profile-timezone / SSR fallback used when no zone is known. */
+export const DEFAULT_TIME_ZONE = 'America/New_York';
 
-/** Format an ISO timestamp as a date+time string in the viewer's timezone. CLIENT components only. */
-export function formatDateTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date);
+/**
+ * The effective IANA zone to format in:
+ *   - a non-empty explicit `zone` always wins;
+ *   - else, on the client, `undefined` so Intl uses the device's local zone;
+ *   - else (server / no `window`), the profile/SSR fallback `DEFAULT_TIME_ZONE`.
+ * Exported for direct unit testing of the resolution rule.
+ */
+export function resolveTimeZone(zone?: string | null): string | undefined {
+  if (typeof zone === 'string' && zone !== '') return zone;
+  return typeof window === 'undefined' ? DEFAULT_TIME_ZONE : undefined;
 }
 
-/** Format an ISO date/timestamp as a date string in the viewer's timezone. CLIENT components only. */
-export function formatDate(iso: string): string {
+function formatIso(
+  iso: string,
+  zone: string | null | undefined,
+  options: Intl.DateTimeFormatOptions,
+): string {
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-  return new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'long',
-  }).format(date);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-US', { timeZone: resolveTimeZone(zone), ...options }).format(date);
 }
 
-/** Format an ISO timestamp as an Eastern-time date+time string (ET-anchored artifacts / server components). */
-export function formatEasternDateTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: EASTERN_TIME_ZONE,
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date);
+/** Date + time (e.g. "Jul 10, 2026, 9:00 AM"). Device-local on the client; pass the profile zone in server components. */
+export function formatDateTime(iso: string, zone?: string | null): string {
+  return formatIso(iso, zone, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-/** Format an ISO date/timestamp as an Eastern-time date string (ET-anchored artifacts / server components). */
-export function formatEasternDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: EASTERN_TIME_ZONE,
-    dateStyle: 'long',
-  }).format(date);
+/** Long date (e.g. "July 10, 2026"). Device-local on the client; pass the profile zone in server components. */
+export function formatDate(iso: string, zone?: string | null): string {
+  return formatIso(iso, zone, { dateStyle: 'long' });
 }
 
-/** Today's date, long form, Eastern time — used in server-rendered page headers. */
-export function todayEastern(): string {
-  return formatEasternDate(new Date().toISOString());
+/** Back-compat name (server components / ET-anchored artifacts). Identical to {@link formatDateTime}. */
+export const formatEasternDateTime = formatDateTime;
+
+/** Back-compat name (server components / ET-anchored artifacts). Identical to {@link formatDate}. */
+export const formatEasternDate = formatDate;
+
+/** Today's date, long form, in `zone` (server page headers pass the profile zone; falls back to Eastern on the server). */
+export function todayEastern(zone?: string | null): string {
+  return formatDate(new Date().toISOString(), zone);
 }

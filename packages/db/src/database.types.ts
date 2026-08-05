@@ -1622,6 +1622,7 @@ export type Database = {
           logto_id: string
           name: string
           role: Database["public"]["Enums"]["user_role"]
+          timezone: string | null
           updated_at: string
         }
         Insert: {
@@ -1636,6 +1637,7 @@ export type Database = {
           logto_id: string
           name: string
           role?: Database["public"]["Enums"]["user_role"]
+          timezone?: string | null
           updated_at?: string
         }
         Update: {
@@ -1650,6 +1652,7 @@ export type Database = {
           logto_id?: string
           name?: string
           role?: Database["public"]["Enums"]["user_role"]
+          timezone?: string | null
           updated_at?: string
         }
         Relationships: []

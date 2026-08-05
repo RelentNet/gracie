@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { NotificationBell } from '@/components/NotificationBell';
 import { Sidebar } from '@/components/Sidebar';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { TimezoneAutoDefault } from '@/components/TimezoneAutoDefault';
 import { MobileNavToggle } from '@/components/ui/MobileNavToggle';
 import { NavCollapseProvider } from '@/components/ui/nav-collapse';
 import { isLogtoConfigured, logtoConfig, safeGetLogtoContext } from '@/lib/logto';
@@ -32,6 +33,9 @@ export default async function AppLayout({
     // horizontal body scroll at any width. The sidebar is static on `md`+ and an
     // off-canvas drawer below it (both driven by the shared nav-collapse context).
     <NavCollapseProvider>
+      {/* Silently defaults the user's profile timezone from the browser on first
+          load if unset; renders nothing. */}
+      <TimezoneAutoDefault />
       <div className="flex h-dvh overflow-hidden">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
