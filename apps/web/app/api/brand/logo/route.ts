@@ -6,26 +6,49 @@
  *   POST   → admin uploads a new logo (multipart `file`; PNG/JPG/SVG, ≤ 1 MB).
  *   DELETE → admin removes the logo (reset to default).
  *
+ * VARIANTS: `?variant=dark` (GET) or a `variant` form field / query param
+ * (POST/DELETE) targets the OPTIONAL dark-theme logo (`brand_logo_dark_key`);
+ * anything else — including no variant — targets the main logo, unchanged. Each
+ * variant is an independent key + object; the dark one 404s until uploaded, and
+ * the Sidebar falls back to the main logo when it's unset.
+ *
  * SVG SAFETY: an uploaded SVG is served with `image/svg+xml` and rendered ONLY
  * via `<img src>` in the nav — never inlined into the DOM — so the browser loads
  * it in secure static mode (no scripts, no external fetches). `nosniff` + a
  * `sandbox` CSP are belt-and-suspenders; upload is admin-only regardless.
  *
- * The object key lives in the `brand_logo_key` setting; bytes go to MinIO under
- * `branding/logo-<ts>.<ext>` via the same `putObject` path as `/api/upload`.
+ * The object keys live in the `brand_logo_key` / `brand_logo_dark_key` settings;
+ * bytes go to MinIO under `branding/logo[-dark]-<ts>.<ext>` via the same
+ * `putObject` path as `/api/upload`.
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { deleteObject, getObjectStream, putObject } from '@gracie/shared/storage';
 
 import { getRequestUser, isAdmin } from '@/lib/api-auth';
-import { getBrandLogoKey, setBrandLogoKey } from '@/lib/data/branding-settings';
+import {
+  getBrandLogoDarkKey,
+  getBrandLogoKey,
+  setBrandLogoDarkKey,
+  setBrandLogoKey,
+} from '@/lib/data/branding-settings';
 import { getUserIdByLogtoId } from '@/lib/data/users';
 
 // AWS SDK stream + @gracie/db (service-role) need the Node runtime (not edge).
 export const runtime = 'nodejs';
 
 const MAX_BYTES = 1024 * 1024; // 1 MB
+
+/** Logo variant → its data-layer read/write + object-key prefix. */
+const VARIANT_IO = {
+  light: { get: getBrandLogoKey, set: setBrandLogoKey, prefix: 'logo' },
+  dark: { get: getBrandLogoDarkKey, set: setBrandLogoDarkKey, prefix: 'logo-dark' },
+} as const;
+
+/** Map a raw variant string to a known variant; unknown/absent → 'light'. */
+function resolveVariant(raw: string | null | undefined): keyof typeof VARIANT_IO {
+  return raw === 'dark' ? 'dark' : 'light';
+}
 
 /** Allowed upload MIME → stored extension + served content type. */
 const ALLOWED: Readonly<Record<string, { ext: string; type: string }>> = {
@@ -55,10 +78,11 @@ function resolveKind(file: File): { ext: string; type: string } | null {
   return Object.values(ALLOWED).find((a) => a.ext === norm) ?? null;
 }
 
-export async function GET(): Promise<Response> {
+export async function GET(req: NextRequest): Promise<Response> {
   try {
     await getRequestUser(); // any authenticated user — every role renders the nav
-    const key = await getBrandLogoKey();
+    const variant = resolveVariant(req.nextUrl.searchParams.get('variant'));
+    const key = await VARIANT_IO[variant].get();
     if (key === null) return jsonError('not_found', 'No brand logo set', 404);
 
     const ext = key.split('.').pop()?.toLowerCase() ?? '';
@@ -106,13 +130,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return jsonError('bad_request', 'Logo must be a PNG, JPG, or SVG image.', 400);
     }
 
+    const formVariant = form?.get('variant');
+    const io =
+      VARIANT_IO[
+        resolveVariant(typeof formVariant === 'string' ? formVariant : req.nextUrl.searchParams.get('variant'))
+      ];
+
     const bytes = Buffer.from(await file.arrayBuffer());
-    const newKey = `branding/logo-${Date.now()}.${kind.ext}`;
+    const newKey = `branding/${io.prefix}-${Date.now()}.${kind.ext}`;
     await putObject(newKey, bytes, kind.type);
 
-    const oldKey = await getBrandLogoKey();
+    const oldKey = await io.get();
     const byUserId = await getUserIdByLogtoId(user.userId).catch(() => null);
-    await setBrandLogoKey(newKey, byUserId);
+    await io.set(newKey, byUserId);
     // Best-effort cleanup of the replaced object — a leftover object is harmless.
     if (oldKey !== null && oldKey !== newKey) await deleteObject(oldKey).catch(() => {});
 
@@ -122,7 +152,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-export async function DELETE(): Promise<NextResponse> {
+export async function DELETE(req: NextRequest): Promise<NextResponse> {
   let user;
   try {
     user = await getRequestUser();
@@ -132,9 +162,10 @@ export async function DELETE(): Promise<NextResponse> {
   if (!isAdmin(user)) return jsonError('forbidden', 'Admin only', 403);
 
   try {
-    const key = await getBrandLogoKey();
+    const io = VARIANT_IO[resolveVariant(req.nextUrl.searchParams.get('variant'))];
+    const key = await io.get();
     const byUserId = await getUserIdByLogtoId(user.userId).catch(() => null);
-    await setBrandLogoKey('', byUserId);
+    await io.set('', byUserId);
     if (key !== null) await deleteObject(key).catch(() => {}); // best-effort
     return NextResponse.json({ brandLogoKey: null });
   } catch (error) {

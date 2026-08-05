@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 
 import { AuthProvider } from '@/lib/auth';
-import { getBrandLogoKey } from '@/lib/data/branding-settings';
+import { getBrandLogoDarkKey, getBrandLogoKey } from '@/lib/data/branding-settings';
 import { getHealthScoresVisible } from '@/lib/data/scoring-settings';
 import { getCurrentUser } from '@/lib/server-auth';
 
@@ -36,10 +36,11 @@ export default async function RootLayout({
   // A settings-read blip must never 500 the whole app — fail OPEN to visible (the
   // current behavior), matching the missing-value default. A logo-read blip falls
   // back to null → the nav's default text treatment.
-  const [user, healthScoresVisible, brandLogoKey] = await Promise.all([
+  const [user, healthScoresVisible, brandLogoKey, brandLogoDarkKey] = await Promise.all([
     getCurrentUser(),
     getHealthScoresVisible().catch(() => true),
     getBrandLogoKey().catch(() => null),
+    getBrandLogoDarkKey().catch(() => null),
   ]);
   return (
     // `suppressHydrationWarning`: the init script sets `data-theme` on <html>
@@ -56,6 +57,7 @@ export default async function RootLayout({
           initialUser={user}
           healthScoresVisible={healthScoresVisible}
           brandLogoKey={brandLogoKey}
+          brandLogoDarkKey={brandLogoDarkKey}
         >
           {children}
         </AuthProvider>
