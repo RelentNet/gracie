@@ -10,7 +10,7 @@ export default function NotFound(): React.JSX.Element {
         The page you are looking for does not exist or has moved.
       </p>
       <Link
-        href="/dashboard"
+        href="/home"
         className="rounded-lg px-4 py-2"
         style={{
           backgroundColor: 'var(--color-blue-500)',
@@ -19,7 +19,7 @@ export default function NotFound(): React.JSX.Element {
           fontWeight: 600,
         }}
       >
-        Back to Overview
+        Back to Home
       </Link>
     </main>
   );

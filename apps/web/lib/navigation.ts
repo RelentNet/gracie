@@ -1,4 +1,5 @@
 import {
+  Home,
   LayoutDashboard,
   Calendar,
   MessageSquare,
@@ -49,8 +50,12 @@ export interface NavGroup {
 export const NAV_GROUPS: readonly NavGroup[] = [
   {
     items: [
+      // Default landing (/home) — Gracie the assistant with the command-center
+      // tiles alongside. Root + post-login redirects point here.
+      { label: 'Home', href: '/home', Icon: Home },
+      // Standalone Overview — the command-center tiles on their own (full grid).
       { label: 'Overview', href: '/dashboard', Icon: LayoutDashboard },
-      // Assistant (Module 14) — general AI chat, all roles (docs/08 §M14).
+      // Assistant (Module 14) — standalone general AI chat, all roles (docs/08 §M14).
       { label: 'Assistant', href: '/assistant', Icon: MessageSquare },
     ],
   },

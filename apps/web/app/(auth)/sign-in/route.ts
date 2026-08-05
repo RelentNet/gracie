@@ -11,7 +11,7 @@ import { baseUrl, isLogtoConfigured, logtoConfig } from '@/lib/logto';
  */
 export async function GET(request: Request): Promise<Response> {
   if (!isLogtoConfigured()) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    return NextResponse.redirect(new URL('/home', request.url));
   }
   await signIn(logtoConfig, { redirectUri: `${baseUrl}/callback` });
   // signIn() performs the redirect; this is unreachable but satisfies the type.
