@@ -45,6 +45,7 @@ const CLIENT_TABS: readonly ClientTab[] = [
   { label: 'Overview', segment: 'overview' },
   { label: 'Strategy', segment: 'strategy' },
   { label: 'Finance', segment: 'finance', requires: 'finance.view' },
+  { label: 'Meetings', segment: 'meetings' },
   { label: 'Operations', segment: 'operations' },
   { label: 'Notes', segment: 'notes' },
   { label: 'Documents', segment: 'documents' },

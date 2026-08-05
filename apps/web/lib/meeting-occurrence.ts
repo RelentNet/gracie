@@ -140,3 +140,29 @@ export function selectPriorMeetings<T extends { readonly id: string; readonly da
     .sort((a, b) => Date.parse(b.dateTime) - Date.parse(a.dateTime))
     .slice(0, Math.max(0, limit));
 }
+
+export interface ClientMeetingWindow<T> {
+  readonly upcoming: readonly T[];
+  readonly previous: readonly T[];
+}
+
+/**
+ * Split a client's meetings (any order) into the 2 nearest UPCOMING (start >= now,
+ * soonest first) and the 6 most-recent PREVIOUS (start < now, newest first — reuses
+ * `selectPriorMeetings` with an empty id so nothing is excluded) for the client-detail
+ * Meetings tab. Meetings with an unparseable start are dropped from both windows.
+ */
+export function splitClientMeetings<T extends { readonly id: string; readonly dateTime: string }>(
+  meetings: readonly T[],
+  now: Date = new Date(),
+): ClientMeetingWindow<T> {
+  const nowMs = now.getTime();
+  const upcoming = meetings
+    .filter((m) => {
+      const ms = Date.parse(m.dateTime);
+      return !Number.isNaN(ms) && ms >= nowMs;
+    })
+    .sort((a, b) => Date.parse(a.dateTime) - Date.parse(b.dateTime))
+    .slice(0, 2);
+  return { upcoming, previous: selectPriorMeetings(meetings, '', now.toISOString(), 6) };
+}
