@@ -35,15 +35,132 @@ interface SettingsResponse {
 const inputClass = 'w-full rounded-lg border bg-white px-3 py-2';
 const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body } as const;
 
-export function CompanySettingsPanel(): React.JSX.Element {
+/**
+ * One brand-logo upload + preview control, for a single theme variant. Rendered
+ * twice by the panel below — the main (light) logo and the optional dark-theme
+ * variant — so the upload/remove/preview logic lives in one place. Admin-only
+ * (the API enforces it); the nav re-hydrates via `router.refresh()` on change.
+ */
+function LogoField({
+  variant,
+  label,
+  help,
+  initialKey,
+  emptyPreview,
+}: {
+  readonly variant: 'light' | 'dark';
+  readonly label: string;
+  readonly help: string;
+  readonly initialKey: string | null;
+  /** Shown on the preview swatch when this variant is unset. */
+  readonly emptyPreview: React.ReactNode;
+}): React.JSX.Element {
   const router = useRouter();
-  const { brandLogoKey } = useAuth();
-  // Local mirror of the firm brand-logo key for instant preview feedback; the nav
-  // itself re-hydrates from the server on router.refresh() after a change.
-  const [logoKey, setLogoKey] = useState<string | null>(brandLogoKey);
-  const [logoBusy, setLogoBusy] = useState(false);
-  const [logoNote, setLogoNote] = useState<{ text: string; ok: boolean } | null>(null);
+  // Local mirror for instant preview; the nav re-hydrates from the server on refresh.
+  const [logoKey, setLogoKey] = useState<string | null>(initialKey);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const upload = useCallback(
+    (file: File): void => {
+      setNote(null);
+      if (file.size > MAX_LOGO_BYTES) {
+        setNote({ text: 'Logo must be 1 MB or smaller.', ok: false });
+        return;
+      }
+      setBusy(true);
+      const body = new FormData();
+      body.set('file', file);
+      body.set('variant', variant);
+      fetch('/api/brand/logo', { method: 'POST', body })
+        .then(async (res) => {
+          const payload = (await res.json().catch(() => null)) as
+            | { brandLogoKey?: string | null; error?: { message?: string } }
+            | null;
+          if (!res.ok) throw new Error(payload?.error?.message ?? `Upload failed: ${res.status}`);
+          setLogoKey(payload?.brandLogoKey ?? null);
+          setNote({ text: 'Logo updated.', ok: true });
+          router.refresh(); // re-hydrate the nav with the new logo
+        })
+        .catch((e: unknown) => setNote({ text: e instanceof Error ? e.message : 'Upload failed.', ok: false }))
+        .finally(() => {
+          setBusy(false);
+          if (fileInputRef.current !== null) fileInputRef.current.value = '';
+        });
+    },
+    [router, variant],
+  );
+
+  const remove = useCallback((): void => {
+    setBusy(true);
+    setNote(null);
+    apiClient
+      .del(`/api/brand/logo?variant=${variant}`)
+      .then(() => {
+        setLogoKey(null);
+        setNote({ text: 'Reset to the default.', ok: true });
+        router.refresh();
+      })
+      .catch((e: unknown) => setNote({ text: e instanceof Error ? e.message : 'Remove failed.', ok: false }))
+      .finally(() => setBusy(false));
+  }, [router, variant]);
+
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend style={TYPE.bodyStrong}>{label}</legend>
+      <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>{help}</span>
+      <div className="flex flex-wrap items-center gap-4">
+        {/* Live preview on a dark swatch (both variants preview on dark ground). */}
+        <div
+          className="flex h-16 min-w-40 items-center justify-center rounded-lg px-4"
+          style={{ backgroundColor: 'var(--color-navy-900)' }}
+        >
+          {logoKey !== null ? (
+            // Preview mirrors the nav: <img> only. ?v busts cache on replace.
+            <img
+              src={`/api/brand/logo?variant=${variant}&v=${encodeURIComponent(logoKey)}`}
+              alt={`Current ${label.toLowerCase()}`}
+              className="max-w-full object-contain"
+              style={{ height: '2rem', width: 'auto' }}
+            />
+          ) : (
+            emptyPreview
+          )}
+        </div>
+        <div className="flex flex-col gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={ACCEPTED_LOGO}
+            disabled={busy}
+            aria-label={`Choose a ${label.toLowerCase()} image`}
+            onChange={(e): void => {
+              const file = e.target.files?.[0];
+              if (file !== undefined) upload(file);
+            }}
+          />
+          {logoKey !== null ? (
+            <Button variant="secondary" onClick={remove} disabled={busy}>
+              Remove / reset to default
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      {note !== null ? (
+        <span
+          role={note.ok ? undefined : 'alert'}
+          style={{ ...TYPE.secondary, color: note.ok ? 'var(--text-secondary)' : 'var(--color-red-600)' }}
+        >
+          {note.text}
+        </span>
+      ) : null}
+    </fieldset>
+  );
+}
+
+export function CompanySettingsPanel(): React.JSX.Element {
+  const { brandLogoKey, brandLogoDarkKey } = useAuth();
 
   const [floorDomains, setFloorDomains] = useState<readonly string[]>([]);
   const [description, setDescription] = useState('');
@@ -112,108 +229,31 @@ export function CompanySettingsPanel(): React.JSX.Element {
       .finally(() => setSaving(false));
   }, [description, domains, hydrate]);
 
-  const uploadLogo = useCallback(
-    (file: File): void => {
-      setLogoNote(null);
-      if (file.size > MAX_LOGO_BYTES) {
-        setLogoNote({ text: 'Logo must be 1 MB or smaller.', ok: false });
-        return;
-      }
-      setLogoBusy(true);
-      const body = new FormData();
-      body.set('file', file);
-      fetch('/api/brand/logo', { method: 'POST', body })
-        .then(async (res) => {
-          const payload = (await res.json().catch(() => null)) as
-            | { brandLogoKey?: string | null; error?: { message?: string } }
-            | null;
-          if (!res.ok) throw new Error(payload?.error?.message ?? `Upload failed: ${res.status}`);
-          setLogoKey(payload?.brandLogoKey ?? null);
-          setLogoNote({ text: 'Logo updated.', ok: true });
-          router.refresh(); // re-hydrate the nav with the new logo
-        })
-        .catch((e: unknown) => setLogoNote({ text: e instanceof Error ? e.message : 'Upload failed.', ok: false }))
-        .finally(() => {
-          setLogoBusy(false);
-          if (fileInputRef.current !== null) fileInputRef.current.value = '';
-        });
-    },
-    [router],
-  );
-
-  const removeLogo = useCallback((): void => {
-    setLogoBusy(true);
-    setLogoNote(null);
-    apiClient
-      .del('/api/brand/logo')
-      .then(() => {
-        setLogoKey(null);
-        setLogoNote({ text: 'Reset to the default.', ok: true });
-        router.refresh();
-      })
-      .catch((e: unknown) => setLogoNote({ text: e instanceof Error ? e.message : 'Remove failed.', ok: false }))
-      .finally(() => setLogoBusy(false));
-  }, [router]);
-
   if (loadError !== null) return <ErrorState title="Couldn’t load company settings" description={loadError} />;
   if (!loaded) return <LoadingState label="Loading company settings…" />;
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Branding — the configurable nav logo. Its own upload/remove controls
-          (multipart), separate from the description/domains Save button below. */}
-      <fieldset className="flex flex-col gap-2">
-        <legend style={TYPE.bodyStrong}>Brand logo</legend>
-        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-          Brand logo — shown in the top-left of the navigation. PNG, JPG, or SVG, up to 1 MB. Leave it
-          unset to keep the default “GA App” wordmark.
-        </span>
-        <div className="flex flex-wrap items-center gap-4">
-          {/* Live preview on a navy swatch (the nav surface). */}
-          <div
-            className="flex h-16 min-w-40 items-center justify-center rounded-lg px-4"
-            style={{ backgroundColor: 'var(--color-navy-900)' }}
-          >
-            {logoKey !== null ? (
-              // Preview mirrors the nav: <img> only. ?v busts cache on replace.
-              <img
-                src={`/api/brand/logo?v=${encodeURIComponent(logoKey)}`}
-                alt="Current brand logo"
-                className="max-w-full object-contain"
-                style={{ height: '2rem', width: 'auto' }}
-              />
-            ) : (
-              <span style={{ ...TYPE.sectionHeader, color: '#ffffff' }}>GA App</span>
-            )}
-          </div>
-          <div className="flex flex-col gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={ACCEPTED_LOGO}
-              disabled={logoBusy}
-              aria-label="Choose a brand logo image"
-              onChange={(e): void => {
-                const file = e.target.files?.[0];
-                if (file !== undefined) uploadLogo(file);
-              }}
-            />
-            {logoKey !== null ? (
-              <Button variant="secondary" onClick={removeLogo} disabled={logoBusy}>
-                Remove / reset to default
-              </Button>
-            ) : null}
-          </div>
-        </div>
-        {logoNote !== null ? (
-          <span
-            role={logoNote.ok ? undefined : 'alert'}
-            style={{ ...TYPE.secondary, color: logoNote.ok ? 'var(--text-secondary)' : 'var(--color-red-600)' }}
-          >
-            {logoNote.text}
-          </span>
-        ) : null}
-      </fieldset>
+      {/* Branding — the configurable nav logos. Each has its own upload/remove
+          controls (multipart), separate from the description/domains Save below.
+          The dark variant is optional: if left empty the main logo is used in
+          both themes (see LogoField + the Sidebar's theme-conditional render). */}
+      <LogoField
+        variant="light"
+        label="Brand logo"
+        help="Shown in the top-left of the navigation. PNG, JPG, or SVG, up to 1 MB. Leave it unset to keep the default “GA App” wordmark."
+        initialKey={brandLogoKey}
+        emptyPreview={<span style={{ ...TYPE.sectionHeader, color: '#ffffff' }}>GA App</span>}
+      />
+      <LogoField
+        variant="dark"
+        label="Dark mode logo (optional)"
+        help="Shown on dark backgrounds; if left empty, your main logo is used everywhere."
+        initialKey={brandLogoDarkKey}
+        emptyPreview={
+          <span style={{ ...TYPE.secondary, color: 'rgba(255,255,255,0.7)' }}>Main logo used</span>
+        }
+      />
 
       {/* Company description */}
       <label className="flex flex-col gap-1">

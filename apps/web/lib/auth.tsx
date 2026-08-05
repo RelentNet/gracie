@@ -38,6 +38,12 @@ export interface AuthContextValue {
    * and never flashes a broken image. Doubles as the `<img src>` cache-buster.
    */
   readonly brandLogoKey: string | null;
+  /**
+   * MinIO object key of the OPTIONAL dark-theme nav logo, or null when unset.
+   * Hydrated from `settings.brand_logo_dark_key`. When null the Sidebar reuses
+   * `brandLogoKey` in dark mode (unchanged single-logo behavior).
+   */
+  readonly brandLogoDarkKey: string | null;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -47,11 +53,13 @@ export function AuthProvider({
   initialUser = MOCK_USER,
   healthScoresVisible = true,
   brandLogoKey = null,
+  brandLogoDarkKey = null,
 }: {
   readonly children: ReactNode;
   readonly initialUser?: AuthUser;
   readonly healthScoresVisible?: boolean;
   readonly brandLogoKey?: string | null;
+  readonly brandLogoDarkKey?: string | null;
 }): React.JSX.Element {
   const value = useMemo<AuthContextValue>(() => {
     const user = initialUser;
@@ -62,8 +70,9 @@ export function AuthProvider({
       canEdit: (): boolean => user.role === 'admin' || user.role === 'standard',
       healthScoresVisible,
       brandLogoKey,
+      brandLogoDarkKey,
     };
-  }, [initialUser, healthScoresVisible, brandLogoKey]);
+  }, [initialUser, healthScoresVisible, brandLogoKey, brandLogoDarkKey]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
