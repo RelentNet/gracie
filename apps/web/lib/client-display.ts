@@ -13,6 +13,19 @@ import type {
   TaskStatus,
 } from '@gracie/shared';
 
+// --- Client logo -----------------------------------------------------------
+
+/**
+ * Same-origin URL for a client's logo, or null when it has none (→ initials
+ * avatar). The `?v=<key>` busts the cache when the logo is replaced. Rendered
+ * ONLY via `<img>` (ClientAvatar) — never inlined — so an uploaded SVG loads in
+ * the browser's secure static mode.
+ */
+export function clientLogoSrc(clientId: string, logoKey: string | null): string | null {
+  if (logoKey === null || logoKey === '') return null;
+  return `/api/clients/${clientId}/logo?v=${encodeURIComponent(logoKey)}`;
+}
+
 // --- Relationship health ---------------------------------------------------
 
 /** Health-score color band (docs/08 M2): >90 emerald, 70–90 amber, <70 red. */

@@ -11,6 +11,7 @@ import type { Client, Permission } from '@gracie/shared';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
+import { clientLogoSrc } from '@/lib/client-display';
 import { ClientAvatar } from '@/components/ClientAvatar';
 import { Button } from '@/components/ui/Button';
 import { PageContainer } from '@/components/ui/PageContainer';
@@ -105,7 +106,11 @@ export default function ClientDetailLayout({
       ) : (
         <header className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <ClientAvatar initials={client.initials} size="lg" />
+            <ClientAvatar
+              initials={client.initials}
+              size="lg"
+              logoSrc={clientLogoSrc(client.id, client.logoKey)}
+            />
             <div className="flex flex-col gap-0.5">
               <h1 style={TYPE.pageTitle}>{client.name}</h1>
               <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>

@@ -214,6 +214,25 @@ export async function updateClient(
 }
 
 /**
+ * Set (or clear) a client's logo object key (per-client logo, mirrors the brand
+ * logo). Pass `null` to clear. Bumps `updated_at`. Returns the updated client, or
+ * throws `'Unknown client'` on a bad id. Editor-gated at the route; the binary
+ * upload lives on `/api/clients/:id/logo`, not the JSON PATCH.
+ */
+export async function setClientLogoKey(id: string, logoKey: string | null): Promise<Client> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('clients')
+    .update({ logo_key: logoKey, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select('*')
+    .maybeSingle();
+  if (error !== null) throw new Error(`setClientLogoKey: ${error.message}`);
+  if (data === null) throw new Error('Unknown client');
+  return mapClient(data);
+}
+
+/**
  * List an org's registered domains (P4.1), oldest-registered first. These are the
  * `client_domains` rows that match incoming meetings to this org by attendee
  * email domain.

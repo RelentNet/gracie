@@ -32,6 +32,8 @@ export interface Client extends Timestamps {
   readonly relationshipTrend: RelationshipTrend | null;
   readonly lastMeetingAt: ISOTimestamp | null;
   readonly driveFolderUrl: string | null;
+  /** MinIO object key of the client's logo, shown instead of `initials`. Null = none. */
+  readonly logoKey: string | null;
 }
 
 /** `client_aliases` table — calendar fuzzy matching. */

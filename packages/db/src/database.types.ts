@@ -500,6 +500,7 @@ export type Database = {
           id: string
           initials: string
           last_meeting_at: string | null
+          logo_key: string | null
           name: string
           primary_contact: string | null
           primary_contact_email: string | null
@@ -524,6 +525,7 @@ export type Database = {
           id?: string
           initials: string
           last_meeting_at?: string | null
+          logo_key?: string | null
           name: string
           primary_contact?: string | null
           primary_contact_email?: string | null
@@ -548,6 +550,7 @@ export type Database = {
           id?: string
           initials?: string
           last_meeting_at?: string | null
+          logo_key?: string | null
           name?: string
           primary_contact?: string | null
           primary_contact_email?: string | null

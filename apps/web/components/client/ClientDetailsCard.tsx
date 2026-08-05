@@ -1,16 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ExternalLink, Pencil } from 'lucide-react';
 import { CLIENT_CADENCES, CLIENT_TYPES } from '@gracie/shared';
 import type { Client, ClientCadence, ClientType } from '@gracie/shared';
 
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
-import { cadenceLabel } from '@/lib/client-display';
+import { cadenceLabel, clientLogoSrc } from '@/lib/client-display';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
+import { ClientAvatar } from '@/components/ClientAvatar';
 import { FormError, SelectField, TextField } from '@/components/ui/Field';
+
+const MAX_LOGO_BYTES = 1024 * 1024;
+const ACCEPTED_LOGO = 'image/png,image/jpeg,image/svg+xml';
 
 /**
  * Overview → Client Details (P2.1). Read-only facts for viewers; editors get an
@@ -128,6 +132,8 @@ export function ClientDetailsCard({
         }
       />
 
+      <ClientLogoField client={client} editable={editable} onChange={onChange} />
+
       {editing ? (
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -178,6 +184,114 @@ export function ClientDetailsCard({
         </>
       )}
     </Card>
+  );
+}
+
+/**
+ * Client logo — shown instead of the initials avatar (mirrors the firm brand
+ * logo). Editors upload/replace/remove; the multipart upload posts straight to
+ * `/api/clients/:id/logo` (its own action, not the JSON Save below). Viewers just
+ * see the current logo (or nothing). On any change the parent client updates.
+ */
+function ClientLogoField({
+  client,
+  editable,
+  onChange,
+}: {
+  readonly client: Client;
+  readonly editable: boolean;
+  readonly onChange: (client: Client) => void;
+}): React.JSX.Element | null {
+  const [busy, setBusy] = useState<boolean>(false);
+  const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const logoSrc = clientLogoSrc(client.id, client.logoKey);
+
+  // Viewers with no logo set: nothing to show here.
+  if (!editable && logoSrc === null) return null;
+
+  function upload(file: File): void {
+    setNote(null);
+    if (file.size > MAX_LOGO_BYTES) {
+      setNote({ text: 'Logo must be 1 MB or smaller.', ok: false });
+      return;
+    }
+    setBusy(true);
+    const body = new FormData();
+    body.set('file', file);
+    fetch(`/api/clients/${client.id}/logo`, { method: 'POST', body })
+      .then(async (res) => {
+        const payload = (await res.json().catch(() => null)) as
+          | { client?: Client; error?: { message?: string } }
+          | null;
+        if (!res.ok || payload?.client === undefined) {
+          throw new Error(payload?.error?.message ?? 'Upload failed.');
+        }
+        onChange(payload.client);
+        setNote({ text: 'Logo updated.', ok: true });
+      })
+      .catch((e: unknown) => setNote({ text: e instanceof Error ? e.message : 'Upload failed.', ok: false }))
+      .finally(() => {
+        setBusy(false);
+        if (fileInputRef.current !== null) fileInputRef.current.value = '';
+      });
+  }
+
+  function remove(): void {
+    setBusy(true);
+    setNote(null);
+    apiClient
+      .del<{ client: Client }>(`/api/clients/${client.id}/logo`)
+      .then(({ client: updated }) => {
+        onChange(updated);
+        setNote({ text: 'Logo removed — showing initials.', ok: true });
+      })
+      .catch((e: unknown) => setNote({ text: e instanceof Error ? e.message : 'Remove failed.', ok: false }))
+      .finally(() => setBusy(false));
+  }
+
+  return (
+    <fieldset className="mb-4 flex flex-col gap-2 border-b pb-4" style={{ borderColor: 'var(--border-subtle)' }}>
+      <legend style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+        Client logo — shown instead of the initials
+      </legend>
+      <div className="flex flex-wrap items-center gap-4">
+        {/* Live preview: the logo if set, else the initials avatar it replaces. */}
+        <ClientAvatar initials={client.initials} size="lg" logoSrc={logoSrc} />
+        {editable ? (
+          <div className="flex flex-col gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_LOGO}
+              disabled={busy}
+              aria-label="Choose a client logo image"
+              onChange={(e): void => {
+                const file = e.target.files?.[0];
+                if (file !== undefined) upload(file);
+              }}
+            />
+            {logoSrc !== null ? (
+              <Button variant="secondary" disabled={busy} onClick={remove}>
+                Remove logo
+              </Button>
+            ) : null}
+            <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+              PNG, JPG, or SVG, up to 1 MB. Leave unset to keep the initials.
+            </span>
+          </div>
+        ) : null}
+      </div>
+      {note !== null ? (
+        <span
+          role={note.ok ? undefined : 'alert'}
+          style={{ ...TYPE.secondary, color: note.ok ? 'var(--text-secondary)' : 'var(--color-red-600)' }}
+        >
+          {note.text}
+        </span>
+      ) : null}
+    </fieldset>
   );
 }
 
