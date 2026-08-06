@@ -11,7 +11,8 @@
     "./constants": "./src/constants/index.ts",
     "./storage": "./src/storage/index.ts",
     "./extract": "./src/extract/index.ts",
-    "./recall": "./src/recall/index.ts"
+    "./recall": "./src/recall/index.ts",
+    "./tasks": "./src/tasks/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

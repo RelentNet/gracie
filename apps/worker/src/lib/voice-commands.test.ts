@@ -65,6 +65,41 @@ test('parseVoiceCommand: leave wins when both a leave and a pause verb appear', 
   assert.deepEqual(parseVoiceCommand('hey gracie stop recording and leave'), { kind: 'leave' });
 });
 
+// ── parseVoiceCommand: action item ──────────────────────────────────────────
+
+test('parseVoiceCommand: action item captures the dictated text (raw casing preserved)', () => {
+  assert.deepEqual(parseVoiceCommand('Hey Gracie AI, action item: send the Q3 proposal to Sarah'), {
+    kind: 'action_item',
+    text: 'send the Q3 proposal to Sarah',
+  });
+  assert.deepEqual(parseVoiceCommand('gracie action items follow up with Philips next week'), {
+    kind: 'action_item',
+    text: 'follow up with Philips next week',
+  });
+});
+
+test('parseVoiceCommand: action item wins over control verbs inside its text', () => {
+  assert.deepEqual(parseVoiceCommand('hey gracie, action item: leave time to review the pause clause'), {
+    kind: 'action_item',
+    text: 'leave time to review the pause clause',
+  });
+});
+
+test('parseVoiceCommand: action item with no text → null (never an empty task)', () => {
+  assert.equal(parseVoiceCommand('hey gracie action item'), null);
+  assert.equal(parseVoiceCommand('gracie ai, action item:'), null);
+});
+
+test('parseVoiceCommand: action item still needs the wake phrase', () => {
+  assert.equal(parseVoiceCommand('action item: send the report'), null);
+});
+
+test('parseVoiceCommand: action item text is length-capped', () => {
+  const cmd = parseVoiceCommand(`hey gracie action item ${'x'.repeat(1000)}`);
+  assert.equal(cmd?.kind, 'action_item');
+  assert.ok(cmd?.kind === 'action_item' && cmd.text.length <= 400);
+});
+
 // ── parseVoiceCommand: misses + near-misses ─────────────────────────────────
 
 test('parseVoiceCommand: no wake phrase → null', () => {
