@@ -31,8 +31,11 @@ const TYPE_LABELS: Readonly<Record<ClientType, string>> = {
   lead: 'Lead',
   partner: 'Partner',
   internal: 'Internal',
+  unassigned: 'Unassigned',
 };
-const TYPE_OPTIONS = CLIENT_TYPES.filter((t) => t !== 'internal').map((t) => ({
+// `internal` + `unassigned` are system-managed and never manually settable; editing an
+// unassigned placeholder's type to a real one is how you promote it to a real client.
+const TYPE_OPTIONS = CLIENT_TYPES.filter((t) => t !== 'internal' && t !== 'unassigned').map((t) => ({
   value: t,
   label: TYPE_LABELS[t],
 }));
