@@ -236,10 +236,11 @@ function RecordingCard({
     );
   }
 
+  // Only describe the happy path here. Once the video is gone (server saw no URL, or the
+  // signed URL 404s in the browser), MeetingRecording shows the "expired" notice itself —
+  // one source of truth so the two paths never contradict each other.
   const description =
-    videoUrl !== null
-      ? 'Play the meeting and click any line to jump to that moment.'
-      : 'The video has expired, but the shared screens and transcript are kept permanently.';
+    videoUrl !== null ? 'Play the meeting and click any line to jump to that moment.' : undefined;
 
   return (
     <Card>
