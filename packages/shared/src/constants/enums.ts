@@ -13,9 +13,13 @@ export type ClientCadence = (typeof CLIENT_CADENCES)[number];
  * `type` distinguishes real clients from the funnel + the internal workspace.
  * "Promote a lead → client" is just flipping this value. Only `client` rows
  * appear on client-only surfaces (roster, cadence, ambiguous-assign picker);
- * `internal` is the single Grace & Associates workspace org.
+ * `internal` is the single Grace & Associates workspace org. `unassigned` is a
+ * DOMAIN-NAMED placeholder org auto-created by the worker to home the generated
+ * docs of a recorded meeting that has no matched client (name = the attendees'
+ * email domain) so they're visible under Clients → "Unassigned"; kept off the real
+ * roster and out of the manual create/link pickers.
  */
-export const CLIENT_TYPES = ['client', 'prospect', 'lead', 'partner', 'internal'] as const;
+export const CLIENT_TYPES = ['client', 'prospect', 'lead', 'partner', 'internal', 'unassigned'] as const;
 export type ClientType = (typeof CLIENT_TYPES)[number];
 
 export const FEE_TIERS = ['low', 'mid', 'high'] as const; // admin-only data

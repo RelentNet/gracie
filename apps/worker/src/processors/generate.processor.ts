@@ -31,7 +31,13 @@ import {
 import type { Database, ServerClient } from '@gracie/db';
 import {
   EMBEDDING_DIMENSIONS,
+  deriveInitialsFromName,
+  deriveOrgNameFromDomain,
+  emailDomain,
+  isFreeEmailDomain,
+  parseInternalDomains,
   resolveGenerationPrompts,
+  type ExternalAttendee,
   type ExtractedTask,
   type GeneratedDocType,
   type GenerationJobPayload,
@@ -304,6 +310,95 @@ async function captureWithoutClient(
     { meetingId },
     'generate: no client yet — transcript captured, doc generation deferred until a client is linked',
   );
+}
+
+/**
+ * Pick the org domain to file an unlinked meeting's docs under: the most-common
+ * external-attendee domain that is NEITHER a GA-internal domain NOR a public
+ * free-email provider (those can't identify a single org). Ties break
+ * alphabetically so re-runs of the SAME meeting resolve the SAME domain
+ * (idempotent). Returns null when no such domain exists → the caller falls back to
+ * the #87 hold. Pure + exported for the unit test.
+ */
+export function pickUnlinkedDomain(
+  externalAttendees: ReadonlyArray<{ readonly email?: string | null; readonly domain?: string | null }>,
+  internalDomains: ReadonlySet<string>,
+): string | null {
+  const counts = new Map<string, number>();
+  for (const attendee of externalAttendees) {
+    const domain =
+      typeof attendee.domain === 'string' && attendee.domain.trim() !== ''
+        ? attendee.domain.trim().toLowerCase()
+        : emailDomain(attendee.email);
+    if (domain === null) continue;
+    if (internalDomains.has(domain) || isFreeEmailDomain(domain)) continue;
+    counts.set(domain, (counts.get(domain) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort(
+    (a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0),
+  );
+  return ranked[0]?.[0] ?? null;
+}
+
+/**
+ * Find (or create) the lightweight, DOMAIN-NAMED placeholder org that homes an
+ * unlinked meeting's docs so they're visible (Documents browser + Clients →
+ * "Unassigned"). Keyed by `type='unassigned'` + `name = domain`; deliberately NOT
+ * registered in `client_domains`, so the domain stays "unknown" and the operator's
+ * "create a real client from this domain" flow (+ the ambiguous-meetings prompt)
+ * keep firing. Promoting a placeholder to a real client is just editing its type.
+ *
+ * ponytail: idempotent via select-first, no unique index (a partial index
+ *   `where type='unassigned'` can't reference the enum value in the same migration
+ *   that adds it — see 0018). Two generate jobs racing on a brand-new domain could
+ *   create a duplicate placeholder — rare and cosmetic-only; add the partial index
+ *   in a follow-up migration if it ever actually happens.
+ */
+async function findOrCreateDomainClient(db: ServerClient, domain: string): Promise<string> {
+  const existing = await db
+    .from('clients')
+    .select('id')
+    .eq('type', 'unassigned')
+    .eq('name', domain)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (existing.error !== null) throw new Error(`generate: find domain org: ${existing.error.message}`);
+  const found = existing.data?.[0]?.id;
+  if (found !== undefined) return found;
+
+  const created = await db
+    .from('clients')
+    .insert({
+      name: domain,
+      initials: deriveInitialsFromName(deriveOrgNameFromDomain(domain)),
+      type: 'unassigned',
+    })
+    .select('id')
+    .single();
+  if (created.error !== null) throw new Error(`generate: create domain org: ${created.error.message}`);
+  return created.data.id;
+}
+
+/**
+ * For a client-less meeting, resolve the domain-named placeholder org to file its
+ * docs under, or null when no org domain can be derived (no external attendees, or
+ * only internal/free-email domains) → the caller falls back to the #87 hold.
+ */
+async function resolveUnlinkedDomainClient(
+  db: ServerClient,
+  meeting: MeetingRow,
+  log: FastifyBaseLogger,
+): Promise<string | null> {
+  const attendees = Array.isArray(meeting.external_attendees)
+    ? (meeting.external_attendees as ReadonlyArray<Partial<ExternalAttendee>>)
+    : [];
+  if (attendees.length === 0) return null;
+  const internalDomains = parseInternalDomains(await getSettingString(db, 'internal_email_domains'));
+  const domain = pickUnlinkedDomain(attendees, internalDomains);
+  if (domain === null) return null;
+  const clientId = await findOrCreateDomainClient(db, domain);
+  log.info({ meetingId: meeting.id, domain, clientId }, 'generate: unlinked meeting filed under domain-named area');
+  return clientId;
 }
 
 /** Read a global setting string (e.g. ga_company_description), or null if unset. */
@@ -890,14 +985,24 @@ export function createGenerateProcessor(
         meeting,
         meeting.client_id === null ? await getInternalOrgId(db) : null,
       );
+      // No real client: file the docs under a DOMAIN-NAMED placeholder org so they're
+      // visible/findable (Documents browser + Clients → "Unassigned") instead of held
+      // invisibly. If no org domain can be derived, fall back to the #87 hold.
+      let clientId: string;
       if (resolution.kind === 'skip') {
-        await captureWithoutClient(db, job.data, meetingId, log);
-        return { meetingId, documents: 0, tasks: 0, status: 'skipped' };
-      }
-      const clientId = resolution.clientId;
-      if (resolution.kind === 'assign') {
+        const domainClientId = await resolveUnlinkedDomainClient(db, meeting, log);
+        if (domainClientId === null) {
+          await captureWithoutClient(db, job.data, meetingId, log);
+          return { meetingId, documents: 0, tasks: 0, status: 'skipped' };
+        }
+        clientId = domainClientId;
         await patchMeeting(db, meetingId, { client_id: clientId });
-        log.info({ meetingId, clientId }, 'generate: internal meeting had no client — homed to the GA org');
+      } else {
+        clientId = resolution.clientId;
+        if (resolution.kind === 'assign') {
+          await patchMeeting(db, meetingId, { client_id: clientId });
+          log.info({ meetingId, clientId }, 'generate: internal meeting had no client — homed to the GA org');
+        }
       }
 
       const { data: client, error: clientError } = await db
