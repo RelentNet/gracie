@@ -19,10 +19,18 @@
 export type VoiceCommand =
   | { readonly kind: 'leave' }
   /** Pause recording for `minutes` (clamped 1–60), then auto-resume. */
-  | { readonly kind: 'pause'; readonly minutes: number };
+  | { readonly kind: 'pause'; readonly minutes: number }
+  /**
+   * Capture a dictated "action item" as a high-confidence task. `text` is the RAW
+   * (un-normalized) item so the task keeps natural casing/punctuation.
+   */
+  | { readonly kind: 'action_item'; readonly text: string };
 
 /** Default pause length when a duration isn't spoken. */
 export const DEFAULT_PAUSE_MINUTES = 5;
+
+/** Dictated action items are capped so a runaway transcript can't flood the task list. */
+export const MAX_ACTION_ITEM_CHARS = 400;
 /** Pause length is clamped to this range (a spoken "for N minutes" outside it is coerced). */
 export const MIN_PAUSE_MINUTES = 1;
 export const MAX_PAUSE_MINUTES = 60;
@@ -94,20 +102,39 @@ function parsePauseMinutes(rest: string): number {
 }
 
 /**
+ * The RAW text after an "action item" cue, kept un-normalized so the task description
+ * keeps natural casing/punctuation. Case-insensitive; tolerates a trailing colon/dash and
+ * length-caps the result. Returns null when nothing follows the cue.
+ */
+function extractActionItem(text: string): string | null {
+  const captured = text.match(/\baction items?\b[\s:\-–—]*(.+)$/is)?.[1]?.trim();
+  // Need real content — a bare cue ("action item:") backtracks to a lone separator.
+  if (captured === undefined || !/[a-z0-9]/i.test(captured)) return null;
+  return captured.length > MAX_ACTION_ITEM_CHARS ? captured.slice(0, MAX_ACTION_ITEM_CHARS).trim() : captured;
+}
+
+/**
  * Parse one utterance into a {@link VoiceCommand}, or null when it isn't one.
- * Requires a wake phrase AND a command verb in the text that follows it, so plain
+ * Requires a wake phrase AND a command in the text that follows it, so plain
  * conversation (or the firm name alone) never matches. PURE; unit-tested.
  *
- *   leave  — "leave" / "leave the meeting" / "leave the call" / "you can leave now"
- *   pause  — "pause" / "stop listening" / "stop recording" [+ "for N minutes"]
+ *   action_item — "action item: <text>" (captures the dictated task text)
+ *   leave       — "leave" / "leave the meeting" / "leave the call" / "you can leave now"
+ *   pause       — "pause" / "stop listening" / "stop recording" [+ "for N minutes"]
  *
- * "leave" wins if both appear (leaving also stops the recording — the safer read).
+ * action_item is matched FIRST so a dictated item whose text happens to contain
+ * "leave"/"pause" is stored as content, never executed as a control command. Among the
+ * controls, "leave" wins if both appear (leaving also stops the recording — the safer read).
  */
 export function parseVoiceCommand(text: string): VoiceCommand | null {
   if (typeof text !== 'string' || text.trim() === '') return null;
   const rest = afterWakePhrase(normalize(text));
   if (rest === null || rest === '') return null;
 
+  if (/^action items?\b/.test(rest)) {
+    const item = extractActionItem(text);
+    return item === null ? null : { kind: 'action_item', text: item };
+  }
   if (/\bleave\b/.test(rest)) return { kind: 'leave' };
   if (/\bpause\b/.test(rest) || /\bstop\s+(?:listening|recording|the recording)\b/.test(rest)) {
     return { kind: 'pause', minutes: parsePauseMinutes(rest) };

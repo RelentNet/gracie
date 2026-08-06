@@ -24,12 +24,15 @@ import {
   type AITool,
   type Client,
   type ClientType,
+  type TaskStatus,
 } from '@gracie/shared';
 
 import { redactClientForCaller, type CompanyCaller } from './access.js';
 import { retrieveCompanyDocuments, retrieveKnowledgeBase } from './retrieval.js';
 import { getClient, listClients } from '../../data/clients.js';
 import { listTasks } from '../../data/tasks.js';
+import { filterTasks, type TaskFilter } from '../../data/tasks-report.js';
+import { listAssignableUsers, type AssignableUser } from '../../data/users.js';
 import { getKnowledgeBaseDocument, listKnowledgeBaseDocuments } from '../../data/knowledge-base.js';
 
 /** Max characters of KB document text returned by `get_knowledge_base_document`. */
@@ -68,10 +71,6 @@ function toolError(message: string): string {
   return JSON.stringify({ error: message });
 }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 // --- shared helpers -----------------------------------------------------------
 
 const ALL_PARTY_TYPES: readonly ClientType[] = CLIENT_TYPES;
@@ -97,6 +96,28 @@ async function resolveClient(nameOrId: string): Promise<Client | null> {
     all.find((c) => c.initials.toLowerCase() === lower) ??
     null
   );
+}
+
+/**
+ * Resolve a `list_tasks` owner argument to a user id, `null` (unassigned), or
+ * `'unresolved'` (name matched nobody). "me"/"mine" is the ASKING user — the fixed
+ * turn identity, never a name from the model.
+ */
+function resolveOwnerFilter(
+  ownerArg: string,
+  callerId: string,
+  users: readonly AssignableUser[],
+): string | null | 'unresolved' {
+  const lower = ownerArg.trim().toLowerCase();
+  if (lower === 'me' || lower === 'mine' || lower === 'myself') return callerId;
+  if (lower === 'unassigned' || lower === 'none' || lower === 'nobody') return null;
+  if (UUID_RE.test(ownerArg)) return users.some((u) => u.id === ownerArg) ? ownerArg : 'unresolved';
+  const found =
+    users.find((u) => u.name.toLowerCase() === lower) ??
+    users.find((u) => u.name.toLowerCase().includes(lower)) ??
+    users.find((u) => u.initials.toLowerCase() === lower) ??
+    null;
+  return found === null ? 'unresolved' : found.id;
 }
 
 /** Compact, redaction-safe client view. `feeTier`/`contractValue` are already null for non-admins. */
@@ -204,47 +225,75 @@ const TOOLS: Record<string, CompanyTool> = {
     spec: {
       name: 'list_tasks',
       description:
-        'List (non-archived) tasks, optionally filtered by status, overdue-only, or client. Each row has description, status, due date, days overdue, priority, and client name.',
+        'List (non-archived) tasks, filterable by status, overdue-only, client, owner, and recency. ' +
+        'The Task Board is admin-only, so this is how most staff reach tasks — answer them DIRECTLY ' +
+        'from the rows (a short summary of what is open / done / overdue), never a link to the board. ' +
+        'Any staff may ask about any client (all-see-all). Each row has description, status, due date, ' +
+        'days overdue, priority, client name, and owner name.',
       parameters: {
         type: 'object',
         properties: {
           status: { type: 'string', enum: [...TASK_STATUSES], description: 'Filter by task status.' },
           overdue: { type: 'boolean', description: 'If true, only tasks past their due date and not complete.' },
           clientNameOrId: { type: 'string', description: 'Restrict to one client (name or id).' },
+          owner: {
+            type: 'string',
+            description:
+              'Restrict by owner: "me" for the asking user, a teammate\'s name, or "unassigned" for tasks with no owner.',
+          },
+          recentDays: {
+            type: 'number',
+            description: 'Only tasks created or updated within the last N days (e.g. 7 for "last week").',
+          },
           limit: { type: 'number', description: 'Max rows (default 50, max 200).' },
         },
         additionalProperties: false,
       },
     },
-    run: async (args) => {
+    run: async (args, caller) => {
       const limit = clampLimit(asNumber(args.limit), 50, 200);
       const status = asString(args.status);
       const overdue = asBool(args.overdue);
       const clientFilter = asString(args.clientNameOrId);
-      const today = todayIso();
+      const ownerArg = asString(args.owner);
+      const recentDays = asNumber(args.recentDays);
+      const now = new Date();
+      const today = now.toISOString().slice(0, 10);
 
-      let tasks = await listTasks();
+      const filter: { -readonly [K in keyof TaskFilter]: TaskFilter[K] } = {};
       if (status !== undefined && (TASK_STATUSES as readonly string[]).includes(status)) {
-        tasks = tasks.filter((t) => t.status === status);
+        filter.status = status as TaskStatus;
       }
-      if (overdue === true) {
-        tasks = tasks.filter(
-          (t) => t.dueDate !== null && t.dueDate < today && t.status !== 'complete',
-        );
-      }
+      if (overdue === true) filter.overdue = true;
+      if (recentDays !== undefined && recentDays > 0) filter.recentDays = Math.floor(recentDays);
+
       if (clientFilter !== undefined) {
         const target = await resolveClient(clientFilter);
-        tasks = target === null ? [] : tasks.filter((t) => t.clientId === target.id);
+        if (target === null) return ok({ count: 0, tasks: [], note: `No client matched "${clientFilter}".` });
+        filter.clientId = target.id;
       }
 
-      const nameMap = await loadClientNameMap();
+      // Assignable users do double duty: resolving the `owner` filter and labelling rows.
+      const users = await listAssignableUsers();
+      if (ownerArg !== undefined) {
+        const resolved = resolveOwnerFilter(ownerArg, caller.userId, users);
+        if (resolved === 'unresolved') {
+          return ok({ count: 0, tasks: [], note: `No teammate matched "${ownerArg}".` });
+        }
+        filter.ownerUserId = resolved;
+      }
+
+      const tasks = filterTasks(await listTasks(), filter, now);
+      const clientMap = await loadClientNameMap();
+      const ownerMap = new Map(users.map((u) => [u.id, u.name]));
       const rows = tasks.slice(0, limit).map((t) => ({
         description: t.description,
         status: t.status,
         dueDate: t.dueDate,
         daysOverdue: daysOverdue(t.dueDate, t.status, today),
         priority: t.hasPriorityFlag,
-        client: nameMap.get(t.clientId) ?? null,
+        client: clientMap.get(t.clientId) ?? null,
+        owner: t.ownerUserId === null ? null : (ownerMap.get(t.ownerUserId) ?? null),
       }));
       return ok({ count: tasks.length, tasks: rows });
     },

@@ -7,6 +7,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Download,
   Pencil,
   RotateCcw,
   Trash2,
@@ -306,15 +307,32 @@ function TaskBoard(): React.JSX.Element {
 
   return (
     <PageContainer className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h1 style={TYPE.pageTitle}>Task Board</h1>
-        <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          {tasks === null
-            ? 'Loading tasks…'
-            : `${filteredTasks.length} task${filteredTasks.length === 1 ? '' : 's'} across all clients${
-                overdueCount > 0 ? ` · ${overdueCount} overdue` : ''
-              }.`}
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h1 style={TYPE.pageTitle}>Task Board</h1>
+          <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+            {tasks === null
+              ? 'Loading tasks…'
+              : `${filteredTasks.length} task${filteredTasks.length === 1 ? '' : 's'} across all clients${
+                  overdueCount > 0 ? ` · ${overdueCount} overdue` : ''
+                }.`}
+          </p>
+        </div>
+        <a
+          href={showArchived ? '/api/tasks/export?archived=true' : '/api/tasks/export'}
+          download
+          className="inline-flex items-center justify-center gap-2 rounded-lg border shadow-sm transition-shadow hover:shadow-md"
+          style={{
+            backgroundColor: 'var(--color-white)',
+            color: 'var(--text-primary)',
+            borderColor: 'var(--border-subtle)',
+            padding: '0.5rem 0.875rem',
+            ...TYPE.bodyStrong,
+          }}
+        >
+          <Download size={16} aria-hidden="true" />
+          Download CSV
+        </a>
       </header>
 
       {actionError !== null ? (

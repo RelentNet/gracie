@@ -31,6 +31,7 @@ import {
   buildMeetingStorageKeys,
   decideAttendanceGate,
   decideMeetingMediaRow,
+  pickUnlinkedDomain,
   resolveMeetingClientId,
   type AttendanceParticipant,
 } from './generate.processor.js';
@@ -421,4 +422,53 @@ test('decideAttendanceGate: internal match by display name (email absent) still 
     isInternalBy(new Set(['daniel velez'])),
   );
   assert.deepEqual(gate, { ok: true });
+});
+
+// --- pickUnlinkedDomain (domain-named area for unlinked meetings) --------------------
+const INTERNAL = new Set(['graceandassociates.com']);
+
+test('pickUnlinkedDomain: picks the most-common external org domain', () => {
+  const domain = pickUnlinkedDomain(
+    [
+      { email: 'a@aperimeter.com', domain: 'aperimeter.com' },
+      { email: 'b@aperimeter.com', domain: 'aperimeter.com' },
+      { email: 'c@other.io', domain: 'other.io' },
+    ],
+    INTERNAL,
+  );
+  assert.equal(domain, 'aperimeter.com');
+});
+
+test('pickUnlinkedDomain: skips internal + free-email domains', () => {
+  assert.equal(
+    pickUnlinkedDomain(
+      [
+        { email: 'staff@graceandassociates.com', domain: 'graceandassociates.com' },
+        { email: 'someone@gmail.com', domain: 'gmail.com' },
+      ],
+      INTERNAL,
+    ),
+    null,
+  );
+});
+
+test('pickUnlinkedDomain: ties break alphabetically → deterministic across re-runs', () => {
+  const one = pickUnlinkedDomain(
+    [{ domain: 'zeta.com' }, { domain: 'alpha.com' }],
+    INTERNAL,
+  );
+  const two = pickUnlinkedDomain(
+    [{ domain: 'alpha.com' }, { domain: 'zeta.com' }],
+    INTERNAL,
+  );
+  assert.equal(one, 'alpha.com');
+  assert.equal(two, 'alpha.com');
+});
+
+test('pickUnlinkedDomain: falls back to the email domain when `domain` is missing', () => {
+  assert.equal(pickUnlinkedDomain([{ email: 'x@acme.co' }], INTERNAL), 'acme.co');
+});
+
+test('pickUnlinkedDomain: no derivable org domain → null (caller holds the meeting)', () => {
+  assert.equal(pickUnlinkedDomain([], INTERNAL), null);
 });

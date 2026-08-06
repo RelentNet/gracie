@@ -133,6 +133,27 @@ export const SCREEN_SHARE_RECORDING_CONFIG: Readonly<Record<string, unknown>> = 
 };
 
 /**
+ * Rolling video retention (operator decision): the meeting video is kept for
+ * SIX MONTHS, after which Recall expires the recording media and the transcript +
+ * screen-share stills (feat: screen-share-stills) remain as the permanent record.
+ * Recall bills storage past its free window, so we set a bounded retention rather
+ * than `forever`.
+ */
+export const VIDEO_RETENTION_DAYS = 180;
+
+/**
+ * Recall `recording_config.retention` for every bot (docs: storage-and-playback).
+ * Shape verified against Recall's docs: `{ type: 'timed', hours }` (the other
+ * allowed value is `{ type: 'forever' }`). Recall counts retention in HOURS, so
+ * 180 days → 4320h. Merged into `recording_config` at dispatch as a sibling of
+ * `video_mixed_layout`/`transcript`, so it composes with everything else there.
+ */
+export const RECORDING_RETENTION_CONFIG: Readonly<Record<string, unknown>> = {
+  type: 'timed',
+  hours: VIDEO_RETENTION_DAYS * 24,
+};
+
+/**
  * Map our provider selector to Recall's `recording_config.transcript.provider`
  * wire shape at BOT CREATION (docs: recallai-transcription):
  *   - meeting_captions → `{ meeting_captions: {} }`
@@ -362,11 +383,16 @@ export async function dispatchRecallBot(options: RecallDispatchOptions): Promise
   const body: Record<string, unknown> = {
     meeting_url: options.meetingUrl,
     bot_name: options.botName ?? DEFAULT_BOT_NAME,
-    // Always shape the mixed video for clean screen-share capture (the stills feature),
-    // composed with any transcript/realtime config. Even the record-only `recallai`
-    // path (recordingConfig === null) now carries this — the async transcript is still
-    // requested post-recording via `recording.done`, unaffected by the video layout.
-    recording_config: { ...SCREEN_SHARE_RECORDING_CONFIG, ...(recordingConfig ?? {}) },
+    // Always shape the mixed video for clean screen-share capture (the stills feature)
+    // and set the 6-month video retention, composed with any transcript/realtime config.
+    // Even the record-only `recallai` path (recordingConfig === null) carries these — the
+    // async transcript is still requested post-recording via `recording.done`, unaffected
+    // by the video layout or retention.
+    recording_config: {
+      ...SCREEN_SHARE_RECORDING_CONFIG,
+      retention: RECORDING_RETENTION_CONFIG,
+      ...(recordingConfig ?? {}),
+    },
   };
 
   // Static image tile: show it both while recording and before, so the bot always

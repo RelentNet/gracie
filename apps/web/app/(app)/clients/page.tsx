@@ -35,12 +35,18 @@ import { AddClientModal } from './AddClientModal';
  */
 type CadenceFilter = ClientCadence | 'all';
 
-/** Party-type tabs — real clients plus the funnel (P4.1). Internal is separate. */
+/**
+ * Party-type tabs — real clients plus the funnel (P4.1). Internal is separate.
+ * "Unassigned" surfaces the domain-named placeholder orgs the worker auto-creates for
+ * recorded meetings that had no matched client, so their notes are reachable without
+ * cluttering the real roster.
+ */
 const PARTY_TABS: ReadonlyArray<{ readonly value: ClientType; readonly label: string }> = [
   { value: 'client', label: 'Clients' },
   { value: 'prospect', label: 'Prospects' },
   { value: 'lead', label: 'Leads' },
   { value: 'partner', label: 'Partners' },
+  { value: 'unassigned', label: 'Unassigned' },
 ];
 
 interface ClientsResponse {
@@ -112,10 +118,12 @@ export default function ClientsPage(): React.JSX.Element {
           <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
             {clients === null
               ? 'Loading relationships…'
-              : `${clients.length} ${PARTY_TABS.find((t) => t.value === party)?.label.toLowerCase() ?? 'clients'}.`}
+              : party === 'unassigned'
+                ? `${clients.length} domain ${clients.length === 1 ? 'area' : 'areas'} — recorded meetings with no matched client. Open one to read its notes, or link the meeting to a real client.`
+                : `${clients.length} ${PARTY_TABS.find((t) => t.value === party)?.label.toLowerCase() ?? 'clients'}.`}
           </p>
         </div>
-        {isAdmin ? (
+        {isAdmin && party !== 'unassigned' ? (
           <Button icon={<Plus size={16} aria-hidden="true" />} onClick={(): void => setShowAdd(true)}>
             Add {party === 'client' ? 'client' : 'party'}
           </Button>

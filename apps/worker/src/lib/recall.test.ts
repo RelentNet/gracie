@@ -19,6 +19,8 @@ import { activeSegmentIndex, formatClock, groupStillsBySegment } from '@gracie/s
 import type { TranscriptSegment } from '@gracie/shared';
 import {
   DEFAULT_TRANSCRIPT_PROVIDER,
+  RECORDING_RETENTION_CONFIG,
+  VIDEO_RETENTION_DAYS,
   buildTranscriptProviderConfig,
   classifyRecordings,
   dispatchRecallBot,
@@ -85,11 +87,13 @@ test('dispatchRecallBot sends NO transcript config for the default (recallai) pr
     },
   );
   // Record-only: NO transcript block (an empty one / null provider would 400 at Recall),
-  // but recording_config still carries the screen-share capture layout (stills feature).
+  // but recording_config still carries the screen-share capture layout (stills feature)
+  // AND the 6-month video retention.
   const rc = sent?.recording_config as Record<string, unknown> | undefined;
   assert.equal(rc?.transcript, undefined);
   assert.equal(rc?.video_mixed_layout, 'speaker_view');
   assert.equal(rc?.video_mixed_participant_video_when_screenshare, 'hide');
+  assert.deepEqual(rc?.retention, { type: 'timed', hours: 4320 });
 });
 
 test('dispatchRecallBot honors an explicit provider', async () => {
@@ -104,11 +108,17 @@ test('dispatchRecallBot honors an explicit provider', async () => {
     },
   );
   const recordingConfig = sent?.recording_config as
-    | { transcript?: { provider?: unknown }; video_mixed_layout?: unknown }
+    | { transcript?: { provider?: unknown }; video_mixed_layout?: unknown; retention?: unknown }
     | undefined;
   assert.deepEqual(recordingConfig?.transcript?.provider, { meeting_captions: {} });
-  // The screen-share layout composes with the transcript config.
+  // The screen-share layout AND the 6-month retention compose with the transcript config.
   assert.equal(recordingConfig?.video_mixed_layout, 'speaker_view');
+  assert.deepEqual(recordingConfig?.retention, { type: 'timed', hours: 4320 });
+});
+
+test('RECORDING_RETENTION_CONFIG is 180 days expressed in hours (Recall counts hours)', () => {
+  assert.equal(VIDEO_RETENTION_DAYS, 180);
+  assert.deepEqual(RECORDING_RETENTION_CONFIG, { type: 'timed', hours: 180 * 24 });
 });
 
 test('flattenRecallTranscript flattens the current download shape', () => {

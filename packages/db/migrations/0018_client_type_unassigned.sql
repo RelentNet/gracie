@@ -1,0 +1,24 @@
+-- 0018_client_type_unassigned.sql — unassigned meetings → domain-named documents area.
+--
+-- When a recorded meeting has no matched client, its generated docs used to be held
+-- (invisible — no client in the roster). This adds an `unassigned` party type so the
+-- worker can file such docs under a lightweight, DOMAIN-NAMED placeholder org (name =
+-- the attendees' email domain, e.g. `aperimeter.com`). The docs then surface in the
+-- Documents browser (the owner-org tree is type-agnostic) and via the new Clients →
+-- "Unassigned" filter, without cluttering the real client roster.
+--
+-- These placeholders are NOT registered in `client_domains` on purpose: the domain
+-- stays "unknown" so the operator's existing "create a real client from this domain"
+-- flow (and the ambiguous-meetings prompt) keep working. Promoting a placeholder to
+-- a real client is just editing its type in the client details.
+--
+-- Idempotent find-or-create of the per-domain placeholder is done in app code
+-- (select-first on type='unassigned' + name), so there is NO unique index here: a
+-- partial index `where type='unassigned'` cannot reference the enum value in the same
+-- transaction that adds it (see 0009's note on ADD VALUE). The select-first check
+-- makes a duplicate placeholder a rare, cosmetic-only race.
+--
+-- Additive + idempotent. Applies to the SHARED dev+prod Supabase — apply ONLY in
+-- coordination with the orchestrator. The value is NOT used elsewhere in this
+-- migration, so ADD VALUE is safe inside the tx (mirrors 0009's notification_type).
+alter type client_type add value if not exists 'unassigned';

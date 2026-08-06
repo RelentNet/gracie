@@ -23,6 +23,7 @@ const ORG_TYPE_STYLE: Readonly<Record<ClientType, { bg: string; fg: string; labe
   lead: { bg: 'var(--color-slate-100)', fg: 'var(--color-slate-600)', label: 'Lead' },
   partner: { bg: 'var(--color-emerald-100)', fg: 'var(--color-emerald-600)', label: 'Partner' },
   internal: { bg: 'var(--color-slate-100)', fg: 'var(--color-navy-800)', label: 'Internal' },
+  unassigned: { bg: 'var(--color-slate-100)', fg: 'var(--color-slate-600)', label: 'Unassigned' },
 };
 
 /** A colored pill for an org's party type. */
