@@ -24,7 +24,9 @@ import {
   dispatchRecallBot,
   downloadRecallTranscript,
   ensureAsyncTranscript,
+  extractParticipants,
   fetchRecallMedia,
+  fetchRecallParticipants,
   fetchRecallRecordingUrls,
   fetchRecallTranscript,
   findVideoMixedUrl,
@@ -468,6 +470,54 @@ test('downloadRecallTranscript: non-OK response → null (best-effort)', async (
       assert.equal(await downloadRecallTranscript('https://recall.s3/gone'), null);
     },
   );
+});
+
+// --- Ghost-meeting attendance gate: observed participants -------------------------
+
+test('extractParticipants: reads name/isHost/email (direct or extra_data), blanks → null', () => {
+  const bot = {
+    meeting_participants: [
+      { id: 1, name: 'Daniel Velez', is_host: true, email: 'daniel@graceandassociates.com' },
+      { id: 2, name: 'Client Rep', is_host: false, extra_data: { email: 'rep@intersystems.com' } },
+      { id: 3, name: '  ', is_host: false }, // blank name, no email
+    ],
+  };
+  assert.deepEqual(extractParticipants(bot), [
+    { name: 'Daniel Velez', isHost: true, email: 'daniel@graceandassociates.com' },
+    { name: 'Client Rep', isHost: false, email: 'rep@intersystems.com' },
+    { name: null, isHost: false, email: null },
+  ]);
+});
+
+test('extractParticipants: no meeting_participants field → [] (the empty-room ghost)', () => {
+  assert.deepEqual(extractParticipants({}), []);
+  assert.deepEqual(extractParticipants({ meeting_participants: null }), []);
+  assert.deepEqual(extractParticipants({ meeting_participants: [] }), []);
+});
+
+test('fetchRecallParticipants: one bot-retrieve → shaped participants', async () => {
+  const botPayload = {
+    meeting_participants: [
+      { id: 1, name: 'A', is_host: true, email: 'a@x.com' },
+      { id: 2, name: 'B', is_host: false },
+    ],
+  };
+  const seen: string[] = [];
+  await withFetch(
+    (url) => {
+      seen.push(url);
+      return Promise.resolve(jsonResponse(botPayload));
+    },
+    async () => {
+      const people = await fetchRecallParticipants('bot_1', { apiKey: 'k', region: 'us-west-2' });
+      assert.deepEqual(people, [
+        { name: 'A', isHost: true, email: 'a@x.com' },
+        { name: 'B', isHost: false, email: null },
+      ]);
+    },
+  );
+  assert.equal(seen.length, 1);
+  assert.ok(seen[0]?.includes('/bot/bot_1/'));
 });
 
 // --- Phase C player: seek/highlight sync helpers ----------------------------------

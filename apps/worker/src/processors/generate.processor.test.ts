@@ -29,8 +29,10 @@ import { stripReproducedScaffold } from '../lib/generate.js';
 import {
   buildDigest,
   buildMeetingStorageKeys,
+  decideAttendanceGate,
   decideMeetingMediaRow,
   resolveMeetingClientId,
+  type AttendanceParticipant,
 } from './generate.processor.js';
 
 const SLUG = 'grace-associates';
@@ -341,4 +343,82 @@ test('resolveMeetingClientId: an existing client always wins, even on an interna
   // Never overwrite an already-assigned client with the GA org.
   const r = resolveMeetingClientId({ client_id: 'client-7', is_internal: true }, 'ga-org');
   assert.deepEqual(r, { kind: 'proceed', clientId: 'client-7' });
+});
+
+/*
+ * Ghost-meeting attendance gate (decideAttendanceGate). A recording is a REAL meeting
+ * only when ≥2 DISTINCT people joined AND ≥1 is internal/GA. The caller has already
+ * excluded Gracie's own bot. `isInternal` here is a simple set-membership stand-in for
+ * the processor's domain/staff-name predicate.
+ */
+const isInternalBy = (internal: ReadonlySet<string>) => (p: AttendanceParticipant): boolean =>
+  (p.email !== null && internal.has(p.email.toLowerCase())) ||
+  (p.name !== null && internal.has(p.name.toLowerCase()));
+
+test('decideAttendanceGate: ≥2 people with ≥1 internal → ok (a real meeting)', () => {
+  const gate = decideAttendanceGate(
+    [
+      { name: 'Daniel Velez', email: 'daniel@graceandassociates.com' },
+      { name: 'Client Rep', email: 'rep@intersystems.com' },
+    ],
+    isInternalBy(new Set(['daniel@graceandassociates.com'])),
+  );
+  assert.deepEqual(gate, { ok: true });
+});
+
+test('decideAttendanceGate: fewer than two people → too_few_participants (the empty-room ghost)', () => {
+  assert.deepEqual(decideAttendanceGate([], isInternalBy(new Set())), {
+    ok: false,
+    reason: 'too_few_participants',
+  });
+  assert.deepEqual(
+    decideAttendanceGate([{ name: 'Daniel Velez', email: null }], isInternalBy(new Set(['daniel velez']))),
+    { ok: false, reason: 'too_few_participants' },
+  );
+});
+
+test('decideAttendanceGate: a rejoin (same person listed twice) counts once → too_few', () => {
+  const gate = decideAttendanceGate(
+    [
+      { name: 'Daniel Velez', email: 'daniel@graceandassociates.com' },
+      { name: 'Daniel Velez', email: 'daniel@graceandassociates.com' },
+    ],
+    isInternalBy(new Set(['daniel@graceandassociates.com'])),
+  );
+  assert.deepEqual(gate, { ok: false, reason: 'too_few_participants' });
+});
+
+test('decideAttendanceGate: two people but NO GA attendee → no_internal_participant', () => {
+  const gate = decideAttendanceGate(
+    [
+      { name: 'Rep One', email: 'a@intersystems.com' },
+      { name: 'Rep Two', email: 'b@intersystems.com' },
+    ],
+    isInternalBy(new Set(['daniel@graceandassociates.com'])),
+  );
+  assert.deepEqual(gate, { ok: false, reason: 'no_internal_participant' });
+});
+
+test('decideAttendanceGate: blank participants are dropped before counting', () => {
+  const gate = decideAttendanceGate(
+    [
+      { name: '  ', email: '' },
+      { name: 'Daniel Velez', email: 'daniel@graceandassociates.com' },
+      { name: null, email: null },
+    ],
+    isInternalBy(new Set(['daniel@graceandassociates.com'])),
+  );
+  // Only one real person remains → too few.
+  assert.deepEqual(gate, { ok: false, reason: 'too_few_participants' });
+});
+
+test('decideAttendanceGate: internal match by display name (email absent) still passes', () => {
+  const gate = decideAttendanceGate(
+    [
+      { name: 'Daniel Velez', email: null },
+      { name: 'Client Rep', email: null },
+    ],
+    isInternalBy(new Set(['daniel velez'])),
+  );
+  assert.deepEqual(gate, { ok: true });
 });

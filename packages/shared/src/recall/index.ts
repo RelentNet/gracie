@@ -403,6 +403,20 @@ export async function dispatchRecallBot(options: RecallDispatchOptions): Promise
 
 /** Bot-retrieve response subset we depend on (docs: bot_retrieve). */
 interface RecallBotRecordings {
+  /**
+   * People the bot actually OBSERVED in the call (docs: bot_retrieve
+   * `meeting_participants`) — the real join list, distinct from the calendar
+   * invitees. Shapes vary by platform and `email` is frequently absent (Teams/Zoom
+   * guests expose only a display name). Read by {@link extractParticipants} for the
+   * ghost-meeting attendance gate.
+   */
+  readonly meeting_participants?: ReadonlyArray<{
+    readonly id?: number | string | null;
+    readonly name?: string | null;
+    readonly is_host?: boolean | null;
+    readonly email?: string | null;
+    readonly extra_data?: { readonly email?: string | null } | null;
+  }> | null;
   readonly recordings?: ReadonlyArray<{
     readonly id?: string | null;
     readonly started_at?: string | null;
@@ -586,6 +600,50 @@ export async function downloadRecallTranscript(
   if (!res.ok) return null;
   const raw = (await res.json()) as unknown;
   return { segments: shapeTranscriptSegments(raw), text: flattenRecallTranscript(raw) };
+}
+
+/**
+ * One participant Recall observed actually IN the meeting (bot-retrieve
+ * `meeting_participants`) — the join list, not the calendar invitees. Used by the
+ * ghost-meeting attendance gate. `email` is often null (many platforms expose only
+ * a display name), so callers must tolerate matching on `name` alone.
+ */
+export interface RecallParticipant {
+  readonly name: string | null;
+  readonly isHost: boolean;
+  readonly email: string | null;
+}
+
+/**
+ * Pull the observed participants out of a bot-retrieve payload into a stable shape,
+ * tolerating the email living directly on the participant or under `extra_data`.
+ * Pure; exported for unit tests.
+ */
+export function extractParticipants(bot: RecallBotRecordings): RecallParticipant[] {
+  return (bot.meeting_participants ?? []).map((p) => {
+    const direct = typeof p?.email === 'string' && p.email.trim() !== '' ? p.email.trim() : null;
+    const nested =
+      typeof p?.extra_data?.email === 'string' && p.extra_data.email.trim() !== ''
+        ? p.extra_data.email.trim()
+        : null;
+    return {
+      name: typeof p?.name === 'string' && p.name.trim() !== '' ? p.name.trim() : null,
+      isHost: p?.is_host === true,
+      email: direct ?? nested,
+    };
+  });
+}
+
+/**
+ * Fetch the participants a Recall bot observed in the meeting (one bot-retrieve).
+ * Mirrors {@link fetchRecallMedia}: only the bot fetch itself throws (a transient
+ * error surfaces to the caller); an absent/empty participant list yields `[]`.
+ */
+export async function fetchRecallParticipants(
+  botJobId: string,
+  options: RecallFetchOptions,
+): Promise<RecallParticipant[]> {
+  return extractParticipants(await retrieveBot(botJobId, options));
 }
 
 /**

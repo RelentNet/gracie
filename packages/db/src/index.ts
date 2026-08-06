@@ -26,6 +26,9 @@ export {
   getBotConfig,
   setBotConfig,
   setBotAvatar,
+  getBotIgnoreList,
+  addBotIgnoreEntry,
+  removeBotIgnoreEntry,
   DEFAULT_BOT_NAME,
   DEFAULT_TRANSCRIPT_PROVIDER,
 } from './bot-config.js';
@@ -34,6 +37,7 @@ export type {
   BotAutoLeave,
   BotConfigPatch,
   BotTranscriptProvider,
+  IgnoreEntry,
 } from './bot-config.js';
 export { encryptSecret, decryptSecret } from './crypto.js';
 export { getActiveProvider, getEmbedder } from './ai.js';

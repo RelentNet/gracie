@@ -14,7 +14,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { callKey, createCallCoverage, decideDispatch } from './bot-dispatch.processor.js';
+import {
+  callKey,
+  createCallCoverage,
+  decideDispatch,
+  isMeetingIgnored,
+} from './bot-dispatch.processor.js';
 
 const TEAMS_LINK = 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_abc%40thread.v2/0';
 
@@ -88,18 +93,28 @@ test('same start time on different links never dedupes', () => {
  * left are: lead opted out, no join link, or a call another bot already covers.
  * Crucially, an UNLINKED meeting (no client, not internal) now DISPATCHES.
  */
-const NO_OPTOUT = { optedOut: new Set<string>(), coverage: createCallCoverage() };
+const NO_OPTOUT = {
+  optedOut: new Set<string>(),
+  ignoredKeys: new Set<string>(),
+  coverage: createCallCoverage(),
+};
 const AT = '2026-07-21 14:00:00+00';
 
 test('decideDispatch: an UNLINKED meeting (no client, not internal) dispatches', () => {
   // The whole point of the change — no eligibility field is even consulted.
   assert.equal(
-    decideDispatch({ video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: 'lead-1' }, NO_OPTOUT),
+    decideDispatch(
+      { video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: 'lead-1', series_id: null },
+      NO_OPTOUT,
+    ),
     'dispatch',
   );
   // …and with no lead at all.
   assert.equal(
-    decideDispatch({ video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: null }, NO_OPTOUT),
+    decideDispatch(
+      { video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: null, series_id: null },
+      NO_OPTOUT,
+    ),
     'dispatch',
   );
 });
@@ -107,8 +122,8 @@ test('decideDispatch: an UNLINKED meeting (no client, not internal) dispatches',
 test('decideDispatch: a lead who opted out of auto-join is skipped', () => {
   assert.equal(
     decideDispatch(
-      { video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: 'lead-1' },
-      { optedOut: new Set(['lead-1']), coverage: createCallCoverage() },
+      { video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: 'lead-1', series_id: null },
+      { optedOut: new Set(['lead-1']), ignoredKeys: new Set(), coverage: createCallCoverage() },
     ),
     'skip_opted_out',
   );
@@ -116,7 +131,10 @@ test('decideDispatch: a lead who opted out of auto-join is skipped', () => {
 
 test('decideDispatch: a meeting with no join link is skipped', () => {
   assert.equal(
-    decideDispatch({ video_link: null, date_time: AT, meeting_lead_user_id: null }, NO_OPTOUT),
+    decideDispatch(
+      { video_link: null, date_time: AT, meeting_lead_user_id: null, series_id: null },
+      NO_OPTOUT,
+    ),
     'skip_no_link',
   );
 });
@@ -124,7 +142,10 @@ test('decideDispatch: a meeting with no join link is skipped', () => {
 test('decideDispatch: a call already covered by another bot is skipped as a duplicate', () => {
   const coverage = createCallCoverage([callKey(TEAMS_LINK, AT)]);
   assert.equal(
-    decideDispatch({ video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: null }, { optedOut: new Set(), coverage }),
+    decideDispatch(
+      { video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: null, series_id: null },
+      { optedOut: new Set(), ignoredKeys: new Set(), coverage },
+    ),
     'skip_duplicate',
   );
 });
@@ -134,8 +155,59 @@ test('decideDispatch: opt-out is checked before the join-link and dedupe gates',
   const coverage = createCallCoverage();
   assert.equal(
     decideDispatch(
-      { video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: 'lead-9' },
-      { optedOut: new Set(['lead-9']), coverage },
+      { video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: 'lead-9', series_id: null },
+      { optedOut: new Set(['lead-9']), ignoredKeys: new Set(), coverage },
+    ),
+    'skip_opted_out',
+  );
+});
+
+/*
+ * Ghost-meeting "don't record" ignore list. Staff mark a stale/duplicate recurring
+ * entry to skip; the sweep honours it by series_id (all occurrences) OR join link.
+ */
+
+test('isMeetingIgnored: matches on series_id (every occurrence) or join link, else false', () => {
+  const bySeries = new Set(['series-xyz']);
+  assert.equal(isMeetingIgnored({ series_id: 'series-xyz', video_link: TEAMS_LINK }, bySeries), true);
+  assert.equal(isMeetingIgnored({ series_id: 'other', video_link: TEAMS_LINK }, bySeries), false);
+
+  const byLink = new Set([TEAMS_LINK]);
+  assert.equal(isMeetingIgnored({ series_id: null, video_link: TEAMS_LINK }, byLink), true);
+  assert.equal(isMeetingIgnored({ series_id: null, video_link: 'https://other' }, byLink), false);
+
+  // Empty/absent keys never accidentally match an empty-string list entry.
+  assert.equal(isMeetingIgnored({ series_id: '', video_link: null }, new Set([''])), false);
+  assert.equal(isMeetingIgnored({ series_id: null, video_link: TEAMS_LINK }, new Set()), false);
+});
+
+test('decideDispatch: an ignored series is skipped, and BEFORE the duplicate gate', () => {
+  // Even a call already covered by a bot resolves to skip_ignored (ignore wins).
+  const coverage = createCallCoverage([callKey(TEAMS_LINK, AT)]);
+  assert.equal(
+    decideDispatch(
+      { video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: null, series_id: 'series-ghost' },
+      { optedOut: new Set(), ignoredKeys: new Set(['series-ghost']), coverage },
+    ),
+    'skip_ignored',
+  );
+});
+
+test('decideDispatch: an ignored one-off (no series) is skipped by its join link', () => {
+  assert.equal(
+    decideDispatch(
+      { video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: null, series_id: null },
+      { optedOut: new Set(), ignoredKeys: new Set([TEAMS_LINK]), coverage: createCallCoverage() },
+    ),
+    'skip_ignored',
+  );
+});
+
+test('decideDispatch: opt-out still wins over the ignore list', () => {
+  assert.equal(
+    decideDispatch(
+      { video_link: TEAMS_LINK, date_time: AT, meeting_lead_user_id: 'lead-1', series_id: 'series-ghost' },
+      { optedOut: new Set(['lead-1']), ignoredKeys: new Set(['series-ghost']), coverage: createCallCoverage() },
     ),
     'skip_opted_out',
   );

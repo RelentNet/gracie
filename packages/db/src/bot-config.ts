@@ -197,3 +197,72 @@ export async function setBotAvatar(jpegB64: string | null): Promise<void> {
     .upsert({ key: AVATAR_KEY, value: (jpegB64 ?? '') as unknown as Json }, { onConflict: 'key' });
   if (error !== null) throw new Error(`setBotAvatar: ${error.message}`);
 }
+
+const IGNORE_KEY = 'bot_ignore_list';
+
+/**
+ * One entry on the meeting-bot ignore list: a calendar entry staff have marked
+ * "don't record" so Gracie skips dispatch (the ghost-meeting guard — stale/duplicate
+ * recurring invites that keep sending a bot into a call that never happens).
+ *   - `key`   — the meeting's stable recurring-series id (`meetings.series_id`) when
+ *               it has one (so EVERY occurrence is skipped), else its join link.
+ *   - `label` — the human meeting title, so staff recognise + can undo the entry.
+ * Stored as DATA in a `settings` row (no migration), like `bot_config`.
+ */
+export interface IgnoreEntry {
+  readonly key: string;
+  readonly label: string;
+}
+
+/** Defensively parse the stored `bot_ignore_list` jsonb into typed entries. */
+function parseIgnoreList(raw: Json | undefined): IgnoreEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const out: IgnoreEntry[] = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) continue;
+    const rec = item as Record<string, unknown>;
+    const key = typeof rec.key === 'string' ? rec.key.trim() : '';
+    if (key === '') continue;
+    const label = typeof rec.label === 'string' && rec.label.trim() !== '' ? rec.label.trim() : key;
+    out.push({ key, label });
+  }
+  return out;
+}
+
+/** Read the meeting-bot ignore list (empty when unset). */
+export async function getBotIgnoreList(): Promise<IgnoreEntry[]> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('settings')
+    .select('value')
+    .eq('key', IGNORE_KEY)
+    .maybeSingle();
+  if (error !== null) throw new Error(`getBotIgnoreList: ${error.message}`);
+  return parseIgnoreList(data?.value);
+}
+
+/** Add (or refresh the label of) an ignore entry, keyed by {@link IgnoreEntry.key}. Idempotent. */
+export async function addBotIgnoreEntry(entry: IgnoreEntry): Promise<IgnoreEntry[]> {
+  const key = entry.key.trim();
+  if (key === '') throw new Error('addBotIgnoreEntry: key is required');
+  const label = entry.label.trim() === '' ? key : entry.label.trim();
+  const db = getServerClient();
+  const next = [...(await getBotIgnoreList()).filter((e) => e.key !== key), { key, label }];
+  const { error } = await db
+    .from('settings')
+    .upsert({ key: IGNORE_KEY, value: next as unknown as Json }, { onConflict: 'key' });
+  if (error !== null) throw new Error(`addBotIgnoreEntry: ${error.message}`);
+  return next;
+}
+
+/** Remove an ignore entry by key. No-op when absent. */
+export async function removeBotIgnoreEntry(key: string): Promise<IgnoreEntry[]> {
+  const trimmed = key.trim();
+  const db = getServerClient();
+  const next = (await getBotIgnoreList()).filter((e) => e.key !== trimmed);
+  const { error } = await db
+    .from('settings')
+    .upsert({ key: IGNORE_KEY, value: next as unknown as Json }, { onConflict: 'key' });
+  if (error !== null) throw new Error(`removeBotIgnoreEntry: ${error.message}`);
+  return next;
+}

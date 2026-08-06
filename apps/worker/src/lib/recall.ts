@@ -12,12 +12,14 @@ export {
   createRecallAsyncTranscript,
   dispatchRecallBot,
   fetchRecallMedia,
+  fetchRecallParticipants,
   fetchRecallTranscript,
 } from '@gracie/shared/recall';
 export type {
   RecallDispatchOptions,
   RecallFetchOptions,
   RecallMedia,
+  RecallParticipant,
   RecallRecoverability,
   RecallRecoveryState,
   RecallTranscriptProvider,
