@@ -21,8 +21,13 @@ import { TYPE } from '@/lib/typography';
  *
  * SCREEN-SHARE STILLS are pinned inline in the transcript at the moment they appeared
  * (the line closest at/before each still's timestamp), and click-to-enlarge. Stills are
- * kept forever, so after the 6-month video expires (`videoUrl === null`) the transcript
- * + stills remain the PERMANENT visual record — the whole point of the feature.
+ * kept forever, so after the 6-month video expires the transcript + stills remain the
+ * PERMANENT visual record — the whole point of the feature.
+ *
+ * EXPIRY is detected two ways and degrades to the same transcript-only layout with an
+ * "expired" notice: server-side (no URL from Recall → `videoUrl === null`), and
+ * client-side (`videoUrl` was a fresh signed URL but 404s in the browser once retention
+ * lapsed — the server can't know without downloading, so the `<video>` `onError` handles it).
  */
 export interface RecordingStill {
   readonly tsSeconds: number;
@@ -80,6 +85,13 @@ export function MeetingRecording({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [enlarged, setEnlarged] = useState<RecordingStill | null>(null);
+  // The video URL is a fresh Recall signed URL resolved server-side, but a recording
+  // whose 6-month retention has lapsed 404s when the browser actually fetches it — the
+  // server can't know that without downloading. Treat a load error the same as no video:
+  // fall back to the transcript + stills (which are kept permanently) instead of showing
+  // a broken <video>.
+  const [videoFailed, setVideoFailed] = useState(false);
+  const videoAvailable = videoUrl !== null && !videoFailed;
 
   // Keep the active line in view as playback moves it.
   useEffect(() => {
@@ -112,6 +124,22 @@ export function MeetingRecording({
   const hasTranscript = segments !== null && segments.length > 0;
   const placed = groupStillsBySegment(segments ?? [], stills);
 
+  // Shown once the video is gone (retention lapsed or its URL 404'd) but the permanent
+  // record — transcript and/or screen-share stills — is still here.
+  const expiredNotice =
+    !videoAvailable && (hasTranscript || stills.length > 0) ? (
+      <p
+        className="rounded-lg border p-3"
+        style={{
+          ...TYPE.secondary,
+          color: 'var(--text-secondary)',
+          borderColor: 'var(--border-subtle)',
+        }}
+      >
+        This recording has expired — the transcript and screen-share stills remain.
+      </p>
+    ) : null;
+
   const transcriptPanel = (
     <div className="relative min-h-0">
       <div
@@ -136,7 +164,7 @@ export function MeetingRecording({
             <ol>
               {segments.map((segment, i) => {
                 const isActive = i === activeIndex;
-                const seekable = videoUrl !== null && segment.start !== null;
+                const seekable = videoAvailable && segment.start !== null;
                 const pinned = placed.bySegment.get(i);
                 return (
                   <li key={i} data-seg={i}>
@@ -181,14 +209,15 @@ export function MeetingRecording({
 
   return (
     <>
-      {videoUrl !== null ? (
+      {videoAvailable ? (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <video
             ref={videoRef}
-            src={videoUrl}
+            src={videoUrl ?? undefined}
             controls
             preload="metadata"
             onTimeUpdate={onTimeUpdate}
+            onError={(): void => setVideoFailed(true)}
             className="w-full rounded-lg border"
             style={{ borderColor: 'var(--border-subtle)', background: '#000', maxHeight: '70vh' }}
           >
@@ -200,8 +229,11 @@ export function MeetingRecording({
           {transcriptPanel}
         </div>
       ) : (
-        // Video expired — stills + transcript stay as the permanent record, full width.
-        transcriptPanel
+        // Video expired / 404'd — stills + transcript stay as the permanent record, full width.
+        <div className="flex flex-col gap-4">
+          {expiredNotice}
+          {transcriptPanel}
+        </div>
       )}
 
       {/* Click-to-enlarge lightbox. Native <dialog> gives Esc-to-close + focus trap;
