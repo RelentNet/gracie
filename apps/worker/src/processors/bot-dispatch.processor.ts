@@ -36,7 +36,7 @@
 import type { Job, Processor } from 'bullmq';
 import type { FastifyBaseLogger } from 'fastify';
 
-import { getBotConfig, getCredential, getServerClient } from '@gracie/db';
+import { getBotConfig, getBotIgnoreList, getCredential, getServerClient } from '@gracie/db';
 import type { ServerClient } from '@gracie/db';
 import { buildRealtimeTranscriptUrl, type BotDispatchJobPayload } from '@gracie/shared';
 
@@ -61,6 +61,8 @@ export interface BotDispatchResult {
   readonly skippedOptOut: number;
   /** Meetings skipped because another bot already covers the same real call. */
   readonly skippedDuplicate: number;
+  /** Meetings skipped because staff put them on the "don't record" ignore list. */
+  readonly skippedIgnored: number;
 }
 
 /**
@@ -81,19 +83,42 @@ export function callKey(videoLink: string, dateTime: string): string {
  * Per-candidate dispatch decision (pure). The sweep no longer filters on client
  * eligibility — every scheduled meeting with a join link records — so the only
  * reasons to skip are: the lead opted out, there's no join link (query-guaranteed,
- * re-checked for safety), or another bot already covers this exact call (dedupe).
+ * re-checked for safety), staff put this entry on the "don't record" ignore list
+ * (the ghost-meeting guard), or another bot already covers this exact call (dedupe).
  * Exported so the test pins the rule without a DB.
  */
-export type DispatchDecision = 'dispatch' | 'skip_opted_out' | 'skip_no_link' | 'skip_duplicate';
+export type DispatchDecision =
+  | 'dispatch'
+  | 'skip_opted_out'
+  | 'skip_no_link'
+  | 'skip_ignored'
+  | 'skip_duplicate';
+
+/**
+ * True when staff marked this meeting "don't record" (ghost-meeting ignore list).
+ * Matched on the stable recurring-series id (so every occurrence is skipped) OR the
+ * join link (one-offs / non-Outlook meetings with no series id). Pure; unit-tested.
+ */
+export function isMeetingIgnored(
+  meeting: { readonly series_id: string | null; readonly video_link: string | null },
+  ignoredKeys: ReadonlySet<string>,
+): boolean {
+  if (meeting.series_id !== null && meeting.series_id !== '' && ignoredKeys.has(meeting.series_id)) {
+    return true;
+  }
+  return meeting.video_link !== null && meeting.video_link !== '' && ignoredKeys.has(meeting.video_link);
+}
 
 export function decideDispatch(
   meeting: {
     readonly video_link: string | null;
     readonly date_time: string;
     readonly meeting_lead_user_id: string | null;
+    readonly series_id: string | null;
   },
   ctx: {
     readonly optedOut: ReadonlySet<string>;
+    readonly ignoredKeys: ReadonlySet<string>;
     readonly coverage: { isCovered(videoLink: string, dateTime: string): boolean };
   },
 ): DispatchDecision {
@@ -101,6 +126,10 @@ export function decideDispatch(
     return 'skip_opted_out';
   }
   if (meeting.video_link === null) return 'skip_no_link';
+  // Ignore list BEFORE dedupe: an entry staff told us not to record shouldn't record,
+  // full stop. Left `scheduled` (no cancel write) so turning the toggle back on
+  // restores dispatch on the next sweep — the reversible, self-healing behaviour.
+  if (isMeetingIgnored(meeting, ctx.ignoredKeys)) return 'skip_ignored';
   if (ctx.coverage.isCovered(meeting.video_link, meeting.date_time)) return 'skip_duplicate';
   return 'dispatch';
 }
@@ -151,7 +180,7 @@ export function createBotDispatchProcessor(
     // client-eligibility filter — every such meeting records (operator directive).
     const { data: candidates, error } = await db
       .from('meetings')
-      .select('id, video_link, date_time, meeting_lead_user_id')
+      .select('id, video_link, date_time, meeting_lead_user_id, series_id')
       .eq('bot_dispatched', false)
       .eq('pipeline_status', 'scheduled')
       .not('video_link', 'is', null)
@@ -165,21 +194,25 @@ export function createBotDispatchProcessor(
     // The scan still runs on its own cron, so meetings keep populating for preview.
     if (!(await isBotDispatchEnabled(db))) {
       log.info({ scanned: inWindow.length }, 'bot-dispatch: globally disabled');
-      return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0, skippedDuplicate: 0 };
+      return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0, skippedDuplicate: 0, skippedIgnored: 0 };
     }
 
     if (inWindow.length === 0) {
-      return { scanned: 0, dispatched: 0, skippedOptOut: 0, skippedDuplicate: 0 };
+      return { scanned: 0, dispatched: 0, skippedOptOut: 0, skippedDuplicate: 0, skippedIgnored: 0 };
     }
 
     // Per-user opt-out: leads who set auto_join_meetings = false.
     const optedOut = await loadOptedOutLeads(db);
 
+    // "Don't record" ignore list: series ids / join links staff marked to skip
+    // (the ghost-meeting guard). Keys match either meeting.series_id or video_link.
+    const ignoredKeys = new Set((await getBotIgnoreList()).map((e) => e.key));
+
     // Resolve the Recall key once (stored credential → env fallback).
     const apiKey = await getCredential('recall');
     if (apiKey === null || apiKey === '') {
       log.warn('bot-dispatch: no Recall API key configured (Admin → API Settings) — skipping sweep');
-      return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0, skippedDuplicate: 0 };
+      return { scanned: inWindow.length, dispatched: 0, skippedOptOut: 0, skippedDuplicate: 0, skippedIgnored: 0 };
     }
     const region = process.env.RECALL_REGION;
 
@@ -200,15 +233,27 @@ export function createBotDispatchProcessor(
     let dispatched = 0;
     let skippedOptOut = 0;
     let skippedDuplicate = 0;
+    let skippedIgnored = 0;
 
     for (const meeting of inWindow) {
-      const decision = decideDispatch(meeting, { optedOut, coverage });
+      const decision = decideDispatch(meeting, { optedOut, ignoredKeys, coverage });
       if (decision === 'skip_opted_out') {
         skippedOptOut += 1;
         log.info({ meetingId: meeting.id }, 'bot-dispatch: lead opted out — skipping');
         continue;
       }
       if (decision === 'skip_no_link' || meeting.video_link === null) continue; // query-guaranteed; re-checked for TS
+
+      // "Don't record" ignore list: skip WITHOUT claiming/cancelling so the meeting
+      // stays scheduled — turning the toggle back on restores dispatch next sweep.
+      if (decision === 'skip_ignored') {
+        skippedIgnored += 1;
+        log.info(
+          { meetingId: meeting.id, seriesId: meeting.series_id },
+          'bot-dispatch: on the "don\'t record" ignore list — skipping',
+        );
+        continue;
+      }
 
       // Duplicate invite for a call that already has a bot → skip, and record
       // the reason where the app can show it (never dispatch a second bot even
@@ -276,8 +321,9 @@ export function createBotDispatchProcessor(
       dispatched,
       skippedOptOut,
       skippedDuplicate,
+      skippedIgnored,
     };
-    if (dispatched > 0 || skippedOptOut > 0 || skippedDuplicate > 0) {
+    if (dispatched > 0 || skippedOptOut > 0 || skippedDuplicate > 0 || skippedIgnored > 0) {
       log.info(result, 'bot-dispatch sweep complete');
     }
     return result;

@@ -54,6 +54,13 @@ export interface CalendarMeeting {
   readonly orgs: readonly MeetingOrg[];
   readonly externalAttendees: readonly ExternalAttendee[];
   readonly unknownOrgDomains: readonly string[];
+  /**
+   * True when staff put this meeting on the "don't record" ignore list (the
+   * ghost-meeting guard) — its recurring series (or one-off join link) is skipped by
+   * the bot-dispatch sweep. Drives the day-detail "Don't record / Turn recording on"
+   * toggle.
+   */
+  readonly recordingIgnored: boolean;
 }
 
 /**

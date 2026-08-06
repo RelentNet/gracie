@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useState } from 'react';
-import { AlertTriangle, Building2, Link2, Lock, Video, X } from 'lucide-react';
+import { AlertTriangle, Building2, Link2, Lock, Video, VideoOff, X } from 'lucide-react';
 import type {
   CalendarMeeting,
   CalendarPerson,
@@ -31,6 +31,7 @@ export function DayDetail({
   loading,
   editable,
   canRedispatch,
+  canConfigureBot,
   onChanged,
 }: {
   readonly dayKey: string;
@@ -39,6 +40,8 @@ export function DayDetail({
   readonly editable: boolean;
   /** Show the manual "Send Gracie" re-dispatch action (admin + on-demand-join on). */
   readonly canRedispatch: boolean;
+  /** Show the per-meeting "Don't record" ignore-list toggle (admin / calendar.configure). */
+  readonly canConfigureBot: boolean;
   readonly onChanged: () => void;
 }): React.JSX.Element {
   return (
@@ -63,6 +66,7 @@ export function DayDetail({
                 meeting={m}
                 editable={editable}
                 canRedispatch={canRedispatch}
+                canConfigureBot={canConfigureBot}
                 onChanged={onChanged}
               />
             </li>
@@ -192,16 +196,103 @@ function RedispatchButton({ meeting }: { readonly meeting: CalendarMeeting }): R
   );
 }
 
+/**
+ * "Don't record" toggle — put this meeting's recurring series (or one-off join link)
+ * on the meeting-bot ignore list so Gracie stops auto-joining it (the ghost-meeting
+ * guard for stale/duplicate calendar entries). Fully reversible: turning it back on
+ * restores dispatch. Enabling asks for confirmation since it affects the whole series.
+ */
+function IgnoreRecordingControl({
+  meeting,
+  onChanged,
+}: {
+  readonly meeting: CalendarMeeting;
+  readonly onChanged: () => void;
+}): React.JSX.Element {
+  const ignored = meeting.recordingIgnored;
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const toggle = useCallback((): void => {
+    const enabling = !ignored;
+    if (
+      enabling &&
+      !window.confirm(
+        "Stop Gracie recording this meeting and its whole series? You can turn recording back on here anytime.",
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    apiClient
+      .post(`/api/calendar/meetings/${meeting.id}/ignore`, { ignore: enabling })
+      .then(() => onChanged())
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to update recording setting'))
+      .finally(() => setBusy(false));
+  }, [ignored, meeting.id, onChanged]);
+
+  if (ignored) {
+    return (
+      <div className="flex flex-col gap-1">
+        <span
+          className="inline-flex items-center gap-1"
+          style={{ ...TYPE.label, color: 'var(--text-secondary)' }}
+        >
+          <VideoOff size={13} aria-hidden="true" /> Gracie won&apos;t record this
+        </span>
+        <button
+          type="button"
+          onClick={toggle}
+          disabled={busy}
+          className="inline-flex w-fit items-center gap-1"
+          style={{ ...TYPE.label, color: 'var(--color-blue-600)', cursor: busy ? 'wait' : 'pointer' }}
+        >
+          <Video size={13} aria-hidden="true" /> {busy ? 'Saving…' : 'Turn recording on'}
+        </button>
+        {error !== null ? (
+          <span role="alert" style={{ ...TYPE.label, color: 'var(--color-red-600)' }}>
+            {error}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span title="Stop Gracie auto-joining this meeting and its series">
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={busy}
+          icon={<VideoOff size={13} aria-hidden="true" />}
+          onClick={toggle}
+        >
+          {busy ? 'Saving…' : "Don't record"}
+        </Button>
+      </span>
+      {error !== null ? (
+        <span role="alert" style={{ ...TYPE.label, color: 'var(--color-red-600)' }}>
+          {error}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 /** One meeting in the day-detail: status, org chips, external people, org actions. */
 function MeetingCard({
   meeting,
   editable,
   canRedispatch,
+  canConfigureBot,
   onChanged,
 }: {
   readonly meeting: CalendarMeeting;
   readonly editable: boolean;
   readonly canRedispatch: boolean;
+  readonly canConfigureBot: boolean;
   readonly onChanged: () => void;
 }): React.JSX.Element {
   const m = meeting;
@@ -371,6 +462,7 @@ function MeetingCard({
           </a>
         ) : null}
         {canRedispatch ? <RedispatchButton meeting={m} /> : null}
+        {canConfigureBot ? <IgnoreRecordingControl meeting={m} onChanged={onChanged} /> : null}
       </div>
 
       {error !== null ? (

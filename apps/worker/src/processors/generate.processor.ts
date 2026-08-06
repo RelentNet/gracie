@@ -24,6 +24,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import {
   findOrCreateFolder,
   getActiveProvider,
+  getBotConfig,
   getCredential,
   getEmbedder,
   getServerClient,
@@ -47,7 +48,13 @@ import { getObjectBytes, putObject } from '@gracie/shared/storage';
 import { chunkText } from '../lib/chunk.js';
 import { emailAdminsForAlert } from '../lib/email.js';
 import { generateDocuments, type GeneratedDocument } from '../lib/generate.js';
-import { fetchRecallMedia, fetchRecallTranscript, type RecallMedia } from '../lib/recall.js';
+import {
+  fetchRecallMedia,
+  fetchRecallParticipants,
+  fetchRecallTranscript,
+  type RecallMedia,
+  type RecallParticipant,
+} from '../lib/recall.js';
 import { extractScreenShareStills } from '../lib/stills.js';
 import {
   decideCapEvictions,
@@ -107,6 +114,49 @@ export function resolveMeetingClientId(
     return { kind: 'assign', clientId: internalOrgId };
   }
   return { kind: 'skip' };
+}
+
+/** A participant considered by the attendance gate (a display name and/or an email). */
+export interface AttendanceParticipant {
+  readonly name: string | null;
+  readonly email: string | null;
+}
+
+/** Why a recording is skipped as "no real meeting" (ghost-meeting attendance gate). */
+export type NoShowReason = 'too_few_participants' | 'no_internal_participant';
+
+export type AttendanceGate =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly reason: NoShowReason };
+
+/**
+ * Ghost-meeting attendance gate (root cause: stale/duplicate calendar entries — the
+ * InterSystems ghost — send a bot into a call that never really happens). A recording
+ * counts as a REAL meeting only when at least two DISTINCT people actually joined AND
+ * at least one is internal/GA. Gate on *did the meeting happen*, NEVER on whether a
+ * client is linked — a real-but-unlinked meeting still proceeds (generate-on-link
+ * fills in its notes once a client is set). The caller excludes Gracie's own bot
+ * before calling this, so the ≥2 bar counts real humans. Pure; unit-tested.
+ */
+export function decideAttendanceGate(
+  participants: readonly AttendanceParticipant[],
+  isInternal: (participant: AttendanceParticipant) => boolean,
+): AttendanceGate {
+  // Distinct real people only: drop blanks; dedupe on name+email (a rejoin lists twice).
+  const seen = new Set<string>();
+  const distinct: AttendanceParticipant[] = [];
+  for (const p of participants) {
+    const name = (p.name ?? '').trim();
+    const email = (p.email ?? '').trim().toLowerCase();
+    if (name === '' && email === '') continue;
+    const dedupeKey = `${name.toLowerCase()}|${email}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    distinct.push(p);
+  }
+  if (distinct.length < 2) return { ok: false, reason: 'too_few_participants' };
+  if (!distinct.some((p) => isInternal(p))) return { ok: false, reason: 'no_internal_participant' };
+  return { ok: true };
 }
 
 /**
@@ -310,6 +360,142 @@ async function captureWithoutClient(
     { meetingId },
     'generate: no client yet — transcript captured, doc generation deferred until a client is linked',
   );
+}
+
+/** Plain-language reasons a recording is skipped as "no real meeting" (attendance gate). */
+const NO_SHOW_REASONS: Record<NoShowReason, string> = {
+  too_few_participants:
+    'No real meeting — Gracie recorded but fewer than two people joined, so there is nothing to generate.',
+  no_internal_participant:
+    'Not recorded as a GA meeting — no Grace & Associates attendee joined this call, so there is nothing to generate.',
+};
+
+/**
+ * Ghost-meeting attendance gate (side-effecting wrapper around
+ * {@link decideAttendanceGate}). Decides whether a recording is a real meeting worth
+ * generating notes for.
+ *
+ * Applies ONLY to a FRESH recording — one with a Recall bot whose transcript hasn't
+ * been captured yet. A re-run / generate-on-link already proved the meeting happened
+ * (`transcript_received`), so it is NEVER re-gated (Recall retention may have lapsed,
+ * leaving no participant data — re-gating would wrongly suppress a real meeting).
+ *
+ * FAILS OPEN: no bot, no Recall key, or a Recall error → proceed. The guard only ever
+ * suppresses a call it POSITIVELY measured as empty/one-sided — never a real meeting
+ * on a transient hiccup.
+ */
+async function checkMeetingHappened(
+  db: ServerClient,
+  data: GenerationJobPayload,
+  meeting: MeetingRow,
+  log: FastifyBaseLogger,
+): Promise<{ readonly kind: 'proceed' } | { readonly kind: 'no_show'; readonly reason: NoShowReason }> {
+  if (typeof data.botJobId !== 'string' || data.botJobId === '') return { kind: 'proceed' };
+  if (meeting.transcript_received) return { kind: 'proceed' };
+
+  const apiKey = await getCredential('recall');
+  if (apiKey === null || apiKey === '') return { kind: 'proceed' };
+
+  let participants: RecallParticipant[];
+  try {
+    participants = await fetchRecallParticipants(data.botJobId, {
+      apiKey,
+      region: process.env.RECALL_REGION,
+    });
+  } catch (err) {
+    log.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      'generate: participant fetch failed — proceeding (fail-open)',
+    );
+    return { kind: 'proceed' };
+  }
+
+  // Exclude Gracie's own bot so the ≥2 bar counts real people (Recall usually omits
+  // the bot from meeting_participants, but a name match is a cheap, safe guard).
+  // ponytail: a human genuinely named like the bot would be excluded — vanishingly
+  // rare; upgrade to a Recall bot-id match if it ever bites.
+  const botName = (await getBotConfig()).name.trim().toLowerCase();
+  const humans = participants.filter((p) => (p.name ?? '').trim().toLowerCase() !== botName);
+
+  // "Internal/GA" = an internal email domain, a known GA staff email, or a joined
+  // display name matching a GA staff member (names are all Teams often exposes).
+  const internalDomains = parseInternalDomains(await getSettingString(db, 'internal_email_domains'));
+  const staff = await db.from('users').select('name, email');
+  if (staff.error !== null) throw new Error(`generate: load staff for attendance gate: ${staff.error.message}`);
+  const staffNames = new Set(
+    (staff.data ?? []).map((u) => u.name.trim().toLowerCase()).filter((n) => n !== ''),
+  );
+  const staffEmails = new Set(
+    (staff.data ?? []).map((u) => u.email.trim().toLowerCase()).filter((e) => e !== ''),
+  );
+  const isInternal = (p: AttendanceParticipant): boolean => {
+    const email = (p.email ?? '').trim().toLowerCase();
+    if (email !== '') {
+      const dom = emailDomain(email);
+      if (dom !== null && internalDomains.has(dom)) return true;
+      if (staffEmails.has(email)) return true;
+    }
+    const name = (p.name ?? '').trim().toLowerCase();
+    return name !== '' && staffNames.has(name);
+  };
+
+  const gate = decideAttendanceGate(humans, isInternal);
+  if (gate.ok) return { kind: 'proceed' };
+
+  // Data-loss safety on the fuzzy axis: NEVER drop a meeting we already KNOW is
+  // GA-associated (flagged internal, or GA staff were invited) just because display
+  // names couldn't confirm a joined GA person — Teams often hides participant emails
+  // and shows nicknames, and losing a real meeting's notes is worse than the ghost we
+  // guard against. The robust ≥2 "did it actually happen" bar has already held here.
+  if (
+    gate.reason === 'no_internal_participant' &&
+    (meeting.is_internal || meeting.attendee_user_ids.length > 0)
+  ) {
+    log.info(
+      { meetingId: meeting.id, humanParticipants: humans.length },
+      'generate: attendance gate — no GA name match but meeting is GA-associated; proceeding',
+    );
+    return { kind: 'proceed' };
+  }
+
+  log.info(
+    { meetingId: meeting.id, reason: gate.reason, humanParticipants: humans.length },
+    'generate: attendance gate — no real meeting, skipping generation',
+  );
+  return { kind: 'no_show', reason: gate.reason };
+}
+
+/**
+ * Mark a recording that FAILED the attendance gate as a benign "no real meeting"
+ * skip — mirrors the no-client / duplicate-invite skips: the meeting goes terminal
+ * (`cancelled`, never overwriting a completed one) and a status-null `pipeline_runs`
+ * row carries the plain-language reason for the Pipeline view (an explanation, not a
+ * red failure). No docs and no transcript are stored — there was no meeting.
+ * `transcript_received` is left false so a manual re-run re-evaluates the gate rather
+ * than being force-proceeded.
+ */
+async function markNoShow(
+  db: ServerClient,
+  meetingId: string,
+  reason: NoShowReason,
+  log: FastifyBaseLogger,
+): Promise<void> {
+  const cancelled = await db
+    .from('meetings')
+    .update({ pipeline_status: 'cancelled' })
+    .eq('id', meetingId)
+    .neq('pipeline_status', 'complete');
+  if (cancelled.error !== null) throw new Error(`generate: mark no-show: ${cancelled.error.message}`);
+
+  const recorded = await db.from('pipeline_runs').insert({
+    meeting_id: meetingId,
+    source: 'recall',
+    completed_at: new Date().toISOString(),
+    documents_generated: 0,
+    error_message: NO_SHOW_REASONS[reason],
+  });
+  if (recorded.error !== null) throw new Error(`generate: record no-show: ${recorded.error.message}`);
+  log.info({ meetingId, reason }, 'generate: recorded benign no-show skip (no real meeting)');
 }
 
 /**
@@ -978,6 +1164,17 @@ export function createGenerateProcessor(
         .maybeSingle();
       if (meetingError !== null) throw new Error(`generate: load meeting: ${meetingError.message}`);
       if (meeting === null) throw new Error(`generate: meeting ${meetingId} not found`);
+
+      // Ghost-meeting attendance gate: a stale/duplicate calendar entry can send a bot
+      // into a call that never really happens. If the recording is not a real meeting
+      // (fewer than two people joined, or no GA attendee), skip generation gracefully
+      // as a benign "no real meeting" outcome — no red failure, no docs. Independent of
+      // whether a client is linked: a real-but-unlinked meeting still proceeds.
+      const attendance = await checkMeetingHappened(db, job.data, meeting, log);
+      if (attendance.kind === 'no_show') {
+        await markNoShow(db, meetingId, attendance.reason, log);
+        return { meetingId, documents: 0, tasks: 0, status: 'skipped' };
+      }
 
       // No-client handling (root cause #2): self-heal internal meetings → the GA org,
       // and skip genuinely client-less meetings gracefully instead of hard-failing.

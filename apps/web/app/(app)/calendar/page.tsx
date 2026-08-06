@@ -280,6 +280,7 @@ export default function CalendarPage(): React.JSX.Element {
             loading={meetings === null}
             editable={editable}
             canRedispatch={true}
+            canConfigureBot={isAdmin}
             onChanged={reload}
           />
           <ConnectionPanel isAdmin={isAdmin} onSynced={reload} />

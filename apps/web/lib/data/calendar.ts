@@ -13,7 +13,14 @@
  */
 import 'server-only';
 
-import { getBotConfig, getCredential, getServerClient } from '@gracie/db';
+import {
+  addBotIgnoreEntry,
+  getBotConfig,
+  getBotIgnoreList,
+  getCredential,
+  getServerClient,
+  removeBotIgnoreEntry,
+} from '@gracie/db';
 import type { ServerClient } from '@gracie/db';
 import type {
   AmbiguousMeeting,
@@ -172,7 +179,7 @@ export async function listCalendarMeetings(
   const { data, error } = await db
     .from('meetings')
     .select(
-      'id, client_id, title, date_time, duration_minutes, meeting_type, video_link, pipeline_status, bot_dispatched, is_internal, external_attendees, source, meeting_lead_user_id, attendee_user_ids',
+      'id, client_id, title, date_time, duration_minutes, meeting_type, video_link, pipeline_status, bot_dispatched, is_internal, external_attendees, source, meeting_lead_user_id, attendee_user_ids, series_id',
     )
     .gte('date_time', fromIso)
     .lte('date_time', toIso)
@@ -180,12 +187,16 @@ export async function listCalendarMeetings(
   if (error !== null) throw new Error(`listCalendarMeetings: ${error.message}`);
 
   const rows = data ?? [];
-  const [people, orgsByMeeting, internalDomains, knownDomains] = await Promise.all([
+  const [people, orgsByMeeting, internalDomains, knownDomains, ignoreList] = await Promise.all([
     loadPeople(db),
     loadMeetingOrgs(db, rows.map((m) => m.id)),
     loadInternalDomains(db),
     loadKnownDomains(db),
+    getBotIgnoreList(),
   ]);
+  // "Don't record" ignore list — a meeting is ignored when its series id OR join link
+  // is on the list (matches the worker's isMeetingIgnored rule).
+  const ignoredKeys = new Set(ignoreList.map((e) => e.key));
 
   return rows.map((m) => {
     const orgs = orgsByMeeting.get(m.id) ?? [];
@@ -209,8 +220,40 @@ export async function listCalendarMeetings(
       orgs,
       externalAttendees,
       unknownOrgDomains: computeUnknownDomains(externalAttendees, internalDomains, knownDomains),
+      recordingIgnored:
+        (m.series_id !== null && m.series_id !== '' && ignoredKeys.has(m.series_id)) ||
+        (m.video_link !== null && m.video_link !== '' && ignoredKeys.has(m.video_link)),
     };
   });
+}
+
+/**
+ * Mark this meeting "don't record" (ghost-meeting guard), or clear it. Keyed by the
+ * stable recurring-series id when present (so EVERY occurrence is skipped), else the
+ * join link — matching the worker's `isMeetingIgnored` rule. The bot-dispatch sweep
+ * then skips it (and turning it back on restores dispatch on the next sweep). Throws
+ * 'Unknown meeting' / 'This meeting has no recurring series or join link.'.
+ */
+export async function setMeetingIgnored(
+  meetingId: string,
+  ignore: boolean,
+): Promise<{ readonly recordingIgnored: boolean }> {
+  const db = getServerClient();
+  const { data: m, error } = await db
+    .from('meetings')
+    .select('series_id, video_link, title')
+    .eq('id', meetingId)
+    .maybeSingle();
+  if (error !== null) throw new Error(`setMeetingIgnored: ${error.message}`);
+  if (m === null) throw new Error('Unknown meeting');
+
+  const key = m.series_id !== null && m.series_id !== '' ? m.series_id : m.video_link;
+  if (key === null || key === '') throw new Error('This meeting has no recurring series or join link.');
+  const label = m.title !== null && m.title.trim() !== '' ? m.title.trim() : 'Untitled meeting';
+
+  if (ignore) await addBotIgnoreEntry({ key, label });
+  else await removeBotIgnoreEntry(key);
+  return { recordingIgnored: ignore };
 }
 
 /**
