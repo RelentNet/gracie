@@ -17,6 +17,7 @@ import {
   isDuplicateDescription,
   MAX_ACTIVE_TASKS_PER_CLIENT,
   normalizeDescription,
+  resolveOwnerFromText,
   resolveTaskOwner,
   STANDARD_TASK_TTL_DAYS,
 } from './task-lifecycle.js';
@@ -119,6 +120,16 @@ test('resolveTaskOwner leaves owner null when no name is clearly present', () =>
   assert.equal(resolveTaskOwner('the team', users), null);
   // Loose substring must NOT match (would mis-assign): "cha" is inside "Chen".
   assert.equal(resolveTaskOwner('cha', users), null);
+});
+
+test('resolveOwnerFromText assigns from a named staffer in a freeform sentence (voice path)', () => {
+  const users = [
+    { id: 'u1', name: 'Sarah Chen', email: 'sarah@ga.com' },
+    { id: 'u2', name: 'Daniel Velez', email: 'daniel@ga.com' },
+  ];
+  assert.equal(resolveOwnerFromText('send the Q3 proposal to Sarah', users), 'u1');
+  assert.equal(resolveOwnerFromText('Daniel should draft the SOW', users), 'u2');
+  assert.equal(resolveOwnerFromText('follow up with the client next week', users), null);
 });
 
 test('agingCutoffIso is TTL days before now', () => {
