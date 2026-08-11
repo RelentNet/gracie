@@ -20,6 +20,9 @@ import { Card } from '@/components/ui/Card';
 import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { ClientAvatar } from '@/components/ClientAvatar';
 import { TYPE } from '@/lib/typography';
+import { useAuth } from '@/lib/auth';
+
+import { CalendarConnectionPanel } from './CalendarConnectionPanel';
 
 interface UserRow {
   readonly id: string;
@@ -73,11 +76,19 @@ function RoleBadge({ role }: { readonly role: Role }): React.JSX.Element {
 }
 
 export function UsersPanel(): React.JSX.Element {
+  // Calendar-connection controls gate on the same permission the calendar page
+  // used (admin-tier). Settings is already admin-only; this preserves the exact
+  // Sync-now / full-roster gating for a settings-admin who lacks it.
+  const { can } = useAuth();
+  const isAdmin = can('calendar.configure');
+
   const [users, setUsers] = useState<readonly UserRow[] | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [rows, setRows] = useState<Readonly<Record<string, RowState>>>({});
-  const [notice, setNotice] = useState<{ readonly text: string; readonly ok: boolean } | null>(null);
+  const [notice, setNotice] = useState<{ readonly text: string; readonly ok: boolean } | null>(
+    null,
+  );
 
   const load = useCallback(async (): Promise<void> => {
     setLoadError(null);
@@ -159,164 +170,177 @@ export function UsersPanel(): React.JSX.Element {
     }
   }
 
+  // The calendar-connection card and the user roster are independent fetches, so
+  // the connection controls stay visible even while the roster loads or errors.
+  let roster: React.JSX.Element;
   if (loadError !== null) {
-    return <ErrorState title="Could not load users" description={loadError} />;
-  }
-  if (users === null) {
-    return <LoadingState label="Loading users…" />;
-  }
-  if (users.length === 0) {
-    return (
+    roster = <ErrorState title="Could not load users" description={loadError} />;
+  } else if (users === null) {
+    roster = <LoadingState label="Loading users…" />;
+  } else if (users.length === 0) {
+    roster = (
       <EmptyState
         title="No users yet"
         description="Users appear here after they first sign in to Gracie."
       />
     );
-  }
+  } else {
+    roster = (
+      <div className="flex flex-col gap-3">
+        {notice !== null ? (
+          <div
+            role="status"
+            className="rounded-lg border px-4 py-2"
+            style={{
+              borderColor: notice.ok ? 'var(--border-subtle)' : 'var(--color-red-500)',
+              ...TYPE.secondary,
+              color: notice.ok ? 'var(--text-secondary)' : 'var(--color-red-500)',
+            }}
+          >
+            {notice.text}
+          </div>
+        ) : null}
 
-  return (
-    <div className="flex flex-col gap-3">
-      {notice !== null ? (
-        <div
-          role="status"
-          className="rounded-lg border px-4 py-2"
-          style={{
-            borderColor: notice.ok ? 'var(--border-subtle)' : 'var(--color-red-500)',
-            ...TYPE.secondary,
-            color: notice.ok ? 'var(--text-secondary)' : 'var(--color-red-500)',
-          }}
-        >
-          {notice.text}
-        </div>
-      ) : null}
-
-      <Card className="p-0">
-        {/* Header — column labels only make sense in the grid layout, so it's
+        <Card className="p-0">
+          {/* Header — column labels only make sense in the grid layout, so it's
             hidden while rows are stacked cards below md. */}
-        <div
-          className={`hidden gap-3 px-4 py-2 ${ROW_GRID}`}
-          style={{ borderBottom: '1px solid var(--border-subtle)' }}
-        >
-          <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>User</span>
-          <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>Role</span>
-          <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>Status</span>
-          <span className="sr-only">Actions</span>
-        </div>
+          <div
+            className={`hidden gap-3 px-4 py-2 ${ROW_GRID}`}
+            style={{ borderBottom: '1px solid var(--border-subtle)' }}
+          >
+            <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>User</span>
+            <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>Role</span>
+            <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>Status</span>
+            <span className="sr-only">Actions</span>
+          </div>
 
-        {users.map((u, index) => {
-          const row = rows[u.id] ?? { pendingRole: u.role, busy: false };
-          const dirty = row.pendingRole !== u.role;
-          const isSelf = currentUserId !== null && u.id === currentUserId;
-          return (
-            <div
-              key={u.id}
-              className={`flex flex-col gap-3 px-4 py-3 ${ROW_GRID}`}
-              style={{
-                borderTop: index === 0 ? undefined : '1px solid var(--border-subtle)',
-                opacity: u.deactivated ? 0.55 : 1,
-              }}
-            >
-              {/* User */}
-              <div className="flex min-w-0 items-center gap-3">
-                <ClientAvatar initials={u.initials} size="sm" color="var(--color-blue-700)" />
-                <div className="flex min-w-0 flex-col">
-                  <span className="truncate" style={TYPE.bodyStrong}>
-                    {u.name}
-                    {isSelf ? (
-                      <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}> (you)</span>
-                    ) : null}
-                  </span>
-                  <span
-                    className="truncate"
-                    style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}
+          {users.map((u, index) => {
+            const row = rows[u.id] ?? { pendingRole: u.role, busy: false };
+            const dirty = row.pendingRole !== u.role;
+            const isSelf = currentUserId !== null && u.id === currentUserId;
+            return (
+              <div
+                key={u.id}
+                className={`flex flex-col gap-3 px-4 py-3 ${ROW_GRID}`}
+                style={{
+                  borderTop: index === 0 ? undefined : '1px solid var(--border-subtle)',
+                  opacity: u.deactivated ? 0.55 : 1,
+                }}
+              >
+                {/* User */}
+                <div className="flex min-w-0 items-center gap-3">
+                  <ClientAvatar initials={u.initials} size="sm" color="var(--color-blue-700)" />
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate" style={TYPE.bodyStrong}>
+                      {u.name}
+                      {isSelf ? (
+                        <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+                          {' '}
+                          (you)
+                        </span>
+                      ) : null}
+                    </span>
+                    <span
+                      className="truncate"
+                      style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}
+                    >
+                      {u.email}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Role select */}
+                <div className="flex items-center gap-2">
+                  <label className="sr-only" htmlFor={`role-${u.id}`}>
+                    Role for {u.name}
+                  </label>
+                  <select
+                    id={`role-${u.id}`}
+                    value={row.pendingRole}
+                    disabled={row.busy}
+                    onChange={(e) => {
+                      patchRow(u.id, { pendingRole: e.target.value as Role });
+                    }}
+                    className="rounded-lg border px-2 py-1"
+                    style={{ borderColor: 'var(--border-subtle)', ...TYPE.body }}
                   >
-                    {u.email}
+                    {ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {ROLE_BADGES[r].label}
+                      </option>
+                    ))}
+                  </select>
+                  {dirty ? (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={row.busy}
+                      onClick={() => {
+                        void saveRole(u);
+                      }}
+                    >
+                      Save
+                    </Button>
+                  ) : null}
+                </div>
+
+                {/* Status */}
+                <div className="flex items-center gap-2">
+                  {u.deactivated ? (
+                    <Badge bg="var(--color-slate-100)" fg="var(--text-secondary)">
+                      Deactivated
+                    </Badge>
+                  ) : (
+                    <RoleBadge role={u.role} />
+                  )}
+                  <span
+                    className="inline-flex items-center gap-1"
+                    title="Calendar connection"
+                    aria-label={
+                      u.calendarConnected ? 'Calendar connected' : 'Calendar not connected'
+                    }
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="size-2 rounded-full"
+                      style={{
+                        backgroundColor: u.calendarConnected
+                          ? 'var(--color-emerald-500)'
+                          : 'var(--color-slate-500)',
+                      }}
+                    />
                   </span>
                 </div>
-              </div>
 
-              {/* Role select */}
-              <div className="flex items-center gap-2">
-                <label className="sr-only" htmlFor={`role-${u.id}`}>
-                  Role for {u.name}
-                </label>
-                <select
-                  id={`role-${u.id}`}
-                  value={row.pendingRole}
-                  disabled={row.busy}
-                  onChange={(e) => {
-                    patchRow(u.id, { pendingRole: e.target.value as Role });
-                  }}
-                  className="rounded-lg border px-2 py-1"
-                  style={{ borderColor: 'var(--border-subtle)', ...TYPE.body }}
-                >
-                  {ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {ROLE_BADGES[r].label}
-                    </option>
-                  ))}
-                </select>
-                {dirty ? (
+                {/* Actions */}
+                <div className="flex items-center justify-end">
                   <Button
-                    variant="primary"
+                    variant={u.deactivated ? 'secondary' : 'danger'}
                     size="sm"
                     disabled={row.busy}
                     onClick={() => {
-                      void saveRole(u);
+                      void toggleActive(u);
                     }}
                   >
-                    Save
+                    {u.deactivated ? 'Reactivate' : 'Deactivate'}
                   </Button>
-                ) : null}
+                </div>
               </div>
+            );
+          })}
+        </Card>
 
-              {/* Status */}
-              <div className="flex items-center gap-2">
-                {u.deactivated ? (
-                  <Badge bg="var(--color-slate-100)" fg="var(--text-secondary)">
-                    Deactivated
-                  </Badge>
-                ) : (
-                  <RoleBadge role={u.role} />
-                )}
-                <span
-                  className="inline-flex items-center gap-1"
-                  title="Calendar connection"
-                  aria-label={u.calendarConnected ? 'Calendar connected' : 'Calendar not connected'}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="size-2 rounded-full"
-                    style={{
-                      backgroundColor: u.calendarConnected
-                        ? 'var(--color-emerald-500)'
-                        : 'var(--color-slate-500)',
-                    }}
-                  />
-                </span>
-              </div>
+        <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+          Role changes take effect on the user&rsquo;s next action — no sign-out required.
+        </p>
+      </div>
+    );
+  }
 
-              {/* Actions */}
-              <div className="flex items-center justify-end">
-                <Button
-                  variant={u.deactivated ? 'secondary' : 'danger'}
-                  size="sm"
-                  disabled={row.busy}
-                  onClick={() => {
-                    void toggleActive(u);
-                  }}
-                >
-                  {u.deactivated ? 'Reactivate' : 'Deactivate'}
-                </Button>
-              </div>
-            </div>
-          );
-        })}
-      </Card>
-
-      <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-        Role changes take effect on the user&rsquo;s next action — no sign-out required.
-      </p>
+  return (
+    <div className="flex flex-col gap-6">
+      <CalendarConnectionPanel isAdmin={isAdmin} />
+      {roster}
     </div>
   );
 }
