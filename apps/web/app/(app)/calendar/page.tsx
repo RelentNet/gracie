@@ -23,7 +23,6 @@ import type { ManualJoinStateResponse, MeetingsResponse } from './types';
 import { MonthGrid } from './components/MonthGrid';
 import { WeekView } from './components/WeekView';
 import { DayDetail } from './components/DayDetail';
-import { ConnectionPanel } from './components/ConnectionPanel';
 import { AmbiguousSection } from './components/AmbiguousSection';
 import { CadenceSection } from './components/CadenceSection';
 import { JoinMeetingModal } from './components/JoinMeetingModal';
@@ -31,13 +30,14 @@ import { JoinMeetingModal } from './components/JoinMeetingModal';
 /**
  * Module 7 — Calendar (docs/08 §M7). Real data via `GET /api/calendar*`.
  *
- * Layout: a month grid + day-detail sidebar (left/main), a connection-status
- * panel with the per-user auto-join opt-out (right), an Admin-only ambiguous-
- * meeting pointer, and a per-client cadence tracker.
+ * Layout: a day-agenda sidebar + month/week grid (left/main), an Admin-only
+ * ambiguous-meeting pointer, and a per-client cadence tracker. The calendar
+ * connection status + per-user preferences (auto-join, timezone) live in
+ * Settings → Users.
  *
  * Meetings, matching, dedup, and bot dispatch are all produced by the P4 worker
- * crons (Microsoft Graph → `meetings`); this page is read-mostly. The only writes
- * are the "assign a client" action on a meeting card and the auto-join toggle.
+ * crons (Microsoft Graph → `meetings`); this page is read-mostly. The only write
+ * is the "assign a client" action on a meeting card.
  *
  * The presentational pieces live in `./components`; pure date/meeting helpers in
  * `./lib`; API response shapes in `./types`.
@@ -283,7 +283,6 @@ export default function CalendarPage(): React.JSX.Element {
             canConfigureBot={isAdmin}
             onChanged={reload}
           />
-          <ConnectionPanel isAdmin={isAdmin} onSynced={reload} />
         </div>
 
         <div className="lg:col-span-3">

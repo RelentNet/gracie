@@ -4,7 +4,6 @@
  */
 import type {
   AmbiguousMeeting,
-  CalendarConnectionStatus,
   CalendarMeeting,
   ClientCadenceRow,
   PipelineStatus,
@@ -12,9 +11,6 @@ import type {
 
 export interface MeetingsResponse {
   readonly meetings: readonly CalendarMeeting[];
-}
-export interface ConnectionsResponse {
-  readonly status: CalendarConnectionStatus;
 }
 export interface CadenceResponse {
   readonly cadence: readonly ClientCadenceRow[];

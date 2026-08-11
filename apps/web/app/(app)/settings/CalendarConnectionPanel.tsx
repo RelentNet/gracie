@@ -13,20 +13,23 @@ import { SettingToggle } from '@/components/ui/SettingToggle';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 
 import { TimezoneSetting } from './TimezoneSetting';
-import type { ConnectionsResponse } from '../types';
+
+/** Local shape for `GET /api/calendar/connections`. */
+interface ConnectionsResponse {
+  readonly status: CalendarConnectionStatus;
+}
 
 /**
- * Calendar connection panel: Sync-now, the team member roster, and the per-user
- * "auto-join meetings I lead" preference. The two admin master switches (global
- * bot kill-switch + on-demand-join) moved to Settings → Meeting Bot; this panel
- * keeps only the personal preference.
+ * Calendar connection panel (rendered in Settings → Users): Sync-now, the team
+ * member roster / connection status, the per-user "auto-join meetings I lead"
+ * preference, and the per-user timezone control. The two admin master switches
+ * (global bot kill-switch + on-demand-join) live under Settings → Meeting Bot;
+ * this panel keeps the connection status plus the personal preferences.
  */
-export function ConnectionPanel({
+export function CalendarConnectionPanel({
   isAdmin,
-  onSynced,
 }: {
   readonly isAdmin: boolean;
-  readonly onSynced?: () => void;
 }): React.JSX.Element {
   const [status, setStatus] = useState<CalendarConnectionStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +60,7 @@ export function ConnectionPanel({
 
   /**
    * Trigger a manual scan, then poll until the worker's last-synced time advances
-   * (or a ~30s timeout), so the panel + calendar reflect the fresh sweep.
+   * (or a ~30s timeout), so the panel reflects the fresh sweep.
    */
   const onSyncNow = useCallback(async (): Promise<void> => {
     setSyncing(true);
@@ -81,9 +84,8 @@ export function ConnectionPanel({
       }
     }
     setSyncNote(done ? 'Calendar synced.' : 'Sync started — results will appear shortly.');
-    if (done) onSynced?.();
     setSyncing(false);
-  }, [status, refreshStatus, onSynced]);
+  }, [status, refreshStatus]);
 
   return (
     <Card>
