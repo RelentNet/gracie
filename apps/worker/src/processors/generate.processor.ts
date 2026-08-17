@@ -136,7 +136,13 @@ export type AttendanceGate =
  * at least one is internal/GA. Gate on *did the meeting happen*, NEVER on whether a
  * client is linked — a real-but-unlinked meeting still proceeds (generate-on-link
  * fills in its notes once a client is set). The caller excludes Gracie's own bot
- * before calling this, so the ≥2 bar counts real humans. Pure; unit-tested.
+ * before calling this, so the ≥2 bar counts real humans.
+ *
+ * FAILS OPEN on the unknown: an EMPTY list means we could not read who joined (this
+ * account leaves the bot-level `meeting_participants` empty and the `participant_events`
+ * download can be absent/unreadable) — so it PROCEEDS, never skipping a real meeting on
+ * missing data. The gate only ever skips when it AFFIRMATIVELY sees a real list with
+ * fewer than two distinct people (or ≥2 with no GA attendee). Pure; unit-tested.
  */
 export function decideAttendanceGate(
   participants: readonly AttendanceParticipant[],
@@ -154,6 +160,8 @@ export function decideAttendanceGate(
     seen.add(dedupeKey);
     distinct.push(p);
   }
+  // Empty = attendance UNKNOWN (unreadable), not "nobody" → fail open, never skip.
+  if (distinct.length === 0) return { ok: true };
   if (distinct.length < 2) return { ok: false, reason: 'too_few_participants' };
   if (!distinct.some((p) => isInternal(p))) return { ok: false, reason: 'no_internal_participant' };
   return { ok: true };
@@ -380,9 +388,10 @@ const NO_SHOW_REASONS: Record<NoShowReason, string> = {
  * (`transcript_received`), so it is NEVER re-gated (Recall retention may have lapsed,
  * leaving no participant data — re-gating would wrongly suppress a real meeting).
  *
- * FAILS OPEN: no bot, no Recall key, or a Recall error → proceed. The guard only ever
- * suppresses a call it POSITIVELY measured as empty/one-sided — never a real meeting
- * on a transient hiccup.
+ * FAILS OPEN: no bot, no Recall key, a Recall error, OR an empty/unreadable participant
+ * list → proceed. The guard only ever suppresses a call it POSITIVELY measured as
+ * one-sided (an affirmative list of fewer than two real people) — never a real meeting on
+ * a transient hiccup or missing join data.
  */
 async function checkMeetingHappened(
   db: ServerClient,

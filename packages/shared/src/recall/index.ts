@@ -454,6 +454,16 @@ interface RecallBotRecordings {
       } | null;
       /** Mixed (single-tile) recording MP4 — the video the meeting-page player streams. */
       readonly video_mixed?: { readonly data?: { readonly download_url?: string | null } | null } | null;
+      /**
+       * Per-recording participant join/leave/speech event stream (docs:
+       * participant_events). On THIS account the bot-level `meeting_participants`
+       * (above) is empty, so this signed download is the ONLY real join list —
+       * {@link fetchRecallParticipants} follows `data.participant_events_download_url`.
+       */
+      readonly participant_events?: {
+        readonly status?: { readonly code?: string | null } | null;
+        readonly data?: { readonly participant_events_download_url?: string | null } | null;
+      } | null;
     } | null;
   }> | null;
 }
@@ -660,16 +670,93 @@ export function extractParticipants(bot: RecallBotRecordings): RecallParticipant
   });
 }
 
+/** First participant-events download URL in a bot-retrieve payload, else null. Pure. */
+export function findParticipantEventsUrl(bot: RecallBotRecordings): string | null {
+  for (const recording of bot.recordings ?? []) {
+    const url = recording?.media_shortcuts?.participant_events?.data?.participant_events_download_url;
+    if (typeof url === 'string' && url !== '') return url;
+  }
+  return null;
+}
+
+/** One event in the `participant_events` download — we only read its `participant`. */
+interface RecallParticipantEvent {
+  readonly participant?: {
+    readonly id?: number | string | null;
+    readonly name?: string | null;
+    readonly is_host?: boolean | null;
+    readonly email?: string | null;
+    readonly extra_data?: { readonly email?: string | null } | null;
+  } | null;
+}
+
 /**
- * Fetch the participants a Recall bot observed in the meeting (one bot-retrieve).
- * Mirrors {@link fetchRecallMedia}: only the bot fetch itself throws (a transient
- * error surfaces to the caller); an absent/empty participant list yields `[]`.
+ * Derive the DISTINCT people from a recording's `participant_events` download — the flat
+ * join/leave/speech event stream Recall exposes when the bot-level `meeting_participants`
+ * is empty (verified live 2026-08-17: bot 491a3d06 had `meeting_participants: null` but a
+ * 2272-event stream over ids 100 "Allie Grace" / 200 "Daniel Velez"). Each event carries a
+ * `participant`, so appearing in the stream at all means the person was in the call. Dedupe
+ * on the stable per-call participant `id` (fall back to name+email); `email` is usually
+ * absent (Teams hides it) so `name` may be all we get. Later events enrich a person's host
+ * flag / name / email. Pure; exported for unit tests.
+ */
+export function parseParticipantEvents(raw: unknown): RecallParticipant[] {
+  if (!Array.isArray(raw)) return [];
+  const byKey = new Map<string, RecallParticipant>();
+  for (const event of raw as RecallParticipantEvent[]) {
+    const p = event?.participant;
+    if (p == null) continue;
+    const name = typeof p.name === 'string' && p.name.trim() !== '' ? p.name.trim() : null;
+    const direct = typeof p.email === 'string' && p.email.trim() !== '' ? p.email.trim() : null;
+    const nested =
+      typeof p.extra_data?.email === 'string' && p.extra_data.email.trim() !== ''
+        ? p.extra_data.email.trim()
+        : null;
+    const email = direct ?? nested;
+    if (name === null && email === null && p.id == null) continue; // nothing identifiable
+    const key = p.id != null ? `id:${String(p.id)}` : `ne:${(name ?? '').toLowerCase()}|${(email ?? '').toLowerCase()}`;
+    const prev = byKey.get(key);
+    byKey.set(key, {
+      name: prev?.name ?? name,
+      isHost: (prev?.isHost ?? false) || p.is_host === true,
+      email: prev?.email ?? email,
+    });
+  }
+  return [...byKey.values()];
+}
+
+/**
+ * Fetch the participants a Recall bot observed in the meeting (one bot-retrieve, plus one
+ * signed download when needed). Prefers the bot-level `meeting_participants` when the
+ * account populates it; on THIS account that field is empty, so it follows the recording's
+ * `participant_events` signed download ({@link findParticipantEventsUrl}) — GET WITHOUT the
+ * Recall auth header (the URL carries its own token, same as the transcript download) — and
+ * derives the distinct people ({@link parseParticipantEvents}).
+ *
+ * Best-effort like {@link fetchRecallMedia}: only the bot-retrieve itself throws (a transient
+ * error surfaces to the caller); an absent/empty list OR any download/parse failure yields
+ * `[]`, so the attendance gate FAILS OPEN rather than skipping a real meeting on missing data.
  */
 export async function fetchRecallParticipants(
   botJobId: string,
   options: RecallFetchOptions,
 ): Promise<RecallParticipant[]> {
-  return extractParticipants(await retrieveBot(botJobId, options));
+  const bot = await retrieveBot(botJobId, options);
+
+  // Prefer the bot-level list when the account actually populates it.
+  const fromBot = extractParticipants(bot);
+  if (fromBot.length > 0) return fromBot;
+
+  const url = findParticipantEventsUrl(bot);
+  if (url === null) return [];
+  try {
+    // Presigned/token URL — no Recall auth header (a second credential 400s S3).
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return [];
+    return parseParticipantEvents((await res.json()) as unknown);
+  } catch {
+    return [];
+  }
 }
 
 /**

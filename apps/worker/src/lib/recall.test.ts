@@ -31,8 +31,10 @@ import {
   fetchRecallParticipants,
   fetchRecallRecordingUrls,
   fetchRecallTranscript,
+  findParticipantEventsUrl,
   findVideoMixedUrl,
   flattenRecallTranscript,
+  parseParticipantEvents,
   leaveRecallBot,
   pauseRecallBot,
   resumeRecallBot,
@@ -528,6 +530,109 @@ test('fetchRecallParticipants: one bot-retrieve → shaped participants', async 
   );
   assert.equal(seen.length, 1);
   assert.ok(seen[0]?.includes('/bot/bot_1/'));
+});
+
+// --- participant_events (the HOTFIX): the REAL join list when meeting_participants is empty ---
+// Shape verified live 2026-08-17 against bot 491a3d06: meeting_participants was null and the
+// distinct people came only from recordings[].media_shortcuts.participant_events (a flat
+// join/leave/speech event stream, each event carrying a `participant`).
+
+test('parseParticipantEvents: dedupes a join/leave/speech stream to distinct people (by id)', () => {
+  const events = [
+    { action: 'join', participant: { id: 100, name: 'Allie Grace', is_host: false, email: null } },
+    { action: 'speech_on', participant: { id: 100, name: 'Allie Grace', is_host: false, email: null } },
+    { action: 'join', participant: { id: 200, name: 'Daniel Velez', is_host: false, email: null } },
+    { action: 'speech_off', participant: { id: 200, name: 'Daniel Velez', is_host: false, email: null } },
+    { action: 'leave', participant: { id: 200, name: 'Daniel Velez', is_host: true, email: null } }, // host flag arrives late
+  ];
+  assert.deepEqual(parseParticipantEvents(events), [
+    { name: 'Allie Grace', isHost: false, email: null },
+    { name: 'Daniel Velez', isHost: true, email: null }, // enriched from the later event
+  ]);
+});
+
+test('parseParticipantEvents: reads email direct or from extra_data; non-array/empty → []', () => {
+  assert.deepEqual(parseParticipantEvents(null), []);
+  assert.deepEqual(parseParticipantEvents([]), []);
+  assert.deepEqual(
+    parseParticipantEvents([
+      { participant: { id: 1, name: 'A', email: 'a@x.com' } },
+      { participant: { id: 2, name: 'B', extra_data: { email: 'b@y.com' } } },
+      { participant: null }, // dropped
+      { data: null }, // no participant → dropped
+    ]),
+    [
+      { name: 'A', isHost: false, email: 'a@x.com' },
+      { name: 'B', isHost: false, email: 'b@y.com' },
+    ],
+  );
+});
+
+test('findParticipantEventsUrl: first non-empty participant_events download URL, else null', () => {
+  assert.equal(findParticipantEventsUrl({}), null);
+  assert.equal(
+    findParticipantEventsUrl({
+      recordings: [
+        { media_shortcuts: { participant_events: { data: { participant_events_download_url: 'https://s3/pe?sig=1' } } } },
+      ],
+    }),
+    'https://s3/pe?sig=1',
+  );
+});
+
+test('fetchRecallParticipants: meeting_participants empty → follows participant_events (no auth on the download)', async () => {
+  const botPayload = {
+    meeting_participants: null, // this account leaves it empty — the bug's trigger
+    recordings: [
+      {
+        media_shortcuts: {
+          participant_events: {
+            status: { code: 'done' },
+            data: { participant_events_download_url: 'https://s3.example/participant_events.json?sig=abc' },
+          },
+        },
+      },
+    ],
+  };
+  const events = [
+    { action: 'join', participant: { id: 100, name: 'Allie Grace', is_host: false, email: null } },
+    { action: 'join', participant: { id: 200, name: 'Daniel Velez', is_host: false, email: null } },
+  ];
+  const seen: Array<{ url: string; auth: unknown }> = [];
+  await withFetch(
+    (url, init) => {
+      const headers = (init?.headers ?? {}) as Record<string, unknown>;
+      seen.push({ url, auth: headers.Authorization });
+      return Promise.resolve(jsonResponse(url.includes('/bot/') ? botPayload : events));
+    },
+    async () => {
+      const people = await fetchRecallParticipants('bot_x', { apiKey: 'k', region: 'us-west-2' });
+      assert.deepEqual(people, [
+        { name: 'Allie Grace', isHost: false, email: null },
+        { name: 'Daniel Velez', isHost: false, email: null },
+      ]);
+    },
+  );
+  assert.equal(seen.length, 2);
+  assert.ok(seen[0]?.url.includes('/bot/bot_x/'));
+  assert.ok(seen[0]?.auth !== undefined); // the bot-retrieve DOES carry the Recall token
+  assert.ok(seen[1]?.url.includes('participant_events.json'));
+  assert.equal(seen[1]?.auth, undefined); // the signed download does NOT (a second credential 400s S3)
+});
+
+test('fetchRecallParticipants: participant_events download failure → [] (fail-open, never throws)', async () => {
+  const botPayload = {
+    meeting_participants: [],
+    recordings: [
+      { media_shortcuts: { participant_events: { data: { participant_events_download_url: 'https://s3/pe?sig=1' } } } },
+    ],
+  };
+  await withFetch(
+    (url) => Promise.resolve(url.includes('/bot/') ? jsonResponse(botPayload) : jsonResponse({}, false, 403)),
+    async () => {
+      assert.deepEqual(await fetchRecallParticipants('bot_y', { apiKey: 'k' }), []);
+    },
+  );
 });
 
 // --- Phase C player: seek/highlight sync helpers ----------------------------------

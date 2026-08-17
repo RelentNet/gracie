@@ -367,11 +367,15 @@ test('decideAttendanceGate: ≥2 people with ≥1 internal → ok (a real meetin
   assert.deepEqual(gate, { ok: true });
 });
 
-test('decideAttendanceGate: fewer than two people → too_few_participants (the empty-room ghost)', () => {
-  assert.deepEqual(decideAttendanceGate([], isInternalBy(new Set())), {
-    ok: false,
-    reason: 'too_few_participants',
-  });
+test('decideAttendanceGate: an EMPTY list → ok (fail-open — attendance unknown, not "nobody")', () => {
+  // The HOTFIX: this Recall account leaves meeting_participants empty, so [] means
+  // "we could not read who joined", NOT "a ghost". The gate must PROCEED (the caller
+  // returns { kind: "proceed" } on gate.ok) — never skip a real meeting on missing data.
+  assert.deepEqual(decideAttendanceGate([], isInternalBy(new Set())), { ok: true });
+});
+
+test('decideAttendanceGate: exactly one real person → too_few_participants (affirmative ghost)', () => {
+  // A NON-empty list of one person IS an affirmative measurement of a one-sided call.
   assert.deepEqual(
     decideAttendanceGate([{ name: 'Daniel Velez', email: null }], isInternalBy(new Set(['daniel velez']))),
     { ok: false, reason: 'too_few_participants' },
