@@ -5,7 +5,15 @@
  * so generation provider/model are swappable from Admin → API Settings with no
  * call-site changes. Embeddings stay pinned (D9).
  */
-import { createProvider, DEFAULT_GENERATION_MODEL, PINNED_EMBEDDING_MODEL, type AIProvider } from '@gracie/shared';
+import {
+  createProvider,
+  DEFAULT_GENERATION_MODEL,
+  DEFAULT_GENERATION_PROVIDER,
+  isProviderId,
+  PINNED_EMBEDDING_MODEL,
+  type AIProvider,
+  type ProviderId,
+} from '@gracie/shared';
 
 import { getServerClient } from './client.js';
 import { getCredential } from './credentials.js';
@@ -17,28 +25,42 @@ async function getSettingString(key: string): Promise<string | null> {
   return typeof data?.value === 'string' ? data.value : null;
 }
 
-async function requireOpenAIKey(): Promise<string> {
-  const apiKey = await getCredential('openai');
+/** Resolve a provider's key from the credential store (stored → env fallback). */
+async function requireProviderKey(providerId: ProviderId): Promise<string> {
+  const apiKey = await getCredential(providerId);
   if (apiKey === null || apiKey === '') {
-    throw new Error('No OpenAI API key configured. Set it in Admin → API Settings.');
+    throw new Error(`No ${providerId} API key configured. Set it in Settings → AI.`);
   }
   return apiKey;
 }
 
+/** The active generation provider id (`settings.ai_provider`), defaulting to OpenAI (D11). */
+async function getActiveProviderId(): Promise<ProviderId> {
+  const stored = await getSettingString('ai_provider');
+  return stored !== null && isProviderId(stored) ? stored : DEFAULT_GENERATION_PROVIDER;
+}
+
 /**
- * Resolve the active generation provider + model. Provider is OpenAI for now
- * (D11 — OpenAI first); `settings.ai_provider` will switch it once more adapters
- * land. The key comes from the credential store (stored → env fallback).
+ * Resolve the active generation provider + model from Settings → AI. An admin picks
+ * the provider (`ai_provider`) + model (`ai_model`) and enters that provider's key;
+ * the pair is validated together on save, so this trusts the stored pair. Defaults to
+ * OpenAI + gpt-4o so a fresh deploy behaves identically until switched.
  */
 export async function getActiveProvider(): Promise<{ provider: AIProvider; model: string }> {
-  const apiKey = await requireOpenAIKey();
-  const provider = createProvider('openai', { apiKey });
+  const providerId = await getActiveProviderId();
+  const apiKey = await requireProviderKey(providerId);
+  const provider = createProvider(providerId, { apiKey });
   const model = (await getSettingString('ai_model')) ?? DEFAULT_GENERATION_MODEL;
   return { provider, model };
 }
 
-/** Resolve the embedder — PINNED to OpenAI text-embedding-3-small (D9). */
+/**
+ * Resolve the embedder — ALWAYS OpenAI text-embedding-3-small (1536-dim, D9),
+ * regardless of the selected generation provider, so switching generation to
+ * Anthropic never changes stored vectors. An OpenAI key is therefore required for
+ * embeddings even when generation runs on another provider.
+ */
 export async function getEmbedder(): Promise<{ provider: AIProvider; model: string }> {
-  const apiKey = await requireOpenAIKey();
+  const apiKey = await requireProviderKey('openai');
   return { provider: createProvider('openai', { apiKey }), model: PINNED_EMBEDDING_MODEL };
 }

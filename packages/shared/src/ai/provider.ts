@@ -116,20 +116,85 @@ export const PINNED_EMBEDDING_MODEL = 'text-embedding-3-small' as const;
 export const EMBEDDING_DIMENSIONS = 1536 as const;
 
 /**
- * Chat/generation models an admin may select in Settings → API (P9). The set is
- * curated on purpose — free-texting a model id would let a typo (or a model this
- * account can't use) fail silently at call time. OpenAI-only today (D11); extend
- * as more providers/models are validated. `ai_provider` stays reserved.
+ * AI provider ids the platform can construct + select (Settings → AI). OpenAI +
+ * Anthropic today; the factory + catalog are left trivially extensible for
+ * google/ollama (PR 2) — add an id here, a catalog block below, and a case in the
+ * adapter's switch.
  */
-export const ALLOWED_GENERATION_MODELS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini'] as const;
+export const PROVIDER_IDS = ['openai', 'anthropic'] as const;
 
-/** A model id the admin is allowed to select for generation/chat. */
-export type GenerationModel = (typeof ALLOWED_GENERATION_MODELS)[number];
+/** A provider the admin may select. */
+export type ProviderId = (typeof PROVIDER_IDS)[number];
+
+/** Human label per provider (the "Company"/provider dropdown in Settings → AI). */
+export const PROVIDER_LABELS: Record<ProviderId, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic (Claude)',
+};
+
+/** True when `value` is a selectable provider id. */
+export function isProviderId(value: string): value is ProviderId {
+  return (PROVIDER_IDS as readonly string[]).includes(value);
+}
+
+/**
+ * One selectable generation/chat model with its capabilities + rough list pricing.
+ * The catalog is curated on purpose — free-texting a model id would let a typo (or a
+ * model this account can't use) fail silently at call time. Prices are public list
+ * prices (USD per 1M tokens) as of 2026-08, used ONLY for the in-Settings cost
+ * estimate — not billing. Calibrate against real spend in PR 2.
+ */
+export interface ModelCatalogEntry {
+  readonly providerId: ProviderId;
+  readonly model: string;
+  readonly label: string;
+  readonly supportsTools: boolean;
+  readonly supportsJson: boolean;
+  readonly costPer1MInput: number;
+  readonly costPer1MOutput: number;
+}
+
+/** All admin-selectable generation models, grouped by provider. */
+export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
+  // OpenAI (default provider)
+  { providerId: 'openai', model: 'gpt-4o', label: 'GPT-4o', supportsTools: true, supportsJson: true, costPer1MInput: 2.5, costPer1MOutput: 10 },
+  { providerId: 'openai', model: 'gpt-4o-mini', label: 'GPT-4o mini', supportsTools: true, supportsJson: true, costPer1MInput: 0.15, costPer1MOutput: 0.6 },
+  { providerId: 'openai', model: 'gpt-4.1', label: 'GPT-4.1', supportsTools: true, supportsJson: true, costPer1MInput: 2, costPer1MOutput: 8 },
+  { providerId: 'openai', model: 'gpt-4.1-mini', label: 'GPT-4.1 mini', supportsTools: true, supportsJson: true, costPer1MInput: 0.4, costPer1MOutput: 1.6 },
+  // Anthropic (Claude) — prices approximate
+  { providerId: 'anthropic', model: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', supportsTools: true, supportsJson: true, costPer1MInput: 3, costPer1MOutput: 15 },
+  { providerId: 'anthropic', model: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', supportsTools: true, supportsJson: true, costPer1MInput: 1, costPer1MOutput: 5 },
+  { providerId: 'anthropic', model: 'claude-opus-4-5', label: 'Claude Opus 4.5', supportsTools: true, supportsJson: true, costPer1MInput: 5, costPer1MOutput: 25 },
+];
+
+/** Default provider when `settings.ai_provider` is unset — OpenAI, so a fresh deploy is unchanged. */
+export const DEFAULT_GENERATION_PROVIDER: ProviderId = 'openai';
 
 /** Default generation model when `settings.ai_model` is unset (single source of truth). */
-export const DEFAULT_GENERATION_MODEL: GenerationModel = 'gpt-4o';
+export const DEFAULT_GENERATION_MODEL = 'gpt-4o';
 
-/** True when `model` is an admin-selectable generation model. */
-export function isAllowedGenerationModel(model: string): model is GenerationModel {
-  return (ALLOWED_GENERATION_MODELS as readonly string[]).includes(model);
+/** Catalog entries for one provider (populates the model dropdown). */
+export function listModelsForProvider(providerId: string): ModelCatalogEntry[] {
+  return MODEL_CATALOG.filter((m) => m.providerId === providerId);
+}
+
+/** The catalog entry for a (provider, model) pair, or undefined if not a valid pair. */
+export function findModel(providerId: string, model: string): ModelCatalogEntry | undefined {
+  return MODEL_CATALOG.find((m) => m.providerId === providerId && m.model === model);
+}
+
+/**
+ * Rough planning constants: tokens to process ONE hour of meeting (transcript in +
+ * generated notes/tasks out). Ballpark — a real hour varies wildly with transcript
+ * length; calibrate against measured spend in PR 2.
+ */
+export const AVG_INPUT_TOKENS_PER_MEETING_HOUR = 12_000;
+export const AVG_OUTPUT_TOKENS_PER_MEETING_HOUR = 3_000;
+
+/** Estimated cents to process one hour of meetings on a model (from list prices). */
+export function estimateCentsPerMeetingHour(entry: ModelCatalogEntry): number {
+  const usd =
+    (AVG_INPUT_TOKENS_PER_MEETING_HOUR / 1_000_000) * entry.costPer1MInput +
+    (AVG_OUTPUT_TOKENS_PER_MEETING_HOUR / 1_000_000) * entry.costPer1MOutput;
+  return usd * 100;
 }

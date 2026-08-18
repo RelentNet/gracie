@@ -1,14 +1,14 @@
 /**
- * Provider factory (docs/06 §1, D11). Pure: given a provider id + resolved
- * config (api key), constructs the matching adapter. The "which provider/model
- * is active" + key resolution lives server-side (packages/db `getActiveProvider`
- * / `getEmbedder`), so this module has no DB/settings dependency.
+ * Provider factory (docs/06 §1, D11). Pure: given a provider id + resolved config
+ * (api key), constructs the matching adapter over the Vercel AI SDK. The "which
+ * provider/model is active" + key resolution lives server-side (packages/db
+ * `getActiveProvider` / `getEmbedder`), so this module has no DB/settings dependency.
+ *
+ * One adapter (`VercelAIAdapter`) backs every provider; adding google/ollama later is
+ * a new case in the adapter's switch + a catalog block — no change here.
  */
-import { OpenAIAdapter } from './openai.adapter.js';
-import type { AIProvider } from './provider.js';
-
-/** Provider ids the factory can construct. */
-export type ProviderId = 'openai' | 'anthropic';
+import type { AIProvider, ProviderId } from './provider.js';
+import { VercelAIAdapter } from './vercel.adapter.js';
 
 export interface ProviderConfig {
   readonly apiKey: string;
@@ -18,12 +18,5 @@ export interface ProviderConfig {
 
 /** Construct a provider adapter for the given id + config. */
 export function createProvider(providerId: ProviderId, config: ProviderConfig): AIProvider {
-  switch (providerId) {
-    case 'openai':
-      return new OpenAIAdapter(config);
-    case 'anthropic':
-      throw new Error('Anthropic adapter is not implemented yet (add an adapter against AIProvider).');
-    default:
-      throw new Error(`Unknown AI provider: ${String(providerId)}`);
-  }
+  return new VercelAIAdapter(providerId, config);
 }
