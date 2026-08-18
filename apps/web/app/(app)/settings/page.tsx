@@ -65,7 +65,7 @@ export default function SettingsPage(): React.JSX.Element {
           { id: 'automations', label: 'Automations', content: <AutomationsSettingsPanel /> },
           { id: 'scoring', label: 'Scoring', content: <ScoringSettingsPanel /> },
           { id: 'prompts', label: 'Generation Prompts', content: <GenerationPromptsPanel /> },
-          { id: 'ai', label: 'AI Model', content: <AiSettingsPanel /> },
+          { id: 'ai', label: 'AI Provider', content: <AiSettingsPanel /> },
           { id: 'api', label: 'API Settings', content: <ApiSettingsPanel /> },
           {
             id: 'roadmap',

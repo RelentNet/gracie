@@ -1,7 +1,13 @@
 export * from './provider.js';
 export * from './registry.js';
-export { OpenAIAdapter } from './openai.adapter.js';
-export type { OpenAIAdapterConfig } from './openai.adapter.js';
+export {
+  VercelAIAdapter,
+  toAIToolCalls,
+  toModelMessages,
+  toToolSet,
+  toUsage,
+} from './vercel.adapter.js';
+export type { VercelAIAdapterConfig } from './vercel.adapter.js';
 export * from './generated-docs.js';
 export * from './daily-sync-template.js';
 export * from './tasks-extract.js';
