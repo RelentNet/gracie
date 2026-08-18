@@ -36,17 +36,26 @@ import { AddClientModal } from './AddClientModal';
 type CadenceFilter = ClientCadence | 'all';
 
 /**
- * Party-type tabs — real clients plus the funnel (P4.1). Internal is separate.
- * "Unassigned" surfaces the domain-named placeholder orgs the worker auto-creates for
- * recorded meetings that had no matched client, so their notes are reachable without
- * cluttering the real roster.
+ * Party-type tabs — exactly four (Aug 11 review), each folding one or more DB types:
+ *   - Clients             → `client`
+ *   - Partners            → `partner` + `unassigned` (the worker's domain-named
+ *                           placeholder orgs for unmatched recorded meetings default
+ *                           here instead of a separate tab)
+ *   - Past clients        → `past_client`
+ *   - Prospective clients → `prospect` + `lead` (leads == prospects; the `lead` value
+ *                           stays valid but shows here)
+ * Internal (the single GA workspace) is separate, linked out beside the tabs. Each
+ * tab's `value` is also the type pre-selected when creating a party from it.
  */
-const PARTY_TABS: ReadonlyArray<{ readonly value: ClientType; readonly label: string }> = [
-  { value: 'client', label: 'Clients' },
-  { value: 'prospect', label: 'Prospects' },
-  { value: 'lead', label: 'Leads' },
-  { value: 'partner', label: 'Partners' },
-  { value: 'unassigned', label: 'Unassigned' },
+const PARTY_TABS: ReadonlyArray<{
+  readonly value: ClientType;
+  readonly label: string;
+  readonly types: readonly ClientType[];
+}> = [
+  { value: 'client', label: 'Clients', types: ['client'] },
+  { value: 'partner', label: 'Partners', types: ['partner', 'unassigned'] },
+  { value: 'past_client', label: 'Past clients', types: ['past_client'] },
+  { value: 'prospect', label: 'Prospective clients', types: ['prospect', 'lead'] },
 ];
 
 interface ClientsResponse {
@@ -66,8 +75,9 @@ export default function ClientsPage(): React.JSX.Element {
   const [internalOrg, setInternalOrg] = useState<Client | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
+    const types = (PARTY_TABS.find((t) => t.value === party)?.types ?? ['client']).join(',');
     try {
-      const data = await apiClient.get<ClientsResponse>(`/api/clients?type=${party}`);
+      const data = await apiClient.get<ClientsResponse>(`/api/clients?type=${types}`);
       setClients(data.clients);
       setError(null);
     } catch (e) {
@@ -99,11 +109,13 @@ export default function ClientsPage(): React.JSX.Element {
   const filtered = useMemo<readonly Client[]>(() => {
     if (clients === null) return [];
     const needle = query.trim().toLowerCase();
-    return clients.filter((client) => {
-      const matchesName = needle === '' || client.name.toLowerCase().includes(needle);
-      const matchesCadence = cadence === 'all' || client.cadence === cadence;
-      return matchesName && matchesCadence;
-    });
+    return clients
+      .filter((client) => {
+        const matchesName = needle === '' || client.name.toLowerCase().includes(needle);
+        const matchesCadence = cadence === 'all' || client.cadence === cadence;
+        return matchesName && matchesCadence;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name)); // alphabetical within each tab
   }, [clients, query, cadence]);
 
   if (error !== null) {
@@ -118,12 +130,10 @@ export default function ClientsPage(): React.JSX.Element {
           <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
             {clients === null
               ? 'Loading relationships…'
-              : party === 'unassigned'
-                ? `${clients.length} domain ${clients.length === 1 ? 'area' : 'areas'} — recorded meetings with no matched client. Open one to read its notes, or link the meeting to a real client.`
-                : `${clients.length} ${PARTY_TABS.find((t) => t.value === party)?.label.toLowerCase() ?? 'clients'}.`}
+              : `${clients.length} ${PARTY_TABS.find((t) => t.value === party)?.label.toLowerCase() ?? 'clients'}.`}
           </p>
         </div>
-        {isAdmin && party !== 'unassigned' ? (
+        {isAdmin ? (
           <Button icon={<Plus size={16} aria-hidden="true" />} onClick={(): void => setShowAdd(true)}>
             Add {party === 'client' ? 'client' : 'party'}
           </Button>
