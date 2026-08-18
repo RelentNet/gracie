@@ -271,21 +271,26 @@ export default function CalendarPage(): React.JSX.Element {
         />
       ) : null}
 
-      {/* Day agenda on the LEFT (narrow sidebar); wide calendar on the RIGHT. */}
-      <div className="grid gap-6 lg:grid-cols-4">
-        <div className="flex flex-col gap-6 lg:col-span-1">
-          <DayDetail
-            dayKey={selectedDay}
-            meetings={selectedMeetings}
-            loading={meetings === null}
-            editable={editable}
-            canRedispatch={true}
-            canConfigureBot={isAdmin}
-            onChanged={reload}
-          />
+      {/* Day agenda on the LEFT; wide calendar on the RIGHT. On desktop the agenda
+          is capped to the calendar's height (absolute layer inside a relative,
+          zero-contribution column) and scrolls within itself; it stacks and flows
+          full-height on mobile. */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:relative lg:col-span-1">
+          <div className="flex flex-col lg:absolute lg:inset-0">
+            <DayDetail
+              dayKey={selectedDay}
+              meetings={selectedMeetings}
+              loading={meetings === null}
+              editable={editable}
+              canRedispatch={true}
+              canConfigureBot={isAdmin}
+              onChanged={reload}
+            />
+          </div>
         </div>
 
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-2">
           <Card>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 style={TYPE.sectionHeader}>{headerLabel}</h2>
@@ -334,8 +339,12 @@ export default function CalendarPage(): React.JSX.Element {
         </div>
       </div>
 
-      {isAdmin ? <AmbiguousSection onJump={jumpToDay} /> : null}
-      <CadenceSection />
+      {/* Combined bottom bar: "needs a client" (admin) + cadence tracker, split
+          side by side; either half fills the width when the other is absent. */}
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        {isAdmin ? <AmbiguousSection onJump={jumpToDay} /> : null}
+        <CadenceSection />
+      </div>
     </PageContainer>
   );
 }

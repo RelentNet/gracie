@@ -45,34 +45,39 @@ export function DayDetail({
   readonly onChanged: () => void;
 }): React.JSX.Element {
   return (
-    <Card>
+    <Card className="flex min-h-0 flex-1 flex-col p-6">
       <CardHeader
         title={localDayLabel(dayKey)}
         description={`${meetings.length} meeting${meetings.length === 1 ? '' : 's'}`}
       />
-      {loading ? (
-        <LoadingState label="Loading meetings…" />
-      ) : meetings.length === 0 ? (
-        <EmptyState title="No meetings" description="Nothing scheduled for this day." />
-      ) : (
-        <ul className="flex flex-col gap-4">
-          {meetings.map((m) => (
-            <li
-              key={m.id}
-              className="border-t pt-4 first:border-t-0 first:pt-0"
-              style={{ borderColor: 'var(--border-subtle)' }}
-            >
-              <MeetingCard
-                meeting={m}
-                editable={editable}
-                canRedispatch={canRedispatch}
-                canConfigureBot={canConfigureBot}
-                onChanged={onChanged}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* Scrolls within the card so the agenda equalizes with the calendar's
+          height and shows ~3 meetings at a time on desktop; flows fully on mobile
+          where the wrapping column is unbounded. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {loading ? (
+          <LoadingState label="Loading meetings…" />
+        ) : meetings.length === 0 ? (
+          <EmptyState title="No meetings" description="Nothing scheduled for this day." />
+        ) : (
+          <ul className="flex flex-col gap-4">
+            {meetings.map((m) => (
+              <li
+                key={m.id}
+                className="border-t pt-4 first:border-t-0 first:pt-0"
+                style={{ borderColor: 'var(--border-subtle)' }}
+              >
+                <MeetingCard
+                  meeting={m}
+                  editable={editable}
+                  canRedispatch={canRedispatch}
+                  canConfigureBot={canConfigureBot}
+                  onChanged={onChanged}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </Card>
   );
 }
