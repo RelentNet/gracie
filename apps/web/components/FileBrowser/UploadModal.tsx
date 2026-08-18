@@ -132,7 +132,7 @@ export function UploadModal({
             Cancel
           </Button>
           <Button variant="primary" onClick={(): void => void submit()} disabled={submitting}>
-            {submitting ? 'Uploading…' : 'Upload'}
+            {submitting ? 'Submitting…' : 'Submit'}
           </Button>
         </>
       }
