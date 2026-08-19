@@ -49,10 +49,12 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     if (typeof body.provider !== 'string') return jsonError('bad_request', 'provider (string) is required', 400);
     if (typeof body.model !== 'string') return jsonError('bad_request', 'model (string) is required', 400);
     const apiKey = typeof body.apiKey === 'string' ? body.apiKey : undefined;
+    const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl : undefined;
+    const openaiKey = typeof body.openaiKey === 'string' ? body.openaiKey : undefined;
     try {
       const byUserId = await getUserIdByLogtoId(user.userId); // Logto id → internal uuid (null if unsynced)
       return NextResponse.json({
-        settings: await setAiProviderModel({ provider: body.provider, model: body.model, apiKey, updatedByUserId: byUserId }),
+        settings: await setAiProviderModel({ provider: body.provider, model: body.model, apiKey, baseUrl, openaiKey, updatedByUserId: byUserId }),
       });
     } catch (err) {
       if (err instanceof AiSettingsValidationError) return jsonError('bad_request', err.message, 400);

@@ -11,6 +11,7 @@ import {
   DEFAULT_GENERATION_PROVIDER,
   isProviderId,
   PINNED_EMBEDDING_MODEL,
+  providerNeedsBaseUrl,
   type AIProvider,
   type ProviderId,
 } from '@gracie/shared';
@@ -42,16 +43,29 @@ async function getActiveProviderId(): Promise<ProviderId> {
 
 /**
  * Resolve the active generation provider + model from Settings → AI. An admin picks
- * the provider (`ai_provider`) + model (`ai_model`) and enters that provider's key;
- * the pair is validated together on save, so this trusts the stored pair. Defaults to
- * OpenAI + gpt-4o so a fresh deploy behaves identically until switched.
+ * the provider (`ai_provider`) + model (`ai_model`, free text or a preset) and enters
+ * that provider's key; the pair is validated on save, so this trusts the stored values.
+ * Defaults to OpenAI + gpt-4o so a fresh deploy behaves identically until switched.
+ *
+ * OpenAI-compatible providers (Ollama / Custom) resolve a base URL from `ai_base_url`
+ * and pass it to the adapter; their key is OPTIONAL (Ollama runs keyless), so a missing
+ * key is not an error for them — a missing base URL is.
  */
 export async function getActiveProvider(): Promise<{ provider: AIProvider; model: string }> {
   const providerId = await getActiveProviderId();
-  const apiKey = await requireProviderKey(providerId);
-  const provider = createProvider(providerId, { apiKey });
   const model = (await getSettingString('ai_model')) ?? DEFAULT_GENERATION_MODEL;
-  return { provider, model };
+
+  if (providerNeedsBaseUrl(providerId)) {
+    const baseUrl = await getSettingString('ai_base_url');
+    if (baseUrl === null || baseUrl === '') {
+      throw new Error(`No endpoint (base URL) configured for ${providerId}. Set it in Settings → AI.`);
+    }
+    const apiKey = (await getCredential(providerId)) ?? ''; // optional (Ollama runs keyless)
+    return { provider: createProvider(providerId, { apiKey, baseUrl }), model };
+  }
+
+  const apiKey = await requireProviderKey(providerId);
+  return { provider: createProvider(providerId, { apiKey }), model };
 }
 
 /**

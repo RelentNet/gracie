@@ -13,18 +13,24 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  createProvider,
   DEFAULT_GENERATION_MODEL,
   DEFAULT_GENERATION_PROVIDER,
+  DEFAULT_OLLAMA_BASE_URL,
   estimateCentsPerMeetingHour,
   findModel,
   isProviderId,
   listModelsForProvider,
   MODEL_CATALOG,
+  OPENAI_COMPATIBLE_PROVIDERS,
   PROVIDER_IDS,
+  PROVIDER_LABELS,
+  providerNeedsBaseUrl,
   toAIToolCalls,
   toModelMessages,
   toToolSet,
   toUsage,
+  type ProviderId,
 } from '@gracie/shared';
 
 test('toModelMessages maps plain user/assistant turns 1:1', () => {
@@ -144,4 +150,66 @@ test('catalog: cost estimate is positive and cheaper for a mini model', () => {
   assert.ok(full !== undefined && mini !== undefined);
   assert.ok(estimateCentsPerMeetingHour(mini) > 0);
   assert.ok(estimateCentsPerMeetingHour(mini) < estimateCentsPerMeetingHour(full));
+});
+
+// --- multi-provider: catalog coverage + createProvider construction (no network) ------
+
+/** Providers with API-keyed SDKs (not the OpenAI-compatible base-URL ones). */
+const KEYED_PROVIDERS: readonly ProviderId[] = [
+  'openai',
+  'anthropic',
+  'google',
+  'mistral',
+  'groq',
+  'deepseek',
+  'xai',
+  'cohere',
+  'perplexity',
+];
+
+test('catalog: every keyed provider has at least one preset; Ollama/Custom have none (free-text)', () => {
+  for (const id of KEYED_PROVIDERS) {
+    assert.ok(listModelsForProvider(id).length > 0, `${id} presets`);
+  }
+  assert.equal(listModelsForProvider('ollama').length, 0);
+  assert.equal(listModelsForProvider('custom').length, 0);
+});
+
+test('providerNeedsBaseUrl is true only for Ollama + Custom', () => {
+  assert.deepEqual([...OPENAI_COMPATIBLE_PROVIDERS].sort(), ['custom', 'ollama']);
+  assert.ok(providerNeedsBaseUrl('ollama') && providerNeedsBaseUrl('custom'));
+  for (const id of KEYED_PROVIDERS) assert.ok(!providerNeedsBaseUrl(id), `${id} no base url`);
+});
+
+test('every provider id has a label', () => {
+  for (const id of PROVIDER_IDS) assert.equal(typeof PROVIDER_LABELS[id], 'string');
+});
+
+test('createProvider: each keyed provider constructs with a key (no throw, no network)', () => {
+  for (const id of KEYED_PROVIDERS) {
+    const p = createProvider(id, { apiKey: 'test-key' });
+    assert.equal(p.id, id);
+  }
+});
+
+test('createProvider: keyed provider throws on empty key', () => {
+  assert.throws(() => createProvider('anthropic', { apiKey: '' }));
+});
+
+test('createProvider: Ollama/Custom construct with a base URL and pass it through', () => {
+  const ollama = createProvider('ollama', { apiKey: '', baseUrl: DEFAULT_OLLAMA_BASE_URL });
+  assert.equal(ollama.id, 'ollama');
+  const custom = createProvider('custom', { apiKey: 'sk-x', baseUrl: 'https://openrouter.ai/api/v1' });
+  assert.equal(custom.id, 'custom');
+});
+
+test('createProvider: Ollama/Custom throw when the base URL is missing', () => {
+  assert.throws(() => createProvider('ollama', { apiKey: '' }));
+  assert.throws(() => createProvider('custom', { apiKey: 'sk-x' }));
+});
+
+test('a free-text model id is not a catalog preset (findModel undefined) but is still usable', () => {
+  // Free text never matches a preset; the adapter passes any id straight to the SDK.
+  assert.equal(findModel('openai', 'gpt-5-some-future-id'), undefined);
+  assert.equal(findModel('ollama', 'llama3.1'), undefined);
 });

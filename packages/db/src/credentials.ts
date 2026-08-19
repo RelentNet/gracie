@@ -23,11 +23,25 @@ export interface IntegrationStatus {
   readonly lastTestOk: boolean | null;
 }
 
-/** Services manageable from Admin → API Settings (excludes env-only bootstrap). */
+/**
+ * Services with a runtime-settable key (excludes env-only bootstrap). Includes the AI
+ * generation providers so their keys persist across a provider switch; those are edited
+ * in Settings → AI Provider (not the API Settings tab, which filters them out via
+ * `isAiProviderService`).
+ */
 export const MANAGEABLE_SERVICES: readonly IntegrationKey[] = [
   'recall',
   'openai',
   'anthropic',
+  'google',
+  'mistral',
+  'groq',
+  'deepseek',
+  'xai',
+  'cohere',
+  'perplexity',
+  'ollama',
+  'custom',
   'resend',
   'r2',
   'ms_graph',
@@ -38,6 +52,15 @@ const DEFAULT_LABELS: Record<IntegrationKey, string> = {
   recall: 'Recall.ai API Key',
   openai: 'OpenAI API Key',
   anthropic: 'Anthropic API Key',
+  google: 'Google (Gemini) API Key',
+  mistral: 'Mistral API Key',
+  groq: 'Groq API Key',
+  deepseek: 'DeepSeek API Key',
+  xai: 'xAI (Grok) API Key',
+  cohere: 'Cohere API Key',
+  perplexity: 'Perplexity API Key',
+  ollama: 'Ollama API Key (optional)',
+  custom: 'Custom Provider API Key',
   resend: 'Resend API Key',
   r2: 'Object Storage (MinIO/S3) Access Key',
   ms_graph: 'Microsoft Graph Client Secret',
@@ -45,11 +68,18 @@ const DEFAULT_LABELS: Record<IntegrationKey, string> = {
   supabase: 'Supabase',
 };
 
-/** Env-var fallback per service (docs/07 step 2). */
+/** Env-var fallback per service (docs/07 step 2). AI-SDK provider defaults included. */
 const ENV_FALLBACK: Partial<Record<IntegrationKey, string>> = {
   recall: 'RECALL_API_KEY',
   openai: 'OPENAI_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
+  google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+  mistral: 'MISTRAL_API_KEY',
+  groq: 'GROQ_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
+  xai: 'XAI_API_KEY',
+  cohere: 'COHERE_API_KEY',
+  perplexity: 'PERPLEXITY_API_KEY',
   resend: 'RESEND_API_KEY',
   ms_graph: 'MS_CLIENT_SECRET',
 };

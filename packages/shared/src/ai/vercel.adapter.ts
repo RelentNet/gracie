@@ -15,7 +15,15 @@
  * throws (it is never reached in practice — getEmbedder always builds an OpenAI one).
  */
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createCohere } from '@ai-sdk/cohere';
+import { createDeepSeek } from '@ai-sdk/deepseek';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createGroq } from '@ai-sdk/groq';
+import { createMistral } from '@ai-sdk/mistral';
 import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { createPerplexity } from '@ai-sdk/perplexity';
+import { createXai } from '@ai-sdk/xai';
 import {
   embedMany,
   generateObject,
@@ -32,6 +40,7 @@ import {
 
 import {
   PINNED_EMBEDDING_MODEL,
+  providerNeedsBaseUrl,
   type AIMessage,
   type AIProvider,
   type AITool,
@@ -149,6 +158,8 @@ function build(providerId: ProviderId, config: VercelAIAdapterConfig): {
   languageModel: (modelId: string) => LanguageModel;
   embeddingModel: EmbeddingModel | null;
 } {
+  // Non-OpenAI providers have no embeddings here; embeddings stay pinned to OpenAI (D9),
+  // so their embeddingModel is null and getEmbedder() always builds an OpenAI adapter.
   switch (providerId) {
     case 'openai': {
       const openai = createOpenAI({ apiKey: config.apiKey, baseURL: config.baseUrl });
@@ -158,8 +169,48 @@ function build(providerId: ProviderId, config: VercelAIAdapterConfig): {
     }
     case 'anthropic': {
       const anthropic = createAnthropic({ apiKey: config.apiKey, baseURL: config.baseUrl });
-      // Anthropic has no embeddings; embeddings stay pinned to OpenAI (D9).
       return { languageModel: (m): LanguageModel => anthropic(m), embeddingModel: null };
+    }
+    case 'google': {
+      const google = createGoogleGenerativeAI({ apiKey: config.apiKey, baseURL: config.baseUrl });
+      return { languageModel: (m): LanguageModel => google(m), embeddingModel: null };
+    }
+    case 'mistral': {
+      const mistral = createMistral({ apiKey: config.apiKey, baseURL: config.baseUrl });
+      return { languageModel: (m): LanguageModel => mistral(m), embeddingModel: null };
+    }
+    case 'groq': {
+      const groq = createGroq({ apiKey: config.apiKey, baseURL: config.baseUrl });
+      return { languageModel: (m): LanguageModel => groq(m), embeddingModel: null };
+    }
+    case 'deepseek': {
+      const deepseek = createDeepSeek({ apiKey: config.apiKey, baseURL: config.baseUrl });
+      return { languageModel: (m): LanguageModel => deepseek(m), embeddingModel: null };
+    }
+    case 'xai': {
+      const xai = createXai({ apiKey: config.apiKey, baseURL: config.baseUrl });
+      return { languageModel: (m): LanguageModel => xai(m), embeddingModel: null };
+    }
+    case 'cohere': {
+      const cohere = createCohere({ apiKey: config.apiKey, baseURL: config.baseUrl });
+      return { languageModel: (m): LanguageModel => cohere(m), embeddingModel: null };
+    }
+    case 'perplexity': {
+      const perplexity = createPerplexity({ apiKey: config.apiKey, baseURL: config.baseUrl });
+      return { languageModel: (m): LanguageModel => perplexity(m), embeddingModel: null };
+    }
+    case 'ollama':
+    case 'custom': {
+      // Catch-all OpenAI-compatible path (Ollama local, OpenRouter/LiteLLM/vLLM/LM Studio/
+      // Together/Fireworks/…). `baseURL` is REQUIRED (validated in the constructor); the
+      // key is optional for Ollama, so pass undefined when blank. `name` is required by
+      // the SDK — use the provider id.
+      const compatible = createOpenAICompatible({
+        name: providerId,
+        baseURL: config.baseUrl ?? '',
+        apiKey: config.apiKey === '' ? undefined : config.apiKey,
+      });
+      return { languageModel: (m): LanguageModel => compatible(m), embeddingModel: null };
     }
     default:
       throw new Error(`Unknown AI provider: ${String(providerId)}`);
@@ -172,7 +223,14 @@ export class VercelAIAdapter implements AIProvider {
   private readonly embeddingModel: EmbeddingModel | null;
 
   public constructor(providerId: ProviderId, config: VercelAIAdapterConfig) {
-    if (config.apiKey === '') {
+    // OpenAI-compatible providers (Ollama / Custom) authenticate to an endpoint, so they
+    // REQUIRE a base URL; the key is optional (Ollama runs keyless). Every other provider
+    // is keyed against a fixed endpoint, so it requires a non-empty key.
+    if (providerNeedsBaseUrl(providerId)) {
+      if (config.baseUrl === undefined || config.baseUrl === '') {
+        throw new Error(`The ${providerId} provider requires a base URL (its endpoint).`);
+      }
+    } else if (config.apiKey === '') {
       throw new Error('VercelAIAdapter requires a non-empty apiKey.');
     }
     this.id = providerId;
