@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { Download, Plus, Search } from 'lucide-react';
 import type { Client, ContactWithAffiliations } from '@gracie/shared';
 
 import { apiClient } from '@/lib/api-client';
@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews
 import { ClientAvatar } from '@/components/ClientAvatar';
 
 import { NewContactModal } from './NewContactModal';
+import { ImportOutlookModal } from './ImportOutlookModal';
 import { ContactProfileDrawer } from './ContactProfileDrawer';
 import { OrgTypeBadge, contactInitials } from './shared';
 
@@ -24,13 +25,15 @@ import { OrgTypeBadge, contactInitials } from './shared';
 interface AllContactsTabProps {
   readonly orgs: readonly Client[];
   readonly canEdit: boolean;
+  /** Admins can bulk-import a mailbox's Outlook contacts. */
+  readonly canImport: boolean;
 }
 
 interface ContactsResponse {
   readonly contacts: readonly ContactWithAffiliations[];
 }
 
-export function AllContactsTab({ orgs, canEdit }: AllContactsTabProps): React.JSX.Element {
+export function AllContactsTab({ orgs, canEdit, canImport }: AllContactsTabProps): React.JSX.Element {
   const [contacts, setContacts] = useState<readonly ContactWithAffiliations[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -40,6 +43,7 @@ export function AllContactsTab({ orgs, canEdit }: AllContactsTabProps): React.JS
   const [includePast, setIncludePast] = useState(false);
 
   const [showNew, setShowNew] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,11 +85,22 @@ export function AllContactsTab({ orgs, canEdit }: AllContactsTabProps): React.JS
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
           {contacts === null ? 'Loading contacts…' : `${contacts.length} contact${contacts.length === 1 ? '' : 's'}.`}
         </p>
-        {canEdit ? (
-          <Button icon={<Plus size={16} aria-hidden="true" />} onClick={() => setShowNew(true)}>
-            New contact
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {canImport ? (
+            <Button
+              variant="secondary"
+              icon={<Download size={16} aria-hidden="true" />}
+              onClick={() => setShowImport(true)}
+            >
+              Import from Outlook
+            </Button>
+          ) : null}
+          {canEdit ? (
+            <Button icon={<Plus size={16} aria-hidden="true" />} onClick={() => setShowNew(true)}>
+              New contact
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -171,6 +186,14 @@ export function AllContactsTab({ orgs, canEdit }: AllContactsTabProps): React.JS
           onClose={() => setShowNew(false)}
           orgs={orgs}
           onCreated={() => reload()}
+        />
+      ) : null}
+
+      {canImport ? (
+        <ImportOutlookModal
+          isOpen={showImport}
+          onClose={() => setShowImport(false)}
+          onImported={() => reload()}
         />
       ) : null}
 

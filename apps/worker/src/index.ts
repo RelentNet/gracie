@@ -24,6 +24,7 @@ import { createDailySyncProcessor } from './processors/daily-sync.processor.js';
 import { createDocumentsPurgeProcessor } from './processors/documents-purge.processor.js';
 import { createGenerateProcessor } from './processors/generate.processor.js';
 import { createHeartbeatProcessor } from './processors/heartbeat.processor.js';
+import { createImportOutlookContactsProcessor } from './processors/import-outlook-contacts.processor.js';
 import { createIngestProcessor } from './processors/ingest.processor.js';
 import { createKbIngestProcessor } from './processors/kb-ingest.processor.js';
 import { createRelationshipHealthProcessor } from './processors/relationship-health.processor.js';
@@ -45,6 +46,7 @@ import {
 import { createWorker } from './queues/factory.js';
 import { createGenerateQueue } from './queues/generate.queue.js';
 import { createHeartbeatQueue, scheduleHeartbeat } from './queues/heartbeat.queue.js';
+import { createImportOutlookContactsQueue } from './queues/import-outlook-contacts.queue.js';
 import { createIngestQueue } from './queues/ingest.queue.js';
 import { createKbIngestQueue } from './queues/kb-ingest.queue.js';
 import {
@@ -116,6 +118,7 @@ async function start(): Promise<void> {
   const documentsPurgeQueue = createDocumentsPurgeQueue(connection);
   const resumeRecordingQueue = createResumeRecordingQueue(connection);
   const taskAgingQueue = createTaskAgingQueue(connection);
+  const importOutlookContactsQueue = createImportOutlookContactsQueue(connection);
 
   /**
    * Best-effort single-client health recompute, deduped by a `health:<clientId>` job
@@ -155,6 +158,7 @@ async function start(): Promise<void> {
       documentsPurgeQueue,
       resumeRecordingQueue,
       taskAgingQueue,
+      importOutlookContactsQueue,
     ],
   });
 
@@ -302,6 +306,16 @@ async function start(): Promise<void> {
     app.log.error({ jobId: job?.id, err: error }, 'task-aging job failed');
   });
 
+  // Import Outlook contacts: admin-triggered pull of one mailbox's contacts (ad-hoc).
+  const importOutlookContactsWorker = createWorker(
+    QUEUE_NAMES.outlookContactsImport,
+    createImportOutlookContactsProcessor(app.log),
+    connection,
+  );
+  importOutlookContactsWorker.on('failed', (job, error) => {
+    app.log.error({ jobId: job?.id, err: error }, 'import-outlook-contacts job failed');
+  });
+
   await scheduleHeartbeat(heartbeatQueue);
   await scheduleTranscriptWatchdog(watchdogQueue);
   await scheduleCalendarScan(calendarScanQueue);
@@ -331,6 +345,7 @@ async function start(): Promise<void> {
       documentsPurgeQueue,
       resumeRecordingQueue,
       taskAgingQueue,
+      importOutlookContactsQueue,
     ],
     workers: [
       heartbeatWorker,
@@ -347,6 +362,7 @@ async function start(): Promise<void> {
       documentsPurgeWorker,
       resumeRecordingWorker,
       taskAgingWorker,
+      importOutlookContactsWorker,
     ],
   });
 

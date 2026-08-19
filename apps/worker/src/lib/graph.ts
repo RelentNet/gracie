@@ -90,6 +90,32 @@ interface GraphRawEvent {
   }> | null;
 }
 
+/** Raw Outlook contact from `GET /users/{mailbox}/contacts` (subset we import). */
+export interface GraphContactRaw {
+  readonly displayName?: string | null;
+  readonly emailAddresses?: ReadonlyArray<{
+    readonly address?: string | null;
+    readonly name?: string | null;
+  }> | null;
+  readonly mobilePhone?: string | null;
+  readonly businessPhones?: readonly string[] | null;
+  readonly jobTitle?: string | null;
+  readonly companyName?: string | null;
+}
+
+/**
+ * Result of listing a mailbox's Outlook contacts. `ok` is false when Graph denied
+ * or could not find the mailbox — `status` then carries the HTTP code (403 =
+ * `Contacts.Read` not granted; 404 = mailbox not found / outside the access
+ * policy) so the caller can surface a precise, plain-language message.
+ */
+export interface MailboxContactsResult {
+  readonly ok: boolean;
+  /** HTTP status when `!ok` (e.g. 403/404); 200 on success. */
+  readonly status: number;
+  readonly contacts: GraphContactRaw[];
+}
+
 interface GraphListResponse<T> {
   readonly value?: readonly T[];
   readonly '@odata.nextLink'?: string;
@@ -127,6 +153,13 @@ export interface GraphClient {
    * policy / no mailbox) so one member never fails a scan; other errors throw.
    */
   readCalendarView(memberId: string, startIso: string, endIso: string): Promise<CalendarReadResult>;
+  /**
+   * Page a mailbox's Outlook contacts (`GET /users/{mailbox}/contacts`). Returns
+   * `{ ok: false, status }` on 403 (`Contacts.Read` not granted / mailbox outside
+   * the access policy) or 404 (mailbox not found) so the caller surfaces a clear
+   * message instead of failing silently; other errors throw.
+   */
+  listMailboxContacts(mailbox: string): Promise<MailboxContactsResult>;
 }
 
 /** Build an app-only Graph client with an in-process token cache. */
@@ -246,6 +279,26 @@ export function createGraphClient(config: GraphConfig, logger: FastifyBaseLogger
           })),
         }));
       return { ok: true, events };
+    },
+
+    async listMailboxContacts(mailbox): Promise<MailboxContactsResult> {
+      const params = new URLSearchParams({
+        $select: 'displayName,emailAddresses,mobilePhone,businessPhones,jobTitle,companyName',
+        $top: '100',
+      });
+      const url = `${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/contacts?${params.toString()}`;
+      try {
+        const contacts = await getAllPages<GraphContactRaw>(url);
+        return { ok: true, status: 200, contacts };
+      } catch (error) {
+        // 403 = Contacts.Read not granted / mailbox outside the access policy;
+        // 404 = no such mailbox. Surface the status so the caller can explain it.
+        if (error instanceof GraphError && (error.status === 403 || error.status === 404)) {
+          logger.warn({ mailbox, status: error.status }, 'graph: mailbox contacts read denied');
+          return { ok: false, status: error.status, contacts: [] };
+        }
+        throw error;
+      }
     },
   };
 }
