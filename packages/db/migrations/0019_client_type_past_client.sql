@@ -1,0 +1,13 @@
+-- 0019_client_type_past_client.sql — "Past clients" party tab (Aug 11 review).
+--
+-- The Clients roster is being reduced to exactly four party tabs — Clients ·
+-- Partners · Past clients · Prospective clients. "Past clients" (former clients
+-- who are no longer active) needs its own party type so it can be its own tab and
+-- an org can be demoted to it via the existing client-details edit path. The other
+-- three tabs reuse existing types (leads fold into Prospective; unassigned shows
+-- under Partners), so this migration only adds the one new value.
+--
+-- Additive + idempotent. Applies to the SHARED dev+prod Supabase — apply ONLY in
+-- coordination with the orchestrator. The value is NOT used elsewhere in this
+-- migration, so ADD VALUE is safe inside the tx (mirrors 0018/0009).
+alter type client_type add value if not exists 'past_client';

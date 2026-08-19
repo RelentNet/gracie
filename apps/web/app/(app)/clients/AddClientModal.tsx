@@ -14,9 +14,9 @@ import { TYPE } from '@/lib/typography';
 /** Party types a user can create here (the reserved `internal` org is excluded). */
 const PARTY_TYPE_OPTIONS: ReadonlyArray<{ readonly value: ClientType; readonly label: string }> = [
   { value: 'client', label: 'Client' },
-  { value: 'prospect', label: 'Prospect' },
-  { value: 'lead', label: 'Lead' },
+  { value: 'prospect', label: 'Prospective client' },
   { value: 'partner', label: 'Partner' },
+  { value: 'past_client', label: 'Past client' },
 ];
 
 interface AddClientModalProps {

@@ -41,6 +41,7 @@ export const CREATE_ORG_TYPES: ReadonlyArray<{
 
 /** Human label for a party type (chip caption). */
 export function orgTypeLabel(type: ClientType): string {
+  if (type === 'past_client') return 'Past client';
   return CREATE_ORG_TYPES.find((t) => t.value === type)?.label ?? 'Internal';
 }
 

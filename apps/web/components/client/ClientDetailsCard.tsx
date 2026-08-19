@@ -32,6 +32,7 @@ const TYPE_LABELS: Readonly<Record<ClientType, string>> = {
   partner: 'Partner',
   internal: 'Internal',
   unassigned: 'Unassigned',
+  past_client: 'Past client',
 };
 // `internal` + `unassigned` are system-managed and never manually settable; editing an
 // unassigned placeholder's type to a real one is how you promote it to a real client.
