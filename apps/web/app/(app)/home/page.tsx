@@ -10,7 +10,11 @@ import { CommandCenter } from '../dashboard/CommandCenter';
  *
  * Both surfaces are reused as-is: {@link AssistantPage} (the standalone /assistant
  * experience) and {@link CommandCenter} (the standalone /dashboard tiles). The
- * two standalone routes remain reachable from the sidebar.
+ * standalone routes still resolve directly, though the nav now points here.
+ *
+ * On `lg`+ the tiles rail is bounded to the viewport and scrolls on its own
+ * (sticky at the top) so a long tile list never stretches the page — the chat
+ * column keeps its own height. Below `lg` the rail stacks and flows normally.
  */
 export default function HomePage(): React.JSX.Element {
   return (
@@ -18,7 +22,7 @@ export default function HomePage(): React.JSX.Element {
       <div className="min-w-0 flex-1">
         <AssistantPage />
       </div>
-      <aside className="flex shrink-0 flex-col lg:w-80 xl:w-96">
+      <aside className="flex shrink-0 flex-col lg:sticky lg:top-0 lg:max-h-[calc(100dvh-6rem)] lg:w-80 lg:overflow-y-auto xl:w-96">
         <CommandCenter variant="rail" />
       </aside>
     </div>
