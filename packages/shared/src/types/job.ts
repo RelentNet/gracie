@@ -197,6 +197,20 @@ export interface ResumeRecordingJobPayload {
 }
 
 /**
+ * Payload for a one-off Outlook/Office 365 contacts import
+ * (`QUEUE_NAMES.outlookContactsImport`). Admin-triggered from the Contacts page:
+ * the worker pages the given mailbox's Outlook contacts via the app-only MS Graph
+ * client and upserts them into `contacts` (deduped by email, idempotent). Not a
+ * repeatable schedule — one job per import.
+ */
+export interface OutlookContactsImportJobPayload {
+  /** Mailbox (SMTP/UPN) whose Outlook contacts to import, e.g. `joe@graceandassociates.com`. */
+  readonly mailbox: string;
+  /** Logical origin — e.g. `'manual'` for an admin "Import from Outlook". */
+  readonly source: string;
+}
+
+/**
  * Payload for the nightly task-aging sweep (`QUEUE_NAMES.taskAging`, tasks
  * lifecycle). No per-item data — each run archives every standard-priority task
  * with no activity past the aging window. High-priority tasks are never touched

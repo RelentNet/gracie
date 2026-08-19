@@ -705,6 +705,7 @@ export type Database = {
       }
       contacts: {
         Row: {
+          company: string | null
           created_at: string
           created_by_user_id: string | null
           email: string | null
@@ -713,9 +714,12 @@ export type Database = {
           linkedin_url: string | null
           notes: string | null
           phone: string | null
+          source: string | null
+          title: string | null
           updated_at: string
         }
         Insert: {
+          company?: string | null
           created_at?: string
           created_by_user_id?: string | null
           email?: string | null
@@ -724,9 +728,12 @@ export type Database = {
           linkedin_url?: string | null
           notes?: string | null
           phone?: string | null
+          source?: string | null
+          title?: string | null
           updated_at?: string
         }
         Update: {
+          company?: string | null
           created_at?: string
           created_by_user_id?: string | null
           email?: string | null
@@ -735,6 +742,8 @@ export type Database = {
           linkedin_url?: string | null
           notes?: string | null
           phone?: string | null
+          source?: string | null
+          title?: string | null
           updated_at?: string
         }
         Relationships: [

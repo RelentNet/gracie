@@ -32,8 +32,9 @@ interface ClientsResponse {
 }
 
 export default function ContactsPage(): React.JSX.Element {
-  const { canEdit } = useAuth();
+  const { canEdit, hasRole } = useAuth();
   const editor = canEdit();
+  const admin = hasRole('admin');
 
   const [tab, setTab] = useState<TabId>('all');
   const [orgs, setOrgs] = useState<readonly Client[] | null>(null);
@@ -107,7 +108,7 @@ export default function ContactsPage(): React.JSX.Element {
       {orgsError !== null ? (
         <ErrorState title="Couldn’t load organizations" description={orgsError} />
       ) : tab === 'all' ? (
-        <AllContactsTab orgs={orgs ?? []} canEdit={editor} />
+        <AllContactsTab orgs={orgs ?? []} canEdit={editor} canImport={admin} />
       ) : tab === 'org-charts' ? (
         <OrgChartsTab orgs={orgs ?? []} canEdit={editor} />
       ) : (
