@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
@@ -62,8 +63,22 @@ export function NotificationBell(): React.JSX.Element {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Viewport-anchored position for the portaled panel (see `place`).
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   /** Ids that were unread at the moment the panel opened — kept accented for this view. */
   const newIdsRef = useRef<Set<string>>(new Set());
+
+  // The panel is portaled to <body> to escape the app-shell header's stacking
+  // context (its `.glass` backdrop-filter traps any z-index inside the header
+  // below the page content). Fixed-positioned under the bell's right edge.
+  const place = useCallback((): void => {
+    const b = buttonRef.current;
+    if (b === null) return;
+    const r = b.getBoundingClientRect();
+    setPos({ top: r.bottom + 8, right: Math.max(8, window.innerWidth - r.right) });
+  }, []);
 
   const load = useCallback(async (): Promise<NotificationsResponse | null> => {
     const res = await fetch('/api/notifications', { cache: 'no-store' });
@@ -90,24 +105,33 @@ export function NotificationBell(): React.JSX.Element {
     };
   }, [load, open]);
 
-  // Close on outside click / Escape.
+  // Close on outside click / Escape; keep the portaled panel anchored on resize.
+  // The panel lives outside `containerRef` (it's in a body portal), so it must be
+  // excluded from the outside-click check or clicking it would close it.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent): void => {
-      if (containerRef.current !== null && !containerRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (containerRef.current?.contains(t) === true) return;
+      if (panelRef.current?.contains(t) === true) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') setOpen(false);
     };
+    const onResize = (): void => place();
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onResize);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onResize);
     };
-  }, [open]);
+  }, [open, place]);
 
   const openPanel = useCallback(async (): Promise<void> => {
+    place();
     setOpen(true);
     setLoading(true);
     setError(null);
@@ -115,7 +139,9 @@ export function NotificationBell(): React.JSX.Element {
       const data = await load();
       if (data === null) return;
       setItems(data.notifications);
-      newIdsRef.current = new Set(data.notifications.filter((n) => n.readAt === null).map((n) => n.id));
+      newIdsRef.current = new Set(
+        data.notifications.filter((n) => n.readAt === null).map((n) => n.id),
+      );
       // Mark-read on open: clear the badge; items keep their "new" accent for this view.
       if (data.unreadCount > 0) {
         setUnreadCount(0);
@@ -130,7 +156,7 @@ export function NotificationBell(): React.JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [load]);
+  }, [load, place]);
 
   const toggle = useCallback((): void => {
     if (open) setOpen(false);
@@ -148,6 +174,7 @@ export function NotificationBell(): React.JSX.Element {
   return (
     <div ref={containerRef} className="relative">
       <button
+        ref={buttonRef}
         type="button"
         onClick={toggle}
         aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
@@ -174,85 +201,108 @@ export function NotificationBell(): React.JSX.Element {
         ) : null}
       </button>
 
-      {open ? (
-        <div
-          role="dialog"
-          aria-label="Notifications"
-          className="absolute right-0 z-50 mt-2 flex max-h-[28rem] w-80 flex-col overflow-hidden rounded-xl border bg-white shadow-lg"
-          style={{ borderColor: 'var(--border-subtle)' }}
-        >
-          <div
-            className="flex items-center justify-between border-b px-4 py-3"
-            style={{ borderColor: 'var(--border-subtle)' }}
-          >
-            <span style={{ ...TYPE.bodyStrong }}>Notifications</span>
-          </div>
-
-          <div className="flex-1 overflow-y-auto">
-            {loading ? (
-              <p className="px-4 py-6" style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-                Loading…
-              </p>
-            ) : error !== null ? (
-              <p role="alert" className="px-4 py-6" style={{ ...TYPE.secondary, color: 'var(--color-red-500)' }}>
-                {error}
-              </p>
-            ) : items.length === 0 ? (
-              <div className="px-4 py-8 text-center">
-                <p style={{ ...TYPE.bodyStrong }}>You&rsquo;re all caught up</p>
-                <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-                  New alerts and updates will appear here.
-                </p>
+      {open && pos !== null && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              ref={panelRef}
+              role="dialog"
+              aria-label="Notifications"
+              className="flex max-h-[28rem] w-80 flex-col overflow-hidden rounded-xl border bg-white shadow-lg"
+              style={{
+                position: 'fixed',
+                top: pos.top,
+                right: pos.right,
+                zIndex: 100,
+                borderColor: 'var(--border-subtle)',
+              }}
+            >
+              <div
+                className="flex items-center justify-between border-b px-4 py-3"
+                style={{ borderColor: 'var(--border-subtle)' }}
+              >
+                <span style={{ ...TYPE.bodyStrong }}>Notifications</span>
               </div>
-            ) : (
-              <ul>
-                {items.map((item) => {
-                  const Icon = TYPE_ICON[item.type] ?? Bell;
-                  const isNew = newIdsRef.current.has(item.id);
-                  const clickable = item.link !== null && item.link !== '';
-                  return (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        onClick={(): void => onItemClick(item)}
-                        disabled={!clickable}
-                        className="flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors"
-                        style={{
-                          borderColor: 'var(--border-subtle)',
-                          backgroundColor: isNew ? 'var(--color-blue-50, #eff6ff)' : 'transparent',
-                          cursor: clickable ? 'pointer' : 'default',
-                        }}
-                      >
-                        <Icon
-                          aria-hidden="true"
-                          size={16}
-                          style={{ marginTop: '0.15rem', color: 'var(--text-secondary)', flexShrink: 0 }}
-                        />
-                        <span className="flex min-w-0 flex-col gap-0.5">
-                          <span style={{ ...TYPE.bodyStrong }} className="truncate">
-                            {item.title}
-                          </span>
-                          {item.body !== null ? (
-                            <span
-                              className="line-clamp-2"
-                              style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}
-                            >
-                              {item.body}
+
+              <div className="flex-1 overflow-y-auto">
+                {loading ? (
+                  <p
+                    className="px-4 py-6"
+                    style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}
+                  >
+                    Loading…
+                  </p>
+                ) : error !== null ? (
+                  <p
+                    role="alert"
+                    className="px-4 py-6"
+                    style={{ ...TYPE.secondary, color: 'var(--color-red-500)' }}
+                  >
+                    {error}
+                  </p>
+                ) : items.length === 0 ? (
+                  <div className="px-4 py-8 text-center">
+                    <p style={{ ...TYPE.bodyStrong }}>You&rsquo;re all caught up</p>
+                    <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+                      New alerts and updates will appear here.
+                    </p>
+                  </div>
+                ) : (
+                  <ul>
+                    {items.map((item) => {
+                      const Icon = TYPE_ICON[item.type] ?? Bell;
+                      const isNew = newIdsRef.current.has(item.id);
+                      const clickable = item.link !== null && item.link !== '';
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            onClick={(): void => onItemClick(item)}
+                            disabled={!clickable}
+                            className="flex w-full items-start gap-3 border-b px-4 py-3 text-left transition-colors"
+                            style={{
+                              borderColor: 'var(--border-subtle)',
+                              backgroundColor: isNew
+                                ? 'var(--color-blue-50, #eff6ff)'
+                                : 'transparent',
+                              cursor: clickable ? 'pointer' : 'default',
+                            }}
+                          >
+                            <Icon
+                              aria-hidden="true"
+                              size={16}
+                              style={{
+                                marginTop: '0.15rem',
+                                color: 'var(--text-secondary)',
+                                flexShrink: 0,
+                              }}
+                            />
+                            <span className="flex min-w-0 flex-col gap-0.5">
+                              <span style={{ ...TYPE.bodyStrong }} className="truncate">
+                                {item.title}
+                              </span>
+                              {item.body !== null ? (
+                                <span
+                                  className="line-clamp-2"
+                                  style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}
+                                >
+                                  {item.body}
+                                </span>
+                              ) : null}
+                              <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+                                {formatDateTime(item.createdAt)}
+                              </span>
                             </span>
-                          ) : null}
-                          <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-                            {formatDateTime(item.createdAt)}
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        </div>
-      ) : null}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

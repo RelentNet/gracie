@@ -41,7 +41,7 @@ export function CadenceSection(): React.JSX.Element {
   }, [open, rows, error]);
 
   return (
-    <Card>
+    <Card className="p-6 lg:flex-1">
       <CardHeader
         title="Cadence tracker"
         description="Meeting rhythm per client — last meeting, next scheduled, and overdue flags."

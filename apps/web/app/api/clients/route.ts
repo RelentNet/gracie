@@ -18,15 +18,18 @@ const NON_INTERNAL_TYPES: readonly ClientType[] = ['client', 'prospect', 'lead',
 
 /**
  * Resolve the `?type=` filter into the party types to list. `all` = every
- * non-internal org (the meeting "link existing" picker); a specific value =
- * that type; absent = the default real-`client` roster.
+ * non-internal org (the meeting "link existing" picker); a comma-separated list
+ * (e.g. `partner,unassigned`) = those types (a roster tab that folds several
+ * types together); a single value = that type; absent/none-valid = the default
+ * real-`client` roster.
  */
 function resolveTypes(value: string | null): readonly ClientType[] | undefined {
   if (value === 'all') return NON_INTERNAL_TYPES;
-  if (value !== null && (CLIENT_TYPES as readonly string[]).includes(value)) {
-    return [value as ClientType];
-  }
-  return undefined;
+  if (value === null) return undefined;
+  const types = value
+    .split(',')
+    .filter((v): v is ClientType => (CLIENT_TYPES as readonly string[]).includes(v));
+  return types.length > 0 ? types : undefined;
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {

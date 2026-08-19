@@ -7,12 +7,13 @@
  */
 import 'server-only';
 
-import { getServerClient } from '@gracie/db';
+import { findOrCreateFolder, getServerClient } from '@gracie/db';
 import type { Database } from '@gracie/db';
 import { isFreeEmailDomain } from '@gracie/shared';
 import type { Client, ClientCadence, ClientDomain, ClientType, FeeTier } from '@gracie/shared';
 
 import { backfillOrgDomains, loadInternalDomains } from './calendar.js';
+import { clientSlug } from './uploads.js';
 import { mapClient, mapClientDomain } from '../mappers.js';
 
 /**
@@ -130,6 +131,29 @@ export async function createClient(input: NewClientInput): Promise<Client> {
         throw new Error('One of those domains already belongs to another organization.');
       }
       throw new Error(`createClient(domains): ${linked.error.message}`);
+    }
+  }
+
+  // Surface the client in the Documents tree the moment it's added — even before any
+  // files exist (team-feedback Aug 11). We create just the top-level "Generated Docs"
+  // folder, at the SAME path/name the worker files meeting docs under, so its later
+  // findOrCreateFolder is a no-op and the generated docs land right here. Idempotent
+  // by the unique folder `path`, so re-adds and the worker never duplicate it. Only
+  // real `client`s — leads/prospects/internal keep the "appear once they own docs"
+  // behavior. Best-effort: a folder hiccup must never fail the client create (the
+  // worker recreates it on first generation regardless).
+  if ((input.type ?? 'client') === 'client') {
+    try {
+      await findOrCreateFolder({
+        clientId: data.id,
+        path: `clients/${clientSlug(input.name)}/generated`,
+        displayName: 'Generated Docs',
+      });
+    } catch (folderError) {
+      console.error(
+        `createClient: could not pre-create Documents folder for ${data.id}:`,
+        folderError instanceof Error ? folderError.message : folderError,
+      );
     }
   }
 

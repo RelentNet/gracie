@@ -1749,6 +1749,7 @@ export type Database = {
         | "partner"
         | "internal"
         | "unassigned"
+        | "past_client"
       document_source: "meeting" | "upload" | "auto"
       document_status: "ready" | "needs_review" | "delivered" | "archived"
       document_type:
@@ -1946,7 +1947,7 @@ export const Constants = {
     Enums: {
       assistant_msg_role: ["user", "assistant"],
       client_cadence: ["weekly", "biweekly", "monthly", "qbr", "ad_hoc"],
-      client_type: ["client", "prospect", "lead", "partner", "internal", "unassigned"],
+      client_type: ["client", "prospect", "lead", "partner", "internal", "unassigned", "past_client"],
       document_source: ["meeting", "upload", "auto"],
       document_status: ["ready", "needs_review", "delivered", "archived"],
       document_type: [

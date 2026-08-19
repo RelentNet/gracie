@@ -45,7 +45,7 @@ export function AmbiguousSection({
 
   if (error !== null) {
     return (
-      <Card accent="critical">
+      <Card accent="critical" className="p-6 lg:flex-1">
         <ErrorState title="Couldn’t load meetings needing a client" description={error} />
       </Card>
     );
@@ -57,7 +57,7 @@ export function AmbiguousSection({
   const earliestDay = earliest !== undefined ? localDayKey(earliest.dateTime) : null;
 
   return (
-    <Card accent="critical">
+    <Card accent="critical" className="p-6 lg:flex-1">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <AlertTriangle size={18} aria-hidden="true" style={{ color: 'var(--color-amber-600)' }} />

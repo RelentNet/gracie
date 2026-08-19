@@ -1,14 +1,11 @@
 import {
   Home,
-  LayoutDashboard,
   Calendar,
-  MessageSquare,
   ListTodo,
   FolderOpen,
   BookOpen,
   Users,
   Contact,
-  Sunrise,
   Zap,
   GitBranch,
   Settings,
@@ -51,12 +48,10 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   {
     items: [
       // Default landing (/home) — Gracie the assistant with the command-center
-      // tiles alongside. Root + post-login redirects point here.
+      // tiles alongside. Root + post-login redirects point here. Home already
+      // bundles the assistant + command-center tiles, so the standalone Overview
+      // and Assistant items were dropped from the nav (routes still resolve).
       { label: 'Home', href: '/home', Icon: Home },
-      // Standalone Overview — the command-center tiles on their own (full grid).
-      { label: 'Overview', href: '/dashboard', Icon: LayoutDashboard },
-      // Assistant (Module 14) — standalone general AI chat, all roles (docs/08 §M14).
-      { label: 'Assistant', href: '/assistant', Icon: MessageSquare },
     ],
   },
   {
@@ -71,7 +66,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     header: 'Planning',
     items: [
       { label: 'Calendar', href: '/calendar', Icon: Calendar },
-      { label: 'Daily Sync', href: '/daily-sync', Icon: Sunrise },
+      // Daily Sync dropped from the nav — reachable from Home's Daily Sync tile
+      // (route /daily-sync still resolves).
       // Task Board is an admin-only triage surface (tasks lifecycle). Regular users act
       // on tasks via each client's Tasks panel, not a global list they must manage.
       { label: 'Task Board', href: '/tasks', Icon: ListTodo, requires: 'task.manageBoard' },
