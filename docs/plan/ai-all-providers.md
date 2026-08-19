@@ -87,7 +87,7 @@ The **AI Provider** tab is now the single place for ALL AI keys:
   and the hiding of the new providers are handled in one place.
 
 ## Migration
-`0019_ai_provider_integration_keys.sql` — additive `ALTER TYPE integration_key ADD VALUE
+`0020_ai_provider_integration_keys.sql` — additive `ALTER TYPE integration_key ADD VALUE
 IF NOT EXISTS …` for the 9 new key slots (google/mistral/groq/deepseek/xai/cohere/
 perplexity/ollama/custom). Non-breaking, idempotent; no data backfill. `database.types.ts`
 hand-updated to match (enum union + Constants array), consistent with the repo's no-CLI

@@ -1,4 +1,4 @@
--- 0019_ai_provider_integration_keys.sql — one encrypted key slot per AI provider.
+-- 0020_ai_provider_integration_keys.sql — one encrypted key slot per AI provider.
 --
 -- PR #115 opened the AI seam to multiple providers but shipped only openai + anthropic.
 -- This widens the `integration_key` enum so EVERY selectable generation provider gets
