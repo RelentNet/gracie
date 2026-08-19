@@ -116,21 +116,61 @@ export const PINNED_EMBEDDING_MODEL = 'text-embedding-3-small' as const;
 export const EMBEDDING_DIMENSIONS = 1536 as const;
 
 /**
- * AI provider ids the platform can construct + select (Settings → AI). OpenAI +
- * Anthropic today; the factory + catalog are left trivially extensible for
- * google/ollama (PR 2) — add an id here, a catalog block below, and a case in the
- * adapter's switch.
+ * AI provider ids the platform can construct + select (Settings → AI). Every
+ * text-generation provider the Vercel AI SDK ships an adapter for, plus two
+ * OpenAI-compatible catch-alls: `ollama` (local, runs-on-your-own-hardware) and
+ * `custom` (any OpenAI-compatible endpoint — OpenRouter/LiteLLM/vLLM/Together/…).
+ * Adding another is: an id here, a label + key slot, a `createProvider` switch case,
+ * and (optionally) a catalog block. OpenAI stays the default so a fresh deploy is
+ * unchanged. NOTE: speech/transcription-only providers (elevenlabs/deepgram/…) are
+ * intentionally excluded — this seam is text generation + chat only.
  */
-export const PROVIDER_IDS = ['openai', 'anthropic'] as const;
+export const PROVIDER_IDS = [
+  'openai',
+  'anthropic',
+  'google',
+  'mistral',
+  'groq',
+  'deepseek',
+  'xai',
+  'cohere',
+  'perplexity',
+  'ollama',
+  'custom',
+] as const;
 
 /** A provider the admin may select. */
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
-/** Human label per provider (the "Company"/provider dropdown in Settings → AI). */
+/** Human label per provider (the provider dropdown in Settings → AI). */
 export const PROVIDER_LABELS: Record<ProviderId, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic (Claude)',
+  google: 'Google (Gemini)',
+  mistral: 'Mistral',
+  groq: 'Groq',
+  deepseek: 'DeepSeek',
+  xai: 'xAI (Grok)',
+  cohere: 'Cohere',
+  perplexity: 'Perplexity',
+  ollama: 'Ollama (local)',
+  custom: 'Custom (OpenAI-compatible)',
 };
+
+/**
+ * Providers reached over the OpenAI-compatible HTTP shape (@ai-sdk/openai-compatible)
+ * rather than a bespoke SDK. They REQUIRE a base URL (their endpoint) and take any
+ * model id as free text; Ollama's key is optional, Custom's is usually required.
+ */
+export const OPENAI_COMPATIBLE_PROVIDERS: readonly ProviderId[] = ['ollama', 'custom'];
+
+/** Default Ollama endpoint (OpenAI-compatible path). Prefilled in Settings. */
+export const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/v1';
+
+/** True for a provider that needs a base URL (Ollama / Custom OpenAI-compatible). */
+export function providerNeedsBaseUrl(providerId: string): boolean {
+  return (OPENAI_COMPATIBLE_PROVIDERS as readonly string[]).includes(providerId);
+}
 
 /** True when `value` is a selectable provider id. */
 export function isProviderId(value: string): value is ProviderId {
@@ -139,10 +179,14 @@ export function isProviderId(value: string): value is ProviderId {
 
 /**
  * One selectable generation/chat model with its capabilities + rough list pricing.
- * The catalog is curated on purpose — free-texting a model id would let a typo (or a
- * model this account can't use) fail silently at call time. Prices are public list
- * prices (USD per 1M tokens) as of 2026-08, used ONLY for the in-Settings cost
- * estimate — not billing. Calibrate against real spend in PR 2.
+ * The catalog is a set of PRESETS per provider — a convenient starting menu, NOT an
+ * allowlist: Settings also offers a "Custom model…" free-text field so any current or
+ * future model id the provider accepts can be typed (the AI SDK passes the id straight
+ * through). A free-text id has unknown cost, so Settings shows "cost varies" rather
+ * than a wrong number. Prices below are public list prices (USD per 1M tokens) as of
+ * 2026-08, used ONLY for the in-Settings cost estimate — not billing. Ollama + Custom
+ * have NO presets on purpose (self-hosted / arbitrary endpoints — model ids and costs
+ * are unknowable here); they are free-text only.
  */
 export interface ModelCatalogEntry {
   readonly providerId: ProviderId;
@@ -165,6 +209,29 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
   { providerId: 'anthropic', model: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', supportsTools: true, supportsJson: true, costPer1MInput: 3, costPer1MOutput: 15 },
   { providerId: 'anthropic', model: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', supportsTools: true, supportsJson: true, costPer1MInput: 1, costPer1MOutput: 5 },
   { providerId: 'anthropic', model: 'claude-opus-4-5', label: 'Claude Opus 4.5', supportsTools: true, supportsJson: true, costPer1MInput: 5, costPer1MOutput: 25 },
+  // Google (Gemini)
+  { providerId: 'google', model: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', supportsTools: true, supportsJson: true, costPer1MInput: 1.25, costPer1MOutput: 10 },
+  { providerId: 'google', model: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', supportsTools: true, supportsJson: true, costPer1MInput: 0.3, costPer1MOutput: 2.5 },
+  { providerId: 'google', model: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', supportsTools: true, supportsJson: true, costPer1MInput: 0.1, costPer1MOutput: 0.4 },
+  // Mistral
+  { providerId: 'mistral', model: 'mistral-large-latest', label: 'Mistral Large', supportsTools: true, supportsJson: true, costPer1MInput: 2, costPer1MOutput: 6 },
+  { providerId: 'mistral', model: 'mistral-small-latest', label: 'Mistral Small', supportsTools: true, supportsJson: true, costPer1MInput: 0.2, costPer1MOutput: 0.6 },
+  // Groq (hosted open models — very cheap, very fast)
+  { providerId: 'groq', model: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (Groq)', supportsTools: true, supportsJson: true, costPer1MInput: 0.59, costPer1MOutput: 0.79 },
+  { providerId: 'groq', model: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant (Groq)', supportsTools: true, supportsJson: true, costPer1MInput: 0.05, costPer1MOutput: 0.08 },
+  // DeepSeek
+  { providerId: 'deepseek', model: 'deepseek-chat', label: 'DeepSeek Chat', supportsTools: true, supportsJson: true, costPer1MInput: 0.27, costPer1MOutput: 1.1 },
+  { providerId: 'deepseek', model: 'deepseek-reasoner', label: 'DeepSeek Reasoner', supportsTools: true, supportsJson: true, costPer1MInput: 0.55, costPer1MOutput: 2.19 },
+  // xAI (Grok)
+  { providerId: 'xai', model: 'grok-3', label: 'Grok 3', supportsTools: true, supportsJson: true, costPer1MInput: 3, costPer1MOutput: 15 },
+  { providerId: 'xai', model: 'grok-3-mini', label: 'Grok 3 Mini', supportsTools: true, supportsJson: true, costPer1MInput: 0.3, costPer1MOutput: 0.5 },
+  // Cohere
+  { providerId: 'cohere', model: 'command-r-plus', label: 'Command R+', supportsTools: true, supportsJson: true, costPer1MInput: 2.5, costPer1MOutput: 10 },
+  { providerId: 'cohere', model: 'command-r', label: 'Command R', supportsTools: true, supportsJson: true, costPer1MInput: 0.15, costPer1MOutput: 0.6 },
+  // Perplexity (Sonar — web-grounded)
+  { providerId: 'perplexity', model: 'sonar', label: 'Sonar', supportsTools: false, supportsJson: true, costPer1MInput: 1, costPer1MOutput: 1 },
+  { providerId: 'perplexity', model: 'sonar-pro', label: 'Sonar Pro', supportsTools: false, supportsJson: true, costPer1MInput: 3, costPer1MOutput: 15 },
+  // Ollama + Custom have NO presets — free-text model id only (see catalog note above).
 ];
 
 /** Default provider when `settings.ai_provider` is unset — OpenAI, so a fresh deploy is unchanged. */

@@ -1773,6 +1773,15 @@ export type Database = {
         | "recall"
         | "openai"
         | "anthropic"
+        | "google"
+        | "mistral"
+        | "groq"
+        | "deepseek"
+        | "xai"
+        | "cohere"
+        | "perplexity"
+        | "ollama"
+        | "custom"
         | "resend"
         | "r2"
         | "ms_graph"
@@ -1964,6 +1973,15 @@ export const Constants = {
         "recall",
         "openai",
         "anthropic",
+        "google",
+        "mistral",
+        "groq",
+        "deepseek",
+        "xai",
+        "cohere",
+        "perplexity",
+        "ollama",
+        "custom",
         "resend",
         "r2",
         "ms_graph",
