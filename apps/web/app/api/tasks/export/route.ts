@@ -15,7 +15,7 @@ import { CLIENT_TYPES } from '@gracie/shared';
 import { getRequestUser, isAdmin } from '@/lib/api-auth';
 import { attachmentDisposition } from '@/lib/content-disposition';
 import { listClients } from '@/lib/data/clients';
-import { listTasks } from '@/lib/data/tasks';
+import { getTaskBoardVisibleToAll, listTasks } from '@/lib/data/tasks';
 import { tasksToCsv } from '@/lib/data/tasks-report';
 import { listAssignableUsers } from '@/lib/data/users';
 
@@ -24,7 +24,10 @@ export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) {
+    // Admin-only unless the operator has revealed the board to everyone (the export
+    // button rides along with the board). Fail closed on a settings-read blip.
+    const user = await getRequestUser();
+    if (!isAdmin(user) && !(await getTaskBoardVisibleToAll().catch(() => false))) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Administrator access required' } },
         { status: 403 },

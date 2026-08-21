@@ -247,6 +247,19 @@ export function formatFileSize(bytes: number | null): string {
   return `${mb.toFixed(1)} MB`;
 }
 
+// --- Task Board visibility -------------------------------------------------
+
+/**
+ * Task-Board visibility gate — the single rule the nav item and the /tasks page
+ * share so they never disagree. The board is an admin-only triage surface
+ * (`hasBoardAccess` = the `task.manageBoard` permission / admin) until the operator
+ * flips the `task_board_visible_to_all` setting on (Settings → Company), at which
+ * point every user sees it. Admins always see it regardless of the toggle.
+ */
+export function canSeeTaskBoard(hasBoardAccess: boolean, visibleToAll: boolean): boolean {
+  return hasBoardAccess || visibleToAll;
+}
+
 // --- Money -----------------------------------------------------------------
 
 /** Format a contract value as USD. `null` → em dash. */

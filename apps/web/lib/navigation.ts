@@ -68,9 +68,10 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { label: 'Calendar', href: '/calendar', Icon: Calendar },
       // Daily Sync dropped from the nav — reachable from Home's Daily Sync tile
       // (route /daily-sync still resolves).
-      // Task Board is an admin-only triage surface (tasks lifecycle). Regular users act
-      // on tasks via each client's Tasks panel, not a global list they must manage.
-      { label: 'Task Board', href: '/tasks', Icon: ListTodo, requires: 'task.manageBoard' },
+      // Task Board is an admin-only triage surface by default. Its visibility is a
+      // TOGGLE (admin OR `task_board_visible_to_all`), not a static permission, so the
+      // Sidebar gates it directly (see {@link Sidebar}) rather than via `requires`.
+      { label: 'Task Board', href: '/tasks', Icon: ListTodo },
     ],
   },
   {
