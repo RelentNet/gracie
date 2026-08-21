@@ -205,6 +205,47 @@ export async function createVoiceActionItem(
   return decision.kind;
 }
 
+/**
+ * DISPLAY-ONLY visibility toggle (Settings → Company). When false — the DEFAULT —
+ * the cross-client Task Board is admin-only (nav item + page + list/export APIs).
+ * When true it is revealed to every user. Stored as a 'true'/'false' string,
+ * mirroring the `client_health_scores_visible` toggle; missing → false (admin-only),
+ * so the board stays hidden from non-admins until the operator opts in.
+ */
+const TASK_BOARD_VISIBLE_KEY = 'task_board_visible_to_all';
+
+/** Read the Task-Board visibility toggle. Missing/any non-'true' value → false (admin-only). */
+export async function getTaskBoardVisibleToAll(): Promise<boolean> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('settings')
+    .select('value')
+    .eq('key', TASK_BOARD_VISIBLE_KEY)
+    .maybeSingle();
+  if (error !== null) throw new Error(`getTaskBoardVisibleToAll: ${error.message}`);
+  const v = data?.value;
+  return typeof v === 'string' ? v.trim().toLowerCase() === 'true' : false;
+}
+
+/** Persist the Task-Board visibility toggle. Admin-gated at the API layer. */
+export async function setTaskBoardVisibleToAll(
+  visible: boolean,
+  updatedByUserId: string | null,
+): Promise<boolean> {
+  const db = getServerClient();
+  const { error } = await db.from('settings').upsert(
+    {
+      key: TASK_BOARD_VISIBLE_KEY,
+      value: visible ? 'true' : 'false',
+      updated_by_user_id: updatedByUserId,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'key' },
+  );
+  if (error !== null) throw new Error(`setTaskBoardVisibleToAll: ${error.message}`);
+  return visible;
+}
+
 /** List the append-only note feed for a task, oldest first. */
 export async function getTaskNotes(taskId: string): Promise<TaskNote[]> {
   const db = getServerClient();

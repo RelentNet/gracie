@@ -32,6 +32,13 @@ export interface AuthContextValue {
    */
   readonly healthScoresVisible: boolean;
   /**
+   * Firm-wide toggle: reveal the cross-client Task Board to ALL users. False (the
+   * default) keeps the board admin-only; admins see it either way. Hydrated from
+   * `settings.task_board_visible_to_all` in the root layout so the Sidebar + /tasks
+   * page gate on it without their own fetch (same pattern as `healthScoresVisible`).
+   */
+  readonly taskBoardVisibleToAll: boolean;
+  /**
    * MinIO object key of the configured nav brand logo, or null when none is set.
    * Hydrated from `settings.brand_logo_key` in the root layout (same pattern as
    * `healthScoresVisible`) so the Sidebar renders the logo without its own fetch
@@ -52,12 +59,14 @@ export function AuthProvider({
   children,
   initialUser = MOCK_USER,
   healthScoresVisible = true,
+  taskBoardVisibleToAll = false,
   brandLogoKey = null,
   brandLogoDarkKey = null,
 }: {
   readonly children: ReactNode;
   readonly initialUser?: AuthUser;
   readonly healthScoresVisible?: boolean;
+  readonly taskBoardVisibleToAll?: boolean;
   readonly brandLogoKey?: string | null;
   readonly brandLogoDarkKey?: string | null;
 }): React.JSX.Element {
@@ -69,10 +78,11 @@ export function AuthProvider({
       can: (permission: Permission): boolean => can(user.role, permission),
       canEdit: (): boolean => user.role === 'admin' || user.role === 'standard',
       healthScoresVisible,
+      taskBoardVisibleToAll,
       brandLogoKey,
       brandLogoDarkKey,
     };
-  }, [initialUser, healthScoresVisible, brandLogoKey, brandLogoDarkKey]);
+  }, [initialUser, healthScoresVisible, taskBoardVisibleToAll, brandLogoKey, brandLogoDarkKey]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

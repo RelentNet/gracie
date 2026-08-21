@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { AuthProvider } from '@/lib/auth';
 import { getBrandLogoDarkKey, getBrandLogoKey } from '@/lib/data/branding-settings';
 import { getHealthScoresVisible } from '@/lib/data/scoring-settings';
+import { getTaskBoardVisibleToAll } from '@/lib/data/tasks';
 import { getCurrentUser } from '@/lib/server-auth';
 
 import '@/styles/theme.css';
@@ -36,12 +37,15 @@ export default async function RootLayout({
   // A settings-read blip must never 500 the whole app — fail OPEN to visible (the
   // current behavior), matching the missing-value default. A logo-read blip falls
   // back to null → the nav's default text treatment.
-  const [user, healthScoresVisible, brandLogoKey, brandLogoDarkKey] = await Promise.all([
-    getCurrentUser(),
-    getHealthScoresVisible().catch(() => true),
-    getBrandLogoKey().catch(() => null),
-    getBrandLogoDarkKey().catch(() => null),
-  ]);
+  const [user, healthScoresVisible, taskBoardVisibleToAll, brandLogoKey, brandLogoDarkKey] =
+    await Promise.all([
+      getCurrentUser(),
+      getHealthScoresVisible().catch(() => true),
+      // Fall back to the default (admin-only) on a read blip — never reveal the board on error.
+      getTaskBoardVisibleToAll().catch(() => false),
+      getBrandLogoKey().catch(() => null),
+      getBrandLogoDarkKey().catch(() => null),
+    ]);
   return (
     // `suppressHydrationWarning`: the init script sets `data-theme` on <html>
     // before React hydrates, so the server/client attribute differs by design.
@@ -56,6 +60,7 @@ export default async function RootLayout({
         <AuthProvider
           initialUser={user}
           healthScoresVisible={healthScoresVisible}
+          taskBoardVisibleToAll={taskBoardVisibleToAll}
           brandLogoKey={brandLogoKey}
           brandLogoDarkKey={brandLogoDarkKey}
         >

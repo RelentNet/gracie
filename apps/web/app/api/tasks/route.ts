@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 import { getRequestUser, isAdmin, isEditor } from '@/lib/api-auth';
-import { createTask, listTasks } from '@/lib/data/tasks';
+import { createTask, getTaskBoardVisibleToAll, listTasks } from '@/lib/data/tasks';
 import { enqueueRelationshipHealth } from '@/lib/queue';
 
 // bullmq/ioredis (the recompute enqueue) are Node-only — force the Node.js runtime.
@@ -21,9 +21,11 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    // The cross-client list backs the admin-only Task Board (tasks lifecycle). Regular
-    // users read tasks per-client (server-rendered) — never this global list.
-    if (!isAdmin(await getRequestUser())) {
+    // The cross-client list backs the Task Board. Admin-only unless the operator has
+    // revealed the board to everyone (Settings → Company); regular users otherwise read
+    // tasks per-client. Fail closed on a settings-read blip (treat as hidden → 403).
+    const user = await getRequestUser();
+    if (!isAdmin(user) && !(await getTaskBoardVisibleToAll().catch(() => false))) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Administrator access required' } },
         { status: 403 },
