@@ -21,6 +21,7 @@ import {
   type GenerationJobPayload,
   type IngestJobPayload,
   type KbIngestJobPayload,
+  type OutlookContactsImportJobPayload,
   type RelationshipHealthJobPayload,
   type ResumeRecordingJobPayload,
 } from '@gracie/shared';
@@ -42,6 +43,7 @@ let relationshipHealthQueue: Queue<RelationshipHealthJobPayload> | undefined;
 let dailySyncQueue: Queue<DailySyncJobPayload> | undefined;
 let automationsQueue: Queue<AutomationJobPayload> | undefined;
 let resumeRecordingQueue: Queue<ResumeRecordingJobPayload> | undefined;
+let outlookContactsImportQueue: Queue<OutlookContactsImportJobPayload> | undefined;
 
 function getConnection(): Redis {
   if (connection !== undefined) return connection;
@@ -205,6 +207,45 @@ function getResumeRecordingQueue(): Queue<ResumeRecordingJobPayload> {
     defaultJobOptions: DEFAULT_JOB_OPTIONS,
   });
   return resumeRecordingQueue;
+}
+
+function getOutlookContactsImportQueue(): Queue<OutlookContactsImportJobPayload> {
+  if (outlookContactsImportQueue !== undefined) return outlookContactsImportQueue;
+  outlookContactsImportQueue = new Queue<OutlookContactsImportJobPayload>(
+    QUEUE_NAMES.outlookContactsImport,
+    { connection: getConnection(), defaultJobOptions: DEFAULT_JOB_OPTIONS },
+  );
+  return outlookContactsImportQueue;
+}
+
+/**
+ * Enqueue a one-off Outlook contacts import for `mailbox` (admin "Import from
+ * Outlook"). The worker pages that mailbox's Graph contacts and upserts them into
+ * `contacts`. Returns the BullMQ job id — the web polls it for the result.
+ */
+export async function enqueueOutlookContactsImport(mailbox: string): Promise<string> {
+  const job = await getOutlookContactsImportQueue().add(JOB_NAMES.outlookContactsImport, {
+    mailbox,
+    source: 'manual',
+  });
+  return job.id ?? '';
+}
+
+/** Job state + result the import modal polls (`returnvalue` is the processor's result). */
+export interface OutlookImportJobStatus {
+  readonly state: string;
+  readonly result: unknown;
+  readonly failedReason: string | null;
+}
+
+/** Read an import job's current state + result by id (for the "Import from Outlook" poll). */
+export async function getOutlookContactsImportStatus(
+  jobId: string,
+): Promise<OutlookImportJobStatus | null> {
+  const job = await getOutlookContactsImportQueue().getJob(jobId);
+  if (job === undefined) return null;
+  const state = await job.getState();
+  return { state, result: job.returnvalue ?? null, failedReason: job.failedReason ?? null };
 }
 
 /**
