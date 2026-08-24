@@ -11,6 +11,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isConsented } from '@/lib/contact-import-consent';
+import { getConsentList } from '@/lib/data/contact-import-consent';
 import { enqueueOutlookContactsImport, getOutlookContactsImportStatus } from '@/lib/queue';
 
 // bullmq/ioredis are Node-only — force the Node.js runtime (not edge).
@@ -31,6 +33,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 400 },
       );
     }
+    // Trust boundary: the Azure `Contacts.Read` grant is tenant-wide, so even an
+    // admin may only import a mailbox that opted in. Gate BEFORE enqueue so a
+    // non-consented mailbox never reaches the worker or MS Graph. The modal shows
+    // `result` as a plain message (no job is created).
+    if (!isConsented(mailbox, await getConsentList())) {
+      return NextResponse.json({
+        enqueued: false,
+        result: { ok: false, mailbox: mailbox.toLowerCase(), reason: 'not_consented' },
+      });
+    }
+
     const jobId = await enqueueOutlookContactsImport(mailbox);
     return NextResponse.json({ enqueued: true, jobId });
   } catch (error) {

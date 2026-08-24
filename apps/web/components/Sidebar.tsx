@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronLeft, ChevronRight, LogOut, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, LogOut, UserCog, X } from 'lucide-react';
 
 import { ROLE_BADGES } from '@gracie/shared';
 
@@ -275,6 +275,18 @@ export function Sidebar(): React.JSX.Element {
               </span>
             </div>
           </div>
+          {/* Per-user preferences (any role). Kept in the account card rather than
+              the role-gated nav groups so every signed-in user can reach it. */}
+          <Link
+            href="/my-settings"
+            title={collapsed ? 'My Settings' : undefined}
+            aria-current={pathname === '/my-settings' ? 'page' : undefined}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors ${linkJustify}`}
+            style={{ color: 'var(--text-secondary)', ...TYPE.bodyStrong }}
+          >
+            <UserCog aria-hidden="true" size={16} className="shrink-0" />
+            <span className={labelHidden}>My Settings</span>
+          </Link>
           {/* Full-page nav to the Logto sign-out GET route (clears the session and
               redirects) — a plain <a>, not <Link>, so it never RSC-navigates. */}
           <a

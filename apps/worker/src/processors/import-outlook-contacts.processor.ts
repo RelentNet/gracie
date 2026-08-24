@@ -43,7 +43,10 @@ type FailReason =
   | 'graph_not_configured'
   | 'permission_denied'
   | 'mailbox_not_found'
-  | 'read_failed';
+  | 'read_failed'
+  // Web-only: the import API rejects a non-consented mailbox before enqueue (the
+  // worker never emits this) — kept in the shared union so the result shape is honest.
+  | 'not_consented';
 
 /** Outcome of one import (the BullMQ return value the web polls). */
 export type ImportOutlookContactsResult =

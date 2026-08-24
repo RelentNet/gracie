@@ -61,6 +61,12 @@ function describeResult(r: ImportResult): { message: string; tone: 'ok' | 'warn'
     return { message: msg, tone: 'ok' };
   }
   switch (r.reason) {
+    case 'not_consented':
+      return {
+        message:
+          'This person hasn’t allowed contact import. Ask them to turn it on under My Settings, or enable it for them in Settings → Contacts.',
+        tone: 'warn',
+      };
     case 'permission_denied':
       return {
         message:
@@ -133,7 +139,18 @@ export function ImportOutlookModal({
     setError(null);
     setOutcome(null);
     try {
-      const { jobId } = await apiClient.post<{ jobId: string }>('/api/contacts/import', { mailbox: mb });
+      const post = await apiClient.post<{ jobId?: string; result?: ImportResult }>(
+        '/api/contacts/import',
+        { mailbox: mb },
+      );
+      // A rejection before enqueue (e.g. mailbox not consented) comes back inline
+      // with no job — show it and stop, nothing to poll.
+      if (post.result !== undefined) {
+        setOutcome(describeResult(post.result));
+        setBusy(false);
+        return;
+      }
+      const jobId = post.jobId ?? '';
       // Poll until the worker finishes (or fails).
       for (let i = 0; i < MAX_POLLS && !cancelled.current; i += 1) {
         await sleep(POLL_MS);
