@@ -135,6 +135,23 @@ export async function getUserIdByLogtoId(logtoId: string): Promise<string | null
 }
 
 /**
+ * The email for a Logto subject, or `null` when no `users` row exists yet (local
+ * mock auth / first-login bootstrap). Used by the self-serve contact-import
+ * consent route to derive the caller's OWN mailbox server-side — never trusting an
+ * address in the request body — so a user can only opt themselves in/out.
+ */
+export async function getEmailByLogtoId(logtoId: string): Promise<string | null> {
+  const db = getServerClient();
+  const { data, error } = await db
+    .from('users')
+    .select('email')
+    .eq('logto_id', logtoId)
+    .maybeSingle();
+  if (error) throw new Error(`email lookup: ${error.message}`);
+  return data?.email ?? null;
+}
+
+/**
  * The caller's profile timezone (IANA id), or `null` when unset / no profile row.
  * Read by the SSR identity resolver (server-auth) so server-rendered timestamps
  * can format in the viewer's zone; null falls back to America/New_York downstream.
