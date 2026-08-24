@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 
+import { PostHogProvider } from '@/components/analytics/PostHogProvider';
 import { AuthProvider } from '@/lib/auth';
 import { getBrandLogoDarkKey, getBrandLogoKey } from '@/lib/data/branding-settings';
 import { getHealthScoresVisible } from '@/lib/data/scoring-settings';
@@ -57,15 +58,21 @@ export default async function RootLayout({
           `min-w-0` lets flex descendants shrink so wide content scrolls inside its
           own container rather than pushing the shell wider. */}
       <body className="min-w-0 overflow-x-hidden">
-        <AuthProvider
-          initialUser={user}
-          healthScoresVisible={healthScoresVisible}
-          taskBoardVisibleToAll={taskBoardVisibleToAll}
-          brandLogoKey={brandLogoKey}
-          brandLogoDarkKey={brandLogoDarkKey}
+        {/* Client-side product analytics. No-ops entirely outside a production
+            build with NEXT_PUBLIC_POSTHOG_KEY set — see PostHogProvider. */}
+        <PostHogProvider
+          user={{ id: user.id, email: user.email, name: user.name, role: user.role }}
         >
-          {children}
-        </AuthProvider>
+          <AuthProvider
+            initialUser={user}
+            healthScoresVisible={healthScoresVisible}
+            taskBoardVisibleToAll={taskBoardVisibleToAll}
+            brandLogoKey={brandLogoKey}
+            brandLogoDarkKey={brandLogoDarkKey}
+          >
+            {children}
+          </AuthProvider>
+        </PostHogProvider>
       </body>
     </html>
   );
