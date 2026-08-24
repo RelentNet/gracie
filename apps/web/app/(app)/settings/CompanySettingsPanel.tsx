@@ -18,6 +18,7 @@ import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
+import { compressImage } from '@/lib/image-compress';
 import { TYPE } from '@/lib/typography';
 
 /** Client-side courtesy cap; the server enforces the real 1 MB limit. */
@@ -71,10 +72,20 @@ function LogoField({
         return;
       }
       setBusy(true);
-      const body = new FormData();
-      body.set('file', file);
-      body.set('variant', variant);
-      fetch('/api/brand/logo', { method: 'POST', body })
+      // Shrink + re-encode under the proxy's ~10 KB body cap before sending (see
+      // lib/image-compress). SVGs and already-tiny files pass through untouched.
+      // Best effort: if compression fails, fall back to the original file.
+      compressImage(file, { maxEdge: 320 })
+        .catch((): { blob: Blob; type: string } => ({ blob: file, type: file.type }))
+        .then(({ blob, type }) => {
+          const ext = type === 'image/png' ? 'png' : type === 'image/jpeg' ? 'jpg' : 'svg';
+          const upload =
+            blob instanceof File ? blob : new File([blob], `logo.${ext}`, { type });
+          const body = new FormData();
+          body.set('file', upload);
+          body.set('variant', variant);
+          return fetch('/api/brand/logo', { method: 'POST', body });
+        })
         .then(async (res) => {
           const payload = (await res.json().catch(() => null)) as
             | { brandLogoKey?: string | null; error?: { message?: string } }
