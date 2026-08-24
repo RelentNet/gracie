@@ -26,6 +26,11 @@ import {
   type ActionContext,
 } from '@/lib/assistant/actions/tools';
 import type { AutomationProposal } from '@/lib/assistant/actions/proposal';
+import {
+  DOCUMENT_TOOLS,
+  DOCUMENT_TOOL_NAMES,
+  executeDocumentTool,
+} from '@/lib/assistant/documents/tools';
 import { WEB_TOOLS, WEB_TOOL_NAMES, executeWebTool } from '@/lib/ai/web-tools';
 import { resolveTools, type ToolExecutor } from '@/lib/ai/tool-loop';
 import {
@@ -134,9 +139,11 @@ export async function POST(req: NextRequest): Promise<Response> {
       const actionCtx: ActionContext = { ownerUserId: ownerId };
       // Company (read) tools + the agentic action tools always; web tools only when
       // the Web toggle is on.
-      const tools = [...COMPANY_TOOLS, ...ACTION_TOOLS, ...(webAccess ? WEB_TOOLS : [])];
+      const tools = [...COMPANY_TOOLS, ...ACTION_TOOLS, ...DOCUMENT_TOOLS, ...(webAccess ? WEB_TOOLS : [])];
       const execute: ToolExecutor = (name, args) => {
         if (ACTION_TOOL_NAMES.has(name)) return executeAssistantAction(name, args, actionCtx, proposals);
+        if (DOCUMENT_TOOL_NAMES.has(name))
+          return executeDocumentTool(name, args, { userId: ownerId, role: caller.role });
         if (WEB_TOOL_NAMES.has(name)) return executeWebTool(name, args);
         return executeCompanyTool(name, args, caller);
       };

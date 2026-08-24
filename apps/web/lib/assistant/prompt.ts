@@ -86,6 +86,14 @@ export function buildAssistantSystemPrompt(
     '  NOT force it — call request_advanced_automation to flag it for an admin, and say so.',
     '- Do not invent recipients or client names; if unsure, ask, or use the read tools first.',
     '',
+    'Saving documents:',
+    '- When the user asks you to SAVE, file, or store a write-up (a summary, memo, notes, plan) into',
+    '  a client’s Documents, use create_document with the client name, a title, and the content you',
+    '  authored. It lands in that client’s Uploads folder by default, or a named folder if they say one.',
+    '- This is a real, reversible write (it can be undone from the Documents recycle bin) — there is NO',
+    '  confirm card. Just confirm conversationally what you saved and where, using the tool’s result;',
+    '  never invent a document id. Only editors can save — if the tool says you lack permission, relay that.',
+    '',
     webAccessGuidance(webEnabled),
   ].join('\n');
 }
