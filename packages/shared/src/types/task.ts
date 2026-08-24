@@ -9,6 +9,12 @@ export interface Task extends Timestamps {
   readonly id: UUID;
   readonly clientId: UUID;
   readonly sourceMeetingId: UUID | null;
+  /**
+   * The source meeting's `date_time`, joined in for the per-client Task Board so it
+   * can group tasks by meeting date. Optional: only the board's list query
+   * (`listTasksForBoard`) populates it; every other producer leaves it undefined.
+   */
+  readonly sourceMeetingAt?: ISOTimestamp | null;
   readonly sourceDocumentId: UUID | null;
   readonly description: string;
   readonly ownerUserId: UUID | null;

@@ -171,6 +171,29 @@ export async function listTasks(opts?: ListTasksOptions): Promise<Task[]> {
   return (data ?? []).map(mapTask);
 }
 
+/**
+ * List tasks for the Task Board, each enriched with its source meeting's
+ * `date_time` (`sourceMeetingAt`) via the `source_meeting_id` FK. The board groups
+ * tasks per client by meeting date, so it needs the join `listTasks` doesn't do.
+ * Same archived semantics as `listTasks` (excluded unless `includeArchived`).
+ */
+export async function listTasksForBoard(opts?: ListTasksOptions): Promise<Task[]> {
+  const db = getServerClient();
+  let query = db
+    .from('tasks')
+    .select('*, source_meeting:meetings!tasks_source_meeting_id_fkey(date_time)')
+    .order('updated_at', { ascending: false });
+  if (opts?.includeArchived !== true) {
+    query = query.eq('archived', false);
+  }
+  const { data, error } = await query;
+  if (error) throw new Error(`listTasksForBoard: ${error.message}`);
+  return (data ?? []).map((row) => ({
+    ...mapTask(row),
+    sourceMeetingAt: row.source_meeting?.date_time ?? null,
+  }));
+}
+
 /** List all tasks for a single client, ordered by due date (asc, nulls last). */
 export async function getTasksByClient(clientId: string): Promise<Task[]> {
   const db = getServerClient();
