@@ -21,6 +21,7 @@ import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
 import { formatDate, formatDateTime } from '@/lib/format';
 import {
+  canSeeTaskBoard,
   daysOverdue,
   priorityBadge,
   taskStatusLabel,
@@ -115,19 +116,20 @@ function displayInitials(users: UsersById, id: string | null): string {
 }
 
 export default function TasksPage(): React.JSX.Element {
-  const { can } = useAuth();
+  const { can, taskBoardVisibleToAll } = useAuth();
 
-  // The cross-client Task Board is an admin triage surface (tasks lifecycle). Regular
-  // users manage tasks per-client, not here — the API enforces this too (GET is admin).
-  // Gate lives in this thin wrapper so TaskBoard's hooks stay unconditional.
-  if (!can('task.manageBoard')) {
+  // The cross-client Task Board is an admin triage surface by default. The operator can
+  // reveal it to everyone via the Settings → Company toggle (`taskBoardVisibleToAll`);
+  // the same rule gates the nav item and the list/export APIs. This thin wrapper keeps
+  // TaskBoard's hooks unconditional, and the gate never 500s — it renders a placeholder.
+  if (!canSeeTaskBoard(can('task.manageBoard'), taskBoardVisibleToAll)) {
     return (
       <PageContainer>
         <PagePlaceholder
           title="Task Board"
           description="Cross-client task triage."
-          emptyTitle="Administrators only"
-          emptyDescription="The global Task Board is available to administrators. Tasks for each client appear on that client's Tasks panel, where you can complete and archive them."
+          emptyTitle="Not available yet"
+          emptyDescription="The global Task Board isn't open to your account yet. Tasks for each client appear on that client's Tasks panel, where you can complete and archive them. An administrator can turn the board on for everyone in Settings → Company."
         />
       </PageContainer>
     );

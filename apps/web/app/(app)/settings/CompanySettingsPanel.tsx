@@ -15,6 +15,7 @@ import { Lock, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
+import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { TYPE } from '@/lib/typography';
@@ -161,6 +162,7 @@ function LogoField({
 
 export function CompanySettingsPanel(): React.JSX.Element {
   const { brandLogoKey, brandLogoDarkKey } = useAuth();
+  const router = useRouter();
 
   const [floorDomains, setFloorDomains] = useState<readonly string[]>([]);
   const [description, setDescription] = useState('');
@@ -170,6 +172,49 @@ export function CompanySettingsPanel(): React.JSX.Element {
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
+
+  // Task-Board visibility — instant-save toggle, independent of the Save button
+  // below. Off (default) = admin-only board; on = revealed to every user. A refresh
+  // re-hydrates the auth context so the sidebar item appears/disappears immediately.
+  const [taskBoardVisible, setTaskBoardVisible] = useState<boolean | null>(null);
+  const [tbSaving, setTbSaving] = useState(false);
+  const [tbNote, setTbNote] = useState<{ text: string; ok: boolean } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    apiClient
+      .get<{ visible: boolean }>('/api/settings/tasks-visibility')
+      .then((d) => {
+        if (active) setTaskBoardVisible(d.visible);
+      })
+      .catch(() => {
+        if (active) setTaskBoardVisible(false); // default: admin-only
+      });
+    return (): void => {
+      active = false;
+    };
+  }, []);
+
+  const toggleTaskBoard = useCallback(
+    (next: boolean): void => {
+      setTaskBoardVisible(next); // optimistic
+      setTbSaving(true);
+      setTbNote(null);
+      apiClient
+        .patch<{ visible: boolean }>('/api/settings/tasks-visibility', { visible: next })
+        .then((d) => {
+          setTaskBoardVisible(d.visible);
+          setTbNote({ text: 'Saved.', ok: true });
+          router.refresh(); // re-hydrate the nav so the Task Board item updates now
+        })
+        .catch((e: unknown) => {
+          setTaskBoardVisible(!next); // revert on failure
+          setTbNote({ text: e instanceof Error ? e.message : 'Save failed.', ok: false });
+        })
+        .finally(() => setTbSaving(false));
+    },
+    [router],
+  );
 
   const hydrate = useCallback((s: CompanySettings): void => {
     setFloorDomains(s.floorDomains);
@@ -234,6 +279,32 @@ export function CompanySettingsPanel(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Task Board visibility — reveal the admin-only board to everyone when the team
+          is ready. Instant-save (separate from the Save button below). */}
+      <div className="flex flex-col gap-2 rounded-lg border p-4" style={{ borderColor: 'var(--border-subtle)' }}>
+        <div className="flex items-center gap-3">
+          <ToggleSwitch
+            checked={taskBoardVisible ?? false}
+            onChange={toggleTaskBoard}
+            disabled={taskBoardVisible === null || tbSaving}
+            label="Show the Task Board to all users"
+            ariaLabel="Show the Task Board to all users"
+          />
+          {tbNote !== null ? (
+            <span
+              role={tbNote.ok ? undefined : 'alert'}
+              style={{ ...TYPE.secondary, color: tbNote.ok ? 'var(--text-secondary)' : 'var(--color-red-600)' }}
+            >
+              {tbNote.text}
+            </span>
+          ) : null}
+        </div>
+        <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
+          Off = only administrators see the cross-client Task Board. Turn it on when the team is ready and
+          every user will see it in the sidebar. Administrators always have access.
+        </span>
+      </div>
+
       {/* Branding — the configurable nav logos. Each has its own upload/remove
           controls (multipart), separate from the description/domains Save below.
           The dark variant is optional: if left empty the main logo is used in

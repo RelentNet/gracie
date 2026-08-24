@@ -38,6 +38,8 @@ export const QUEUE_NAMES = {
   resumeRecording: 'resume-recording',
   /** Task aging: nightly archive of stale, standard-priority tasks (tasks lifecycle). */
   taskAging: 'task-aging',
+  /** Outlook contacts import: admin-triggered pull of a mailbox's Outlook contacts → `contacts`. */
+  outlookContactsImport: 'outlook-contacts-import',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -69,6 +71,8 @@ export const JOB_NAMES = {
   resumeRecording: 'resume-recording.resume',
   /** Nightly task-aging sweep — archive stale standard tasks (tasks lifecycle). */
   taskAgingSweep: 'task-aging.sweep',
+  /** Single Outlook contacts import — pull one mailbox's contacts (admin-triggered). */
+  outlookContactsImport: 'outlook-contacts-import.run',
 } as const;
 
 export type JobName = (typeof JOB_NAMES)[keyof typeof JOB_NAMES];

@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, LogOut, X } from 'lucide-react';
 import { ROLE_BADGES } from '@gracie/shared';
 
 import { useAuth } from '@/lib/auth';
+import { canSeeTaskBoard } from '@/lib/client-display';
 import { NAV_GROUPS } from '@/lib/navigation';
 import { TYPE } from '@/lib/typography';
 import { ClientAvatar } from '@/components/ClientAvatar';
@@ -29,16 +30,25 @@ import { useNavCollapse } from '@/components/ui/nav-collapse';
  *    Always renders fully expanded regardless of the desktop collapsed state.
  */
 export function Sidebar(): React.JSX.Element {
-  const { user, can, brandLogoKey, brandLogoDarkKey } = useAuth();
+  const { user, can, taskBoardVisibleToAll, brandLogoKey, brandLogoDarkKey } = useAuth();
   const pathname = usePathname();
   const { collapsed, toggleCollapsed, mobileOpen, closeMobile } = useNavCollapse();
+
+  // Task Board is admin-only until the operator reveals it to everyone (Settings →
+  // Company). It's a toggle, not a static permission, so it's gated here rather than
+  // via the item's `requires`.
+  const showTaskBoard = canSeeTaskBoard(can('task.manageBoard'), taskBoardVisibleToAll);
 
   // Filter each group's items by role, then drop groups left empty — this hides a
   // section header (CLIENTS/PLANNING/LIBRARY) when all its items are gated away for
   // the current role, so no orphan header renders over nothing.
   const visibleGroups = NAV_GROUPS.map((group) => ({
     header: group.header,
-    items: group.items.filter((item) => item.requires === undefined || can(item.requires)),
+    items: group.items.filter((item) => {
+      if (item.requires !== undefined && !can(item.requires)) return false;
+      if (item.href === '/tasks') return showTaskBoard;
+      return true;
+    }),
   })).filter((group) => group.items.length > 0);
 
   const roleBadge = ROLE_BADGES[user.role];
