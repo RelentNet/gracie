@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { Archive, Check, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { Archive, Check, Pencil, Pin, Plus, Search, Trash2, X } from 'lucide-react';
 
 import { TYPE } from '@/lib/typography';
 import { LoadingState } from '@/components/ui/StateViews';
@@ -12,6 +12,7 @@ export interface Conversation {
   readonly id: string;
   readonly title: string | null;
   readonly archived: boolean;
+  readonly pinned: boolean;
   readonly updatedAt: string;
 }
 
@@ -32,6 +33,7 @@ export function ConversationList({
   onRename,
   onArchive,
   onDelete,
+  onPin,
 }: {
   readonly chats: readonly Conversation[];
   readonly activeChatId: string | null;
@@ -44,6 +46,7 @@ export function ConversationList({
   readonly onRename: (id: string, title: string) => void;
   readonly onArchive: (id: string) => void;
   readonly onDelete: (id: string) => void;
+  readonly onPin: (id: string, pinned: boolean) => void;
 }): React.JSX.Element {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -148,6 +151,17 @@ export function ConversationList({
                   </>
                 ) : (
                   <>
+                    <button
+                      type="button"
+                      onClick={(): void => onPin(chat.id, !chat.pinned)}
+                      aria-label={chat.pinned ? 'Unpin conversation' : 'Pin conversation'}
+                      aria-pressed={chat.pinned}
+                      title={chat.pinned ? 'Unpin' : 'Pin to top'}
+                      className={`shrink-0 transition-opacity ${chat.pinned ? '' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}`}
+                      style={{ color: chat.pinned ? 'var(--color-blue-700)' : 'var(--text-secondary)' }}
+                    >
+                      <Pin size={14} fill={chat.pinned ? 'currentColor' : 'none'} />
+                    </button>
                     <button
                       type="button"
                       onClick={(): void => onSelect(chat.id)}

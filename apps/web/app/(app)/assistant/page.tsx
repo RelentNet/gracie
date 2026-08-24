@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { ChatThread } from '@/components/chat/ChatThread';
 import { ChatComposer } from '@/components/chat/ChatComposer';
+import { MicButton } from '@/components/chat/MicButton';
 import type { ChatMessage } from '@/components/chat/types';
 import type { AutomationProposal } from '@/lib/assistant/actions/proposal';
 import { LoadingState } from '@/components/ui/StateViews';
@@ -232,6 +233,15 @@ export default function AssistantPage(): React.JSX.Element {
     }
   }
 
+  async function handlePin(id: string, pinned: boolean): Promise<void> {
+    try {
+      await apiClient.patch(`/api/assistant/chats/${id}`, { pinned });
+      await loadChats(search); // re-sort: pinned first, then recency
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to pin conversation');
+    }
+  }
+
   const attachDisabled = streaming || uploading;
 
   // Shared conversation-list wiring, reused by the desktop sidebar and the mobile
@@ -248,6 +258,7 @@ export default function AssistantPage(): React.JSX.Element {
     onRename: (id: string, title: string): void => void handleRename(id, title),
     onArchive: (id: string): void => void handleArchive(id),
     onDelete: (id: string): void => void handleDelete(id),
+    onPin: (id: string, pinned: boolean): void => void handlePin(id, pinned),
   };
 
   return (
@@ -347,20 +358,28 @@ export default function AssistantPage(): React.JSX.Element {
           disabled={streaming}
           placeholder="Message the assistant…  (Enter to send, Shift+Enter for a new line)"
           leading={
-            <button
-              type="button"
-              onClick={(): void => fileInputRef.current?.click()}
-              disabled={attachDisabled}
-              aria-label="Attach a file"
-              className="rounded-lg border p-3 transition-colors"
-              style={{
-                borderColor: 'var(--border-subtle)',
-                color: attachDisabled ? 'var(--text-secondary)' : 'var(--text-primary)',
-                cursor: attachDisabled ? 'not-allowed' : 'pointer',
-              }}
-            >
-              <Paperclip aria-hidden="true" size={18} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={(): void => fileInputRef.current?.click()}
+                disabled={attachDisabled}
+                aria-label="Attach a file"
+                className="rounded-lg border p-3 transition-colors"
+                style={{
+                  borderColor: 'var(--border-subtle)',
+                  color: attachDisabled ? 'var(--text-secondary)' : 'var(--text-primary)',
+                  cursor: attachDisabled ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <Paperclip aria-hidden="true" size={18} />
+              </button>
+              <MicButton
+                disabled={streaming}
+                onTranscript={(text): void =>
+                  setInput((prev) => (prev.trim() === '' ? text : `${prev} ${text}`))
+                }
+              />
+            </div>
           }
         >
           {(attachments.length > 0 || uploading) && (

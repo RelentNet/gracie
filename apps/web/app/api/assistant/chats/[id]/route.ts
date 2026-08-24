@@ -50,15 +50,16 @@ export async function PATCH(req: NextRequest, { params }: Params): Promise<NextR
     const { id } = await params;
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
-    const patch: { title?: string; archived?: boolean } = {};
+    const patch: { title?: string; archived?: boolean; pinned?: boolean } = {};
     if (typeof body.title === 'string') {
       const title = body.title.trim();
       if (title === '') return jsonError('bad_request', 'title cannot be empty', 400);
       patch.title = title.length > 200 ? title.slice(0, 200) : title;
     }
     if (typeof body.archived === 'boolean') patch.archived = body.archived;
-    if (patch.title === undefined && patch.archived === undefined) {
-      return jsonError('bad_request', 'Nothing to update (title or archived)', 400);
+    if (typeof body.pinned === 'boolean') patch.pinned = body.pinned;
+    if (patch.title === undefined && patch.archived === undefined && patch.pinned === undefined) {
+      return jsonError('bad_request', 'Nothing to update (title, archived, or pinned)', 400);
     }
 
     const chat = await updateChat(ownerId, id, patch);
