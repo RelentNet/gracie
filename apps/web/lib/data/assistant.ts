@@ -24,6 +24,7 @@ export interface AssistantChatView {
   readonly title: string | null;
   readonly model: string | null;
   readonly archived: boolean;
+  readonly pinned: boolean;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -58,6 +59,7 @@ function toChatView(row: ChatRow): AssistantChatView {
     title: row.title,
     model: row.model,
     archived: row.archived,
+    pinned: row.pinned,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -91,6 +93,7 @@ export async function listChats(
     .from('assistant_chats')
     .select('*')
     .eq('user_id', ownerId)
+    .order('pinned', { ascending: false })
     .order('updated_at', { ascending: false });
 
   if (options.includeArchived !== true) query = query.eq('archived', false);
@@ -149,18 +152,22 @@ export async function getChatWithMessages(
   return { chat, messages: (data ?? []).map(toMessageView) };
 }
 
-/** Rename / archive a conversation, ownership-checked. `null` if not owned. */
+/** Rename / archive / pin a conversation, ownership-checked. `null` if not owned. */
 export async function updateChat(
   ownerId: string,
   chatId: string,
-  patch: { readonly title?: string; readonly archived?: boolean },
+  patch: { readonly title?: string; readonly archived?: boolean; readonly pinned?: boolean },
 ): Promise<AssistantChatView | null> {
   const db = getServerClient();
-  const update: Database['public']['Tables']['assistant_chats']['Update'] = {
-    updated_at: new Date().toISOString(),
-  };
+  const update: Database['public']['Tables']['assistant_chats']['Update'] = {};
   if (patch.title !== undefined) update.title = patch.title;
   if (patch.archived !== undefined) update.archived = patch.archived;
+  if (patch.pinned !== undefined) update.pinned = patch.pinned;
+  // Pinning is metadata, not activity: only a title/archive change bumps recency,
+  // so unpinning returns a chat to its true position in the list.
+  if (patch.title !== undefined || patch.archived !== undefined) {
+    update.updated_at = new Date().toISOString();
+  }
 
   const { data, error } = await db
     .from('assistant_chats')
