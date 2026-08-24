@@ -138,8 +138,12 @@ export default function TasksPage(): React.JSX.Element {
 }
 
 function TaskBoard(): React.JSX.Element {
-  const { user, canEdit } = useAuth();
+  const { user, canEdit, can } = useAuth();
   const editable = canEdit();
+  // Bulk select + Merge + Mass-delete hit ADMIN-only endpoints, so gate them on the admin
+  // capability — not `editable` (standard users are editors). Since #122 can reveal the
+  // board to non-admins, this keeps them from seeing bulk actions that would 403.
+  const canBulk = can('task.manageBoard');
   const currentUserId = user.internalId;
 
   const [tasks, setTasks] = useState<readonly Task[] | null>(null);
@@ -471,7 +475,7 @@ function TaskBoard(): React.JSX.Element {
         </label>
       </div>
 
-      {editable && selectedCount > 0 ? (
+      {canBulk && selectedCount > 0 ? (
         <div
           className="flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3"
           style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--color-blue-50)' }}
@@ -526,7 +530,7 @@ function TaskBoard(): React.JSX.Element {
       ) : (
         <Table minWidth="60rem" scrollRegionLabel="Task board">
           <THead>
-            {editable ? (
+            {canBulk ? (
               <TH style={{ width: '2.5rem' }}>
                 <SelectAllCheckbox
                   checked={allVisibleSelected}
@@ -558,6 +562,7 @@ function TaskBoard(): React.JSX.Element {
                 currentUserId={currentUserId}
                 usersById={usersById}
                 clientNamesById={clientNamesById}
+                selectable={canBulk}
                 selected={selectedIds.has(task.id)}
                 selectDisabled={bulkBusy}
                 onToggleSelect={(): void => toggleSelect(task.id)}
@@ -703,6 +708,7 @@ function TaskRow({
   currentUserId,
   usersById,
   clientNamesById,
+  selectable,
   selected,
   selectDisabled,
   onToggleSelect,
@@ -719,6 +725,7 @@ function TaskRow({
   readonly currentUserId: string | null;
   readonly usersById: UsersById;
   readonly clientNamesById: ClientNamesById;
+  readonly selectable: boolean;
   readonly selected: boolean;
   readonly selectDisabled: boolean;
   readonly onToggleSelect: () => void;
@@ -741,13 +748,13 @@ function TaskRow({
   const canToggleComplete = !task.isArchived && (editable || isOwnTask);
 
   // Columns the expanded notes row spans: expander, status, task, client, owner, due,
-  // priority, actions = 8, plus the leading select checkbox column for editors.
-  const COLUMN_COUNT = editable ? 9 : 8;
+  // priority, actions = 8, plus the leading select checkbox column for admins.
+  const COLUMN_COUNT = selectable ? 9 : 8;
 
   return (
     <Fragment>
       <TRow tone={tone}>
-        {editable ? (
+        {selectable ? (
           <TCell style={{ width: '2.5rem' }}>
             <input
               type="checkbox"
