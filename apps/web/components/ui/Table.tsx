@@ -67,14 +67,15 @@ export function TBody({ children }: { readonly children: ReactNode }): React.JSX
 
 export interface TRowProps {
   readonly children: ReactNode;
-  /** Highlight tone for the whole row (e.g. overdue = red, 48h = amber). */
-  readonly tone?: 'default' | 'critical' | 'warning';
+  /** Highlight tone for the whole row (overdue = red, 48h = amber, done = green). */
+  readonly tone?: 'default' | 'critical' | 'warning' | 'success';
 }
 
 const ROW_TONE_BG: Readonly<Record<NonNullable<TRowProps['tone']>, string | undefined>> = {
   default: undefined,
   critical: 'var(--color-red-100)',
   warning: 'var(--color-amber-100)',
+  success: 'var(--color-emerald-100)',
 };
 
 export function TRow({ children, tone = 'default' }: TRowProps): React.JSX.Element {

@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 import { getRequestUser, isAdmin, isEditor } from '@/lib/api-auth';
-import { createTask, getTaskBoardVisibleToAll, listTasks } from '@/lib/data/tasks';
+import { createTask, getTaskBoardVisibleToAll, listTasksForBoard } from '@/lib/data/tasks';
 import { enqueueRelationshipHealth } from '@/lib/queue';
 
 // bullmq/ioredis (the recompute enqueue) are Node-only — force the Node.js runtime.
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
     const includeArchived = request.nextUrl.searchParams.get('archived') === 'true';
-    const tasks = await listTasks({ includeArchived });
+    const tasks = await listTasksForBoard({ includeArchived });
     return NextResponse.json({ tasks });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
