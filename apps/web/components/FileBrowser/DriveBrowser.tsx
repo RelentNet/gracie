@@ -89,13 +89,15 @@ type ManageTarget =
 /** Recent Documents virtual node size (docs/plan p2fix — last ~20–30 touched). */
 const RECENT_LIMIT = 25;
 
-// Resizable preview-pane bounds (px). The default roughly matches the old 1.5fr share
-// at a typical desktop width; the clamp keeps the preview readable and the file area
-// from collapsing (the tree column is only reserved in list view).
-const DEFAULT_PREVIEW_WIDTH = 480;
+// Resizable preview-pane bounds (px). Default split favours a wide folder panel and a
+// large preview, letting the middle file list ride between them (it has its own
+// horizontal scroll region, so a narrow middle degrades gracefully). The clamp keeps
+// the preview readable and the file area from collapsing on resize (the tree column is
+// only reserved in list view).
+const DEFAULT_PREVIEW_WIDTH = 600;
 const MIN_PREVIEW_WIDTH = 280;
 const MIN_FILE_AREA_WIDTH = 300;
-const TREE_COLUMN_WIDTH = 256; // 16rem
+const TREE_COLUMN_WIDTH = 320; // 20rem — keep in sync with the list-view grid template below
 const HANDLE_WIDTH = 6;
 
 /** Clamp a requested preview width so neither side collapses (docs/plan resize brief). */
@@ -594,7 +596,7 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
         className={`grid grid-cols-1 gap-0 lg:min-h-0 lg:flex-1 lg:grid-rows-1 ${
           view === 'grid'
             ? 'lg:grid-cols-[minmax(0,1fr)_6px_var(--preview-w)]'
-            : 'lg:grid-cols-[16rem_minmax(0,1fr)_6px_var(--preview-w)]'
+            : 'lg:grid-cols-[20rem_minmax(0,1fr)_6px_var(--preview-w)]'
         }`}
       >
         {view === 'grid' ? null : (
