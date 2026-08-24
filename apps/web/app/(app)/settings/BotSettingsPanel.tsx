@@ -19,6 +19,7 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
+import { compressImage } from '@/lib/image-compress';
 import { TYPE } from '@/lib/typography';
 
 interface AutoLeave {
@@ -145,14 +146,15 @@ export function BotSettingsPanel(): React.JSX.Element {
       setMessage({ text: 'Image must be 1.3 MB or smaller.', ok: false });
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (): void => {
-      setPendingDataUrl(String(reader.result));
-      setRemoveAvatar(false);
-      setAvatarEnabled(true); // uploading a new image implies you want it shown
-    };
-    reader.onerror = (): void => setMessage({ text: 'Could not read that file.', ok: false });
-    reader.readAsDataURL(file);
+    // Downscale + re-encode to JPEG under the proxy's ~10 KB body cap before we
+    // ever send it (see lib/image-compress). Recall only needs a small tile.
+    compressImage(file, { maxEdge: 256, format: 'jpeg' })
+      .then(({ dataUrl }) => {
+        setPendingDataUrl(dataUrl);
+        setRemoveAvatar(false);
+        setAvatarEnabled(true); // uploading a new image implies you want it shown
+      })
+      .catch(() => setMessage({ text: 'Could not read that file.', ok: false }));
   }, []);
 
   const previewUrl = pendingDataUrl ?? (removeAvatar ? null : (config?.avatarDataUrl ?? null));
