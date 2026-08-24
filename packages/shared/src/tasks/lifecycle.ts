@@ -187,3 +187,53 @@ export function decideCapEvictions(
 export function agingCutoffIso(now: Date, ttlDays: number = STANDARD_TASK_TTL_DAYS): string {
   return new Date(now.getTime() - ttlDays * 86_400_000).toISOString();
 }
+
+/** One task's fields the merge cares about (index 0 of the selection = the survivor). */
+export interface MergeTaskInput {
+  readonly clientId: string;
+  readonly description: string;
+  readonly priorityFlag: boolean;
+}
+
+/** Fields written onto the survivor when a merge is applied. */
+export interface MergeCombination {
+  readonly description: string;
+  readonly priorityFlag: boolean;
+}
+
+/**
+ * True when every task shares one client. A task is client-scoped, so merge is too —
+ * combining across clients would silently move work onto the survivor's client. Empty
+ * or single-task selections are not mergeable (nothing to fold in).
+ */
+export function tasksShareClient(tasks: readonly { readonly clientId: string }[]): boolean {
+  const [first, ...rest] = tasks;
+  if (first === undefined) return false;
+  return rest.every((task) => task.clientId === first.clientId);
+}
+
+/**
+ * Fold N selected tasks into the survivor's fields (pure — the DB re-parents the
+ * merged-away notes and deletes their rows). `tasks[0]` is the survivor:
+ *  - description: the survivor's, with each DISTINCT merged-away description appended
+ *    on its own bullet line (identical restatements are dropped via normalizeDescription)
+ *    so the combined task still names everything it absorbed;
+ *  - priorityFlag: HIGH if ANY selected task is high — the highest priority wins.
+ * Throws on an empty selection (callers guard for 2+, but fail loud rather than silent).
+ */
+export function combineMergedTasks(tasks: readonly MergeTaskInput[]): MergeCombination {
+  const [survivor, ...rest] = tasks;
+  if (survivor === undefined) throw new Error('combineMergedTasks: no tasks to merge');
+  const base = survivor.description.trim();
+  const seen = new Set<string>([normalizeDescription(base)]);
+  const extra: string[] = [];
+  for (const task of rest) {
+    const norm = normalizeDescription(task.description);
+    if (norm === '' || seen.has(norm)) continue;
+    seen.add(norm);
+    extra.push(task.description.trim());
+  }
+  const description =
+    extra.length === 0 ? base : `${base}\n\nMerged in:\n${extra.map((d) => `• ${d}`).join('\n')}`;
+  return { description, priorityFlag: tasks.some((task) => task.priorityFlag) };
+}

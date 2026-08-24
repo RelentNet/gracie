@@ -138,8 +138,12 @@ export default function TasksPage(): React.JSX.Element {
 }
 
 function TaskBoard(): React.JSX.Element {
-  const { user, canEdit } = useAuth();
+  const { user, canEdit, can } = useAuth();
   const editable = canEdit();
+  // Bulk select + Merge + Mass-delete hit ADMIN-only endpoints, so gate them on the admin
+  // capability — not `editable` (standard users are editors). Since #122 can reveal the
+  // board to non-admins, this keeps them from seeing bulk actions that would 403.
+  const canBulk = can('task.manageBoard');
   const currentUserId = user.internalId;
 
   const [tasks, setTasks] = useState<readonly Task[] | null>(null);
@@ -159,6 +163,13 @@ function TaskBoard(): React.JSX.Element {
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [assignTask, setAssignTask] = useState<Task | null>(null);
   const [deleteTask, setDeleteTask] = useState<Task | null>(null);
+
+  // Bulk multi-select (admin board only). Selection is tracked as an id set and is
+  // always intersected with the *visible* filtered rows, so an action never touches a
+  // task that scrolled out of the current filter.
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState<boolean>(false);
+  const [bulkModal, setBulkModal] = useState<'delete' | 'merge' | null>(null);
 
   // Active-only by default; the archived toggle re-fetches with ?archived=true (M6).
   useEffect(() => {
@@ -303,6 +314,83 @@ function TaskBoard(): React.JSX.Element {
     }
   }
 
+  // Selection ∩ visible rows: everything (count, primary, same-client) derives from this,
+  // so a hidden-but-still-selected task can never be deleted/merged out from under a filter.
+  const selectedTasks = useMemo<readonly Task[]>(
+    () => filteredTasks.filter((task) => selectedIds.has(task.id)),
+    [filteredTasks, selectedIds],
+  );
+  const selectedCount = selectedTasks.length;
+  const allVisibleSelected = filteredTasks.length > 0 && selectedCount === filteredTasks.length;
+  // Merge is client-scoped — a task belongs to one client (tasks lifecycle).
+  const selectedClientCount = useMemo<number>(
+    () => new Set(selectedTasks.map((task) => task.clientId)).size,
+    [selectedTasks],
+  );
+  const canMerge = selectedCount >= 2 && selectedClientCount === 1;
+
+  function toggleSelect(taskId: string): void {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  }
+
+  // Header checkbox: select every visible row, or clear when all are already selected.
+  function toggleSelectAll(): void {
+    setSelectedIds(allVisibleSelected ? new Set() : new Set(filteredTasks.map((task) => task.id)));
+  }
+
+  function clearSelection(): void {
+    setSelectedIds(new Set());
+  }
+
+  // Mass hard-delete the selected rows in one call, then drop them from the board in place.
+  async function runBulkDelete(): Promise<void> {
+    const ids = selectedTasks.map((task) => task.id);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setActionError(null);
+    try {
+      await apiClient.post('/api/tasks/bulk-delete', { ids });
+      const removed = new Set(ids);
+      setTasks((prev) => (prev === null ? prev : prev.filter((t) => !removed.has(t.id))));
+      clearSelection();
+      setBulkModal(null);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Delete failed. Try again.');
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  // Merge the selected same-client tasks into the first (primary): fold the others in,
+  // then drop them and replace the primary with the returned survivor — all in place.
+  async function runMerge(): Promise<void> {
+    const [primary, ...rest] = selectedTasks;
+    if (primary === undefined || rest.length === 0) return;
+    setBulkBusy(true);
+    setActionError(null);
+    try {
+      const { task } = await apiClient.post<{ task: Task }>('/api/tasks/merge', {
+        primaryId: primary.id,
+        mergedIds: rest.map((t) => t.id),
+      });
+      const removed = new Set(rest.map((t) => t.id));
+      setTasks((prev) =>
+        prev === null ? prev : prev.filter((t) => !removed.has(t.id)).map((t) => (t.id === task.id ? task : t)),
+      );
+      clearSelection();
+      setBulkModal(null);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Merge failed. Try again.');
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   if (error !== null) {
     return <ErrorState title="Couldn’t load tasks" description={error} />;
   }
@@ -387,6 +475,51 @@ function TaskBoard(): React.JSX.Element {
         </label>
       </div>
 
+      {canBulk && selectedCount > 0 ? (
+        <div
+          className="flex flex-wrap items-center gap-3 rounded-lg border px-4 py-3"
+          style={{ borderColor: 'var(--border-subtle)', backgroundColor: 'var(--color-blue-50)' }}
+          role="region"
+          aria-label="Selected tasks"
+        >
+          <span style={TYPE.bodyStrong}>
+            {selectedCount} selected
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              // Clickable at 2+ selected even across clients — the modal then shows the
+              // plain "one client only" message, rather than a silently-disabled button.
+              disabled={bulkBusy || selectedCount < 2}
+              title={
+                selectedCount < 2 ? 'Select 2 or more tasks to merge' : 'Merge the selected tasks into one'
+              }
+              onClick={(): void => setBulkModal('merge')}
+            >
+              Merge
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={bulkBusy}
+              onClick={(): void => setBulkModal('delete')}
+            >
+              Delete selected
+            </Button>
+          </div>
+          <button
+            type="button"
+            onClick={clearSelection}
+            disabled={bulkBusy}
+            className="ml-auto rounded-md px-2 py-1"
+            style={{ ...TYPE.secondary, color: 'var(--text-secondary)', background: 'transparent', cursor: 'pointer' }}
+          >
+            Clear
+          </button>
+        </div>
+      ) : null}
+
       {tasks === null ? (
         <LoadingState label="Loading tasks…" />
       ) : filteredTasks.length === 0 ? (
@@ -397,6 +530,16 @@ function TaskBoard(): React.JSX.Element {
       ) : (
         <Table minWidth="60rem" scrollRegionLabel="Task board">
           <THead>
+            {canBulk ? (
+              <TH style={{ width: '2.5rem' }}>
+                <SelectAllCheckbox
+                  checked={allVisibleSelected}
+                  indeterminate={selectedCount > 0 && !allVisibleSelected}
+                  disabled={bulkBusy}
+                  onChange={toggleSelectAll}
+                />
+              </TH>
+            ) : null}
             <TH style={{ width: '2.5rem' }}>
               <span className="sr-only">Expand notes</span>
             </TH>
@@ -419,6 +562,10 @@ function TaskBoard(): React.JSX.Element {
                 currentUserId={currentUserId}
                 usersById={usersById}
                 clientNamesById={clientNamesById}
+                selectable={canBulk}
+                selected={selectedIds.has(task.id)}
+                selectDisabled={bulkBusy}
+                onToggleSelect={(): void => toggleSelect(task.id)}
                 busy={rowBusyId === task.id}
                 isExpanded={expandedTaskId === task.id}
                 onToggleExpand={(): void =>
@@ -480,6 +627,77 @@ function TaskBoard(): React.JSX.Element {
           close this and use Archive instead — archived tasks stay under “Show archived”.
         </p>
       </Modal>
+
+      <Modal
+        isOpen={bulkModal === 'delete'}
+        onClose={(): void => setBulkModal(null)}
+        title="Delete selected tasks"
+        footer={
+          <>
+            <Button variant="secondary" disabled={bulkBusy} onClick={(): void => setBulkModal(null)}>
+              Cancel
+            </Button>
+            <Button variant="danger" disabled={bulkBusy} onClick={(): void => void runBulkDelete()}>
+              {bulkBusy ? 'Deleting…' : `Delete ${selectedCount} task${selectedCount === 1 ? '' : 's'}`}
+            </Button>
+          </>
+        }
+      >
+        <p style={TYPE.body}>
+          Permanently delete {selectedCount} task{selectedCount === 1 ? '' : 's'}? This can’t be undone.
+          To keep tasks recoverable, cancel and use Archive instead.
+        </p>
+      </Modal>
+
+      <Modal
+        isOpen={bulkModal === 'merge'}
+        onClose={(): void => setBulkModal(null)}
+        title="Merge tasks"
+        footer={
+          canMerge ? (
+            <>
+              <Button variant="secondary" disabled={bulkBusy} onClick={(): void => setBulkModal(null)}>
+                Cancel
+              </Button>
+              <Button variant="primary" disabled={bulkBusy} onClick={(): void => void runMerge()}>
+                {bulkBusy ? 'Merging…' : `Merge ${selectedCount} into 1`}
+              </Button>
+            </>
+          ) : (
+            <Button variant="secondary" onClick={(): void => setBulkModal(null)}>
+              Close
+            </Button>
+          )
+        }
+      >
+        {!canMerge ? (
+          <p style={TYPE.body}>
+            {selectedCount < 2
+              ? 'Select two or more tasks from the same client to merge.'
+              : 'Merge only works within one client. These tasks belong to different clients — deselect tasks until only one client remains.'}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <p style={TYPE.body}>
+              Merge {selectedCount} tasks into one? The primary keeps its client; the others’
+              descriptions and notes are folded into it, then they’re deleted. This can’t be undone.
+            </p>
+            <ul className="flex flex-col gap-1">
+              {selectedTasks.map((task, index) => (
+                <li key={task.id} className="flex items-center gap-2">
+                  <Badge
+                    bg={index === 0 ? 'var(--color-emerald-100)' : 'var(--color-slate-100)'}
+                    fg={index === 0 ? 'var(--color-emerald-600)' : 'var(--color-slate-600)'}
+                  >
+                    {index === 0 ? 'Primary — kept' : 'Merged in'}
+                  </Badge>
+                  <span style={TYPE.secondary}>{task.description}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Modal>
     </PageContainer>
   );
 }
@@ -490,6 +708,10 @@ function TaskRow({
   currentUserId,
   usersById,
   clientNamesById,
+  selectable,
+  selected,
+  selectDisabled,
+  onToggleSelect,
   busy,
   isExpanded,
   onToggleExpand,
@@ -503,6 +725,10 @@ function TaskRow({
   readonly currentUserId: string | null;
   readonly usersById: UsersById;
   readonly clientNamesById: ClientNamesById;
+  readonly selectable: boolean;
+  readonly selected: boolean;
+  readonly selectDisabled: boolean;
+  readonly onToggleSelect: () => void;
   readonly busy: boolean;
   readonly isExpanded: boolean;
   readonly onToggleExpand: () => void;
@@ -521,13 +747,26 @@ function TaskRow({
   const isOwnTask = currentUserId !== null && task.ownerUserId === currentUserId;
   const canToggleComplete = !task.isArchived && (editable || isOwnTask);
 
-  // Columns the expanded notes row spans (THead always renders 8 columns:
-  // expander, status, task, client, owner, due, priority, actions).
-  const COLUMN_COUNT = 8;
+  // Columns the expanded notes row spans: expander, status, task, client, owner, due,
+  // priority, actions = 8, plus the leading select checkbox column for admins.
+  const COLUMN_COUNT = selectable ? 9 : 8;
 
   return (
     <Fragment>
       <TRow tone={tone}>
+        {selectable ? (
+          <TCell style={{ width: '2.5rem' }}>
+            <input
+              type="checkbox"
+              checked={selected}
+              disabled={selectDisabled}
+              onChange={onToggleSelect}
+              aria-label={`Select "${task.description}"`}
+              className="size-4 rounded border"
+              style={{ borderColor: 'var(--border-subtle)', accentColor: 'var(--color-blue-500)' }}
+            />
+          </TCell>
+        ) : null}
         <TCell style={{ width: '2.5rem' }}>
           <button
             type="button"
@@ -888,6 +1127,34 @@ function TaskNotes({
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Header select-all checkbox — supports the indeterminate (some-selected) state via a ref. */
+function SelectAllCheckbox({
+  checked,
+  indeterminate,
+  disabled,
+  onChange,
+}: {
+  readonly checked: boolean;
+  readonly indeterminate: boolean;
+  readonly disabled: boolean;
+  readonly onChange: () => void;
+}): React.JSX.Element {
+  return (
+    <input
+      type="checkbox"
+      aria-label="Select all tasks in the current filter"
+      checked={checked}
+      disabled={disabled}
+      ref={(el): void => {
+        if (el !== null) el.indeterminate = indeterminate;
+      }}
+      onChange={onChange}
+      className="size-4 rounded border"
+      style={{ borderColor: 'var(--border-subtle)', accentColor: 'var(--color-blue-500)' }}
+    />
   );
 }
 

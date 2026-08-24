@@ -11,10 +11,12 @@ import { getServerClient } from '@gracie/db';
 import type { Database } from '@gracie/db';
 import type { Task, TaskNote, TaskStatus } from '@gracie/shared';
 import {
+  combineMergedTasks,
   decideCapEvictions,
   decideTaskUpsert,
   findDuplicateTask,
   resolveOwnerFromText,
+  tasksShareClient,
 } from '@gracie/shared/tasks';
 
 import { mapTask, mapTaskNote } from '../mappers/task.js';
@@ -90,6 +92,65 @@ export async function deleteTask(id: string): Promise<void> {
   const db = getServerClient();
   const { error } = await db.from('tasks').delete().eq('id', id);
   if (error !== null) throw new Error(`deleteTask: ${error.message}`);
+}
+
+/**
+ * Permanently delete many tasks in one round-trip (admin-only, enforced at the API).
+ * The bulk sibling of {@link deleteTask} — one `.in('id', ids)` delete for clearing an
+ * oversized board fast. `task_notes` cascade via their FK. Idempotent (unknown ids are
+ * no-ops); an empty list is a no-op. Returns how many ids were requested.
+ */
+export async function deleteTasks(ids: readonly string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const db = getServerClient();
+  const { error } = await db.from('tasks').delete().in('id', ids as string[]);
+  if (error !== null) throw new Error(`deleteTasks: ${error.message}`);
+  return ids.length;
+}
+
+/**
+ * Merge 2+ same-client tasks into the first-selected survivor (admin-only, enforced at
+ * the API). Folds the merged-away descriptions into the survivor + takes the highest
+ * priority (pure {@link combineMergedTasks}), RE-PARENTS their notes onto the survivor
+ * so history survives, then hard-deletes them. Rejects a cross-client selection — a task
+ * belongs to one client. `primaryId` is the survivor; `mergedIds` are absorbed.
+ * ponytail: no cross-row transaction (reparent → update → delete run in sequence); a
+ * mid-way failure surfaces as an error and leaves rows intact-but-partially-moved —
+ * acceptable for rare admin cleanup, wrap in an RPC if it ever matters.
+ */
+export async function mergeTasks(primaryId: string, mergedIds: readonly string[]): Promise<Task> {
+  if (mergedIds.length === 0) throw new Error('Select at least two tasks to merge.');
+  const db = getServerClient();
+  const ids = [primaryId, ...mergedIds];
+
+  const { data, error } = await db.from('tasks').select('*').in('id', ids);
+  if (error !== null) throw new Error(`mergeTasks: ${error.message}`);
+  const rows = data ?? [];
+
+  // Preserve selection order (primary first) so the survivor is inputs[0] for the combine.
+  const inputs = ids.map((id) => {
+    const row = rows.find((r) => r.id === id);
+    if (row === undefined) throw new Error('Unknown task');
+    return { clientId: row.client_id, description: row.description, priorityFlag: row.priority_flag };
+  });
+  if (!tasksShareClient(inputs)) throw new Error('Merge only works within one client.');
+
+  const combined = combineMergedTasks(inputs);
+
+  // Re-parent the merged-away tasks' notes onto the survivor before deleting them.
+  const reparent = await db
+    .from('task_notes')
+    .update({ task_id: primaryId })
+    .in('task_id', mergedIds as string[]);
+  if (reparent.error !== null) throw new Error(`mergeTasks: reparent notes: ${reparent.error.message}`);
+
+  const survivor = await updateTask(primaryId, {
+    description: combined.description,
+    priorityFlag: combined.priorityFlag,
+  });
+
+  await deleteTasks(mergedIds);
+  return survivor;
 }
 
 /**
