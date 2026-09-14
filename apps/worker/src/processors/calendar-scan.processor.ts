@@ -13,8 +13,8 @@
  *      capturing `is_internal` + `external_attendees` and linking matched orgs.
  *
  * EVERY real meeting is ingested now (not just client-matched ones) — solo
- * calendar blocks (no join URL AND ≤1 attendee) and cancelled/undated events are
- * the only skips. Matching is DOMAIN-FIRST (no subject/alias guessing).
+ * calendar blocks (no join URL AND ≤1 attendee), cancelled/undated events, and
+ * events marked PRIVATE in Outlook are the only skips. Matching is DOMAIN-FIRST (no subject/alias guessing).
  *
  * Reconciliation (P4.2): after upserting, the sweep REMOVES any calendar-sourced
  * meeting in the scan window that is no longer on any current group member's
@@ -114,7 +114,7 @@ interface UserLite {
 }
 
 /** The same meeting merged across every member calendar it appeared on. */
-interface AggregatedMeeting {
+export interface AggregatedMeeting {
   readonly dedupKey: string;
   readonly canonical: GraphEvent;
   /** Lower-cased emails of every group member whose calendar held this event. */
@@ -169,33 +169,15 @@ export function createCalendarScanProcessor(
     //    EVERY read succeeded — reconciliation only reaps on a fully-clean sweep.
     const windowStart = new Date(now.getTime() - SCAN_LOOKBACK_MINUTES * 60_000).toISOString();
     const windowEnd = new Date(now.getTime() + SCAN_LOOKAHEAD_DAYS * 86_400_000).toISOString();
-    const aggregated = new Map<string, AggregatedMeeting>();
-    let eventCount = 0;
+    const reads: { email: string; events: readonly GraphEvent[] }[] = [];
     let allReadsOk = true;
 
     for (const member of members) {
       const { ok, events } = await graph.readCalendarView(member.id, windowStart, windowEnd);
       if (!ok) allReadsOk = false;
-      for (const event of events) {
-        if (event.isCancelled || event.startUtc === null) continue;
-        // Skip solo calendar blocks (personal holds / focus time): no join URL AND
-        // at most one attendee — never a real meeting.
-        if (event.joinUrl === null && event.attendees.length <= 1) continue;
-        eventCount += 1;
-        const key = meetingDedupKey({
-          iCalUId: event.iCalUId,
-          joinUrl: event.joinUrl,
-          startUtc: event.startUtc,
-          attendeeEmails: event.attendees.map((a) => a.email),
-        });
-        const existing = aggregated.get(key);
-        if (existing === undefined) {
-          aggregated.set(key, { dedupKey: key, canonical: event, ownerEmails: new Set([member.email]) });
-        } else {
-          existing.ownerEmails.add(member.email);
-        }
-      }
+      reads.push({ email: member.email, events });
     }
+    const { aggregated, eventCount } = aggregateCalendarEvents(reads);
 
     // 4. Resolve + upsert each unique meeting.
     const usersByEmail = new Map(users.map((u) => [u.email, u]));
@@ -260,6 +242,57 @@ export function createCalendarScanProcessor(
     log.info(result, 'calendar-scan sweep complete');
     return result;
   };
+}
+
+/**
+ * Merge every member's calendar read into one entry per real meeting (keyed by
+ * {@link meetingDedupKey}). Skips cancelled/undated events and solo calendar
+ * blocks (no join URL AND ≤1 attendee).
+ *
+ * PRIVATE (operator decision 2026-09-14): a meeting marked Private in Outlook on
+ * ANY attendee's calendar is dropped entirely — never shown in Gracie, never
+ * joined by a bot. Deliberately Outlook's explicit flag only, never title
+ * keywords: GA's work is heavily medical, so "appointment"/"medical" guesses
+ * would silently skip real client meetings. Because a dropped meeting is simply
+ * "not seen", the normal reconcile removes any already-ingested upcoming copy.
+ * Pure; exported for unit tests.
+ */
+export function aggregateCalendarEvents(
+  reads: ReadonlyArray<{ readonly email: string; readonly events: readonly GraphEvent[] }>,
+): { aggregated: Map<string, AggregatedMeeting>; eventCount: number } {
+  const aggregated = new Map<string, AggregatedMeeting>();
+  const privateKeys = new Set<string>();
+  let eventCount = 0;
+
+  for (const { email, events } of reads) {
+    for (const event of events) {
+      if (event.isCancelled || event.startUtc === null) continue;
+      // Skip solo calendar blocks (personal holds / focus time): no join URL AND
+      // at most one attendee — never a real meeting.
+      if (event.joinUrl === null && event.attendees.length <= 1) continue;
+      const key = meetingDedupKey({
+        iCalUId: event.iCalUId,
+        joinUrl: event.joinUrl,
+        startUtc: event.startUtc,
+        attendeeEmails: event.attendees.map((a) => a.email),
+      });
+      if (event.isPrivate) {
+        privateKeys.add(key);
+        continue;
+      }
+      eventCount += 1;
+      const existing = aggregated.get(key);
+      if (existing === undefined) {
+        aggregated.set(key, { dedupKey: key, canonical: event, ownerEmails: new Set([email]) });
+      } else {
+        existing.ownerEmails.add(email);
+      }
+    }
+  }
+
+  // Private on ANY copy wins, even if another attendee's copy was read first.
+  for (const key of privateKeys) aggregated.delete(key);
+  return { aggregated, eventCount };
 }
 
 /**

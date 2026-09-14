@@ -51,6 +51,11 @@ export interface GraphEvent {
   readonly startUtc: string | null;
   readonly endUtc: string | null;
   readonly isCancelled: boolean;
+  /**
+   * Marked Private in Outlook (Graph `sensitivity === 'private'`). Private events
+   * are never ingested — so they never appear in Gracie and never get a bot.
+   */
+  readonly isPrivate: boolean;
   readonly joinUrl: string | null;
   readonly organizerEmail: string | null;
   readonly attendees: readonly GraphAttendee[];
@@ -79,6 +84,7 @@ interface GraphRawEvent {
   readonly iCalUId?: string | null;
   readonly subject?: string | null;
   readonly isCancelled?: boolean;
+  readonly sensitivity?: string | null;
   readonly start?: { readonly dateTime?: string | null } | null;
   readonly end?: { readonly dateTime?: string | null } | null;
   readonly onlineMeeting?: { readonly joinUrl?: string | null } | null;
@@ -243,7 +249,7 @@ export function createGraphClient(config: GraphConfig, logger: FastifyBaseLogger
       const params = new URLSearchParams({
         startDateTime: startIso,
         endDateTime: endIso,
-        $select: 'id,iCalUId,subject,start,end,isCancelled,onlineMeeting,onlineMeetingUrl,organizer,attendees',
+        $select: 'id,iCalUId,subject,start,end,isCancelled,sensitivity,onlineMeeting,onlineMeetingUrl,organizer,attendees',
         $top: '100',
         $orderby: 'start/dateTime',
       });
@@ -270,6 +276,7 @@ export function createGraphClient(config: GraphConfig, logger: FastifyBaseLogger
           startUtc: normalizeGraphInstant(e.start?.dateTime ?? null),
           endUtc: normalizeGraphInstant(e.end?.dateTime ?? null),
           isCancelled: e.isCancelled === true,
+          isPrivate: e.sensitivity === 'private',
           joinUrl: (e.onlineMeeting?.joinUrl ?? e.onlineMeetingUrl ?? null) || null,
           organizerEmail: (e.organizer?.emailAddress?.address ?? null)?.trim().toLowerCase() || null,
           attendees: (e.attendees ?? []).map((a) => ({
