@@ -51,6 +51,8 @@ export const PIPELINE_STATUSES = [
   'processing',
   'complete',
   'needs_attention',
+  /** Bot dispatched but never let into the meeting — nothing was ever recorded. */
+  'not_admitted',
   'cancelled',
 ] as const;
 export type PipelineStatus = (typeof PIPELINE_STATUSES)[number];

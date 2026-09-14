@@ -9,6 +9,7 @@
 import 'server-only';
 
 import { getCredential, getServerClient } from '@gracie/db';
+import type { PipelineStatus } from '@gracie/shared';
 import { classifyRecallRecoverability, type RecallRecoveryState } from '@gracie/shared/recall';
 
 import {
@@ -100,7 +101,7 @@ export async function listPipelineFleet(
     .from('meetings')
     .select('id, title, date_time, client_id, bot_job_id, pipeline_status')
     .or(
-      `pipeline_status.in.(needs_attention,processing,in_progress,awaiting_transcript),and(bot_dispatched.eq.true,transcript_received.eq.false)`,
+      `pipeline_status.in.(needs_attention,not_admitted,processing,in_progress,awaiting_transcript),and(bot_dispatched.eq.true,transcript_received.eq.false)`,
     )
     .order('date_time', { ascending: false })
     .limit(cap);
@@ -144,10 +145,14 @@ export async function listPipelineFleet(
     const state: FleetState =
       m.pipeline_status === 'needs_attention'
         ? 'needs_attention'
-        : (IN_PROGRESS_STATES as readonly string[]).includes(m.pipeline_status)
-          ? 'in_progress'
-          : 'in_progress';
-    const hasRecording = m.bot_job_id !== null && m.bot_job_id !== '';
+        : m.pipeline_status === 'not_admitted'
+          ? 'not_admitted'
+          : (IN_PROGRESS_STATES as readonly string[]).includes(m.pipeline_status)
+            ? 'in_progress'
+            : 'in_progress';
+    // A never-admitted bot HAS a bot_job_id but produced nothing, so the cheap
+    // "a bot exists → we can re-run" proxy is a lie here. Say so explicitly.
+    const hasRecording = m.pipeline_status !== 'not_admitted' && m.bot_job_id !== null && m.bot_job_id !== '';
     return {
       id: `meeting:${m.id}`,
       meetingId: m.id,
@@ -231,11 +236,19 @@ async function classifyStuckRows(
 }
 
 /** Fetch the id + bot job id for a meeting (re-trigger pre-check); null if not found. */
-export async function getMeetingForRetrigger(meetingId: string): Promise<{ id: string; botJobId: string | null } | null> {
+export async function getMeetingForRetrigger(
+  meetingId: string,
+): Promise<{ id: string; botJobId: string | null; pipelineStatus: PipelineStatus } | null> {
   const db = getServerClient();
-  const { data, error } = await db.from('meetings').select('id, bot_job_id').eq('id', meetingId).maybeSingle();
+  const { data, error } = await db
+    .from('meetings')
+    .select('id, bot_job_id, pipeline_status')
+    .eq('id', meetingId)
+    .maybeSingle();
   if (error !== null) throw new Error(`getMeetingForRetrigger: ${error.message}`);
-  return data === null ? null : { id: data.id, botJobId: data.bot_job_id };
+  return data === null
+    ? null
+    : { id: data.id, botJobId: data.bot_job_id, pipelineStatus: data.pipeline_status };
 }
 
 /**

@@ -430,6 +430,16 @@ export async function dispatchRecallBot(options: RecallDispatchOptions): Promise
 /** Bot-retrieve response subset we depend on (docs: bot_retrieve). */
 interface RecallBotRecordings {
   /**
+   * The bot's lifecycle timeline (docs: bot_retrieve `status_changes`). Read by
+   * {@link wasNeverAdmitted} to tell "nobody let the bot in" apart from "the bot
+   * recorded but the transcript failed" — both otherwise look like zero recordings.
+   */
+  readonly status_changes?: ReadonlyArray<{
+    readonly code?: string | null;
+    readonly sub_code?: string | null;
+    readonly created_at?: string | null;
+  }> | null;
+  /**
    * People the bot actually OBSERVED in the call (docs: bot_retrieve
    * `meeting_participants`) — the real join list, distinct from the calendar
    * invitees. Shapes vary by platform and `email` is frequently absent (Teams/Zoom
@@ -868,9 +878,15 @@ export async function ensureAsyncTranscript(
  *   - `retranscribe`  — no usable transcript (missing or `status=failed`) but a
  *                       recording DOES exist → request async transcription, then generate.
  *                       This is the GA/Leap Metrics `provider_connection_failed` case.
- *   - `unrecoverable` — no recording at all (silent / never-admitted bot) → nothing to recover.
+ *   - `not_admitted`  — the bot was dispatched but never let into the meeting (it sat
+ *                       in the waiting room until it timed out, or was ejected from
+ *                       it). No recording was ever made, and no amount of re-running
+ *                       can change that — the fix is human (admit the bot / let it in
+ *                       automatically), so this is reported as its own state rather
+ *                       than buried in `unrecoverable`.
+ *   - `unrecoverable` — no recording for any OTHER reason → nothing to recover.
  */
-export type RecallRecoveryState = 'regenerate' | 'retranscribe' | 'unrecoverable';
+export type RecallRecoveryState = 'regenerate' | 'retranscribe' | 'not_admitted' | 'unrecoverable';
 
 export interface RecallRecoverability {
   readonly state: RecallRecoveryState;
@@ -888,6 +904,37 @@ export interface RecallRecoverability {
 /** Transcript status codes that mean "still working" — a request is in flight, don't re-issue. */
 function isPendingTranscriptCode(code: string | null | undefined): boolean {
   return code === 'processing' || code === 'in_progress';
+}
+
+/** Bot lifecycle codes that mean the bot actually made it INTO the call. */
+const IN_CALL_CODES: ReadonlySet<string> = new Set(['in_call_recording', 'in_call_not_recording']);
+
+/**
+ * Did the bot never get into the meeting? True when it reached the waiting room (or
+ * was refused entry) and NEVER reached an in-call state — i.e. nobody clicked Admit.
+ *
+ * Checked semantically (saw the waiting room, never got in) rather than by matching
+ * an exact Recall `sub_code`, so a renamed or platform-specific code can't silently
+ * reclassify these as generic failures. Observed live on this account as
+ * `call_ended/timeout_exceeded_waiting_room` and `call_ended/bot_kicked_from_waiting_room`.
+ * Pure; exported for unit tests.
+ */
+export function wasNeverAdmitted(bot: RecallBotRecordings): boolean {
+  const changes = bot.status_changes ?? [];
+  if (changes.some((c) => IN_CALL_CODES.has(c?.code ?? ''))) return false;
+  return changes.some(
+    (c) => c?.code === 'in_waiting_room' || /waiting_room|denied_entry/.test(c?.sub_code ?? ''),
+  );
+}
+
+/** The terminal sub_code (e.g. `timeout_exceeded_waiting_room`) for a support tooltip. */
+function terminalSubCode(bot: RecallBotRecordings): string | null {
+  const changes = bot.status_changes ?? [];
+  for (let i = changes.length - 1; i >= 0; i -= 1) {
+    const sub = changes[i]?.sub_code;
+    if (typeof sub === 'string' && sub !== '') return sub;
+  }
+  return null;
 }
 
 /**
@@ -920,7 +967,12 @@ export function classifyRecordings(bot: RecallBotRecordings): RecallRecoverabili
   if (recordingId !== null) {
     return { state: 'retranscribe', recordingId, transcriptPending: pending, detail };
   }
-  // No recording at all → nothing to recover from.
+  // No recording at all. Distinguish "never let in" (a human can fix that for NEXT
+  // time; this meeting is simply lost) from any other silent bot.
+  if (wasNeverAdmitted(bot)) {
+    return { state: 'not_admitted', recordingId: null, transcriptPending: false, detail: terminalSubCode(bot) };
+  }
+  // Nothing to recover from.
   return { state: 'unrecoverable', recordingId: null, transcriptPending: false, detail };
 }
 

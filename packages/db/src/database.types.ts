@@ -1826,6 +1826,7 @@ export type Database = {
         | "processing"
         | "complete"
         | "needs_attention"
+        | "not_admitted"
         | "cancelled"
       relationship_trend: "improving" | "stable" | "declining"
       task_status: "open" | "in_progress" | "complete"
@@ -2029,6 +2030,7 @@ export const Constants = {
         "processing",
         "complete",
         "needs_attention",
+        "not_admitted",
         "cancelled",
       ],
       relationship_trend: ["improving", "stable", "declining"],

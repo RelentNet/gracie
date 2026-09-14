@@ -43,6 +43,7 @@ export function deriveOccurrenceState(
   if (
     input.pipelineStatus === 'complete' ||
     input.pipelineStatus === 'needs_attention' ||
+    input.pipelineStatus === 'not_admitted' ||
     input.pipelineStatus === 'awaiting_transcript' ||
     input.pipelineStatus === 'processing'
   ) {
@@ -80,6 +81,8 @@ export function deriveMeetingFleetState(input: MeetingFleetInput): FleetState {
       return 'success';
     case 'needs_attention':
       return 'needs_attention';
+    case 'not_admitted':
+      return 'not_admitted';
     case 'cancelled':
       return 'skipped';
     default:

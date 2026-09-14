@@ -50,6 +50,23 @@ test('retranscribe once the cap is reached → escalate (bounded: no infinite lo
 test('unrecoverable (no recording) → escalate, never a doomed retry', () => {
   const action = decideWatchdogAction(recoverability({ state: 'unrecoverable', recordingId: null }), 0, MAX);
   assert.equal(action.kind, 'escalate');
+  assert.ok(action.kind === 'escalate' && action.status === 'needs_attention');
+});
+
+test('not_admitted → escalate as `not_admitted`, out of the genuine-failure queue', () => {
+  // The 2026-09-01 root cause: the bot was never let in, so there is nothing to
+  // re-run. It must NOT land in `needs_attention` beside real pipeline failures.
+  const action = decideWatchdogAction(recoverability({ state: 'not_admitted', recordingId: null }), 0, MAX);
+  assert.equal(action.kind, 'escalate');
+  assert.ok(action.kind === 'escalate' && action.status === 'not_admitted');
+  // The reason must tell a non-technical reader what to DO, with no provider codes.
+  assert.ok(action.kind === 'escalate' && /admit/i.test(action.reason));
+  assert.ok(action.kind === 'escalate' && !/waiting_room|sub_code/.test(action.reason));
+});
+
+test('not_admitted is never retried, even with a full attempt budget', () => {
+  const action = decideWatchdogAction(recoverability({ state: 'not_admitted', recordingId: null }), 0, 99);
+  assert.equal(action.kind, 'escalate');
 });
 
 test('retranscribe under the cap but missing a recording id → escalate (nothing to point at)', () => {

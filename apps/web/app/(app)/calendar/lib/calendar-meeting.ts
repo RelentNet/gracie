@@ -16,11 +16,19 @@ export function toBadgeStatus(status: PipelineStatus): BadgeStatus {
       return 'processing';
     case 'complete':
       return 'complete';
+    // `not_admitted` is a real "someone must look at this" state, not a silent skip;
+    // the calendar's badge vocabulary has no dedicated slot, so it rides needs-review.
     case 'needs_attention':
+    case 'not_admitted':
       return 'needs-review';
     case 'cancelled':
       return 'overdue';
   }
+  // Unreachable for every status this build knows about (the switch above is
+  // exhaustive, so TypeScript still fails the build if a new one is unhandled).
+  // This only catches a DB enum value added by a migration that shipped ahead of
+  // this bundle — surface it as "needs review" instead of returning undefined.
+  return 'needs-review';
 }
 
 /** A meeting needs attention when it's external with no linked org yet (amber). */

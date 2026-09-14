@@ -16,7 +16,15 @@
  */
 
 /** Unified fleet state shown in the Pipeline activity feed. */
-export type FleetState = 'success' | 'partial' | 'failed' | 'in_progress' | 'needs_attention' | 'skipped';
+export type FleetState =
+  | 'success'
+  | 'partial'
+  | 'failed'
+  | 'in_progress'
+  | 'needs_attention'
+  /** Bot dispatched but never admitted — it waited outside and nothing was recorded. */
+  | 'not_admitted'
+  | 'skipped';
 
 /** A displayable reason: `headline` for staff, `detail` for support (raw code/message). */
 export interface FleetReason {
@@ -66,6 +74,13 @@ export function describePipelineState(input: DescribeInput): FleetReason {
       // The duplicate-invite skip note is already written in plain language.
       return { headline: detail ?? 'Skipped — no notes were needed for this meeting.', detail };
 
+    case 'not_admitted':
+      return {
+        headline:
+          'Gracie waited to be let in but nobody admitted her, so the meeting was never recorded. Admit Gracie when she asks to join, or turn on automatic admission for your meetings.',
+        detail,
+      };
+
     case 'needs_attention':
       if (input.hasRecording === false) {
         return { headline: 'No recording was captured — there’s nothing to recover.', detail };
@@ -90,7 +105,7 @@ export function describePipelineState(input: DescribeInput): FleetReason {
 }
 
 /** The three recoverability states from the shared Recall pre-flight (brief §3.2). */
-export type RecoveryState = 'regenerate' | 'retranscribe' | 'unrecoverable';
+export type RecoveryState = 'regenerate' | 'retranscribe' | 'not_admitted' | 'unrecoverable';
 
 /**
  * Plain-language reason for a stuck meeting once its live Recall recoverability is
@@ -107,6 +122,12 @@ export function describeRecovery(state: RecoveryState, detail?: string | null): 
     case 'retranscribe':
       return {
         headline: 'The recording is fine, but the notes couldn’t be created. Re-transcribe to try again.',
+        detail: detailOut,
+      };
+    case 'not_admitted':
+      return {
+        headline:
+          'Gracie waited to be let in but nobody admitted her, so the meeting was never recorded. Admit Gracie when she asks to join, or turn on automatic admission for your meetings.',
         detail: detailOut,
       };
     case 'unrecoverable':

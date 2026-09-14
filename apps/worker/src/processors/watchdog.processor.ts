@@ -53,6 +53,13 @@ const RETRANSCRIBE_EXHAUSTED_REASON =
   'This meeting was recorded, but the notes couldn’t be created after several automatic tries. Review it or upload the notes manually.';
 const NO_RECORDING_REASON =
   'No recording was captured for this meeting, so there’s nothing to turn into notes.';
+/**
+ * The dominant real-world cause of a stuck meeting (2026-09-01: 48 of 48). The bot
+ * dialled in, sat in the waiting room, and no human ever admitted it. Nothing was
+ * recorded, so there is nothing to re-run — the fix is to let Gracie in next time.
+ */
+const NOT_ADMITTED_REASON =
+  'Gracie waited to be let in but nobody admitted her, so this meeting was never recorded. Admit Gracie when she asks to join, or turn on automatic admission for your meetings.';
 const NO_TRANSCRIPT_REASON = `No transcript arrived within ${TRANSCRIPT_TIMEOUT_MINUTES} minutes. Review or upload it manually.`;
 
 /** Outcome of one watchdog sweep (visible in Bull Board). */
@@ -60,6 +67,8 @@ export interface WatchdogResult {
   readonly scanned: number;
   /** Meetings escalated to `needs_attention` this sweep (couldn't self-heal). */
   readonly flagged: number;
+  /** Meetings the bot was never admitted to — nothing recorded, nothing to recover. */
+  readonly notAdmitted: number;
   /** Meetings whose existing transcript was re-queued for generation. */
   readonly regenerated: number;
   /** Meetings for which async transcription was (re-)requested. */
@@ -74,7 +83,13 @@ export type WatchdogAction =
   | { readonly kind: 'regenerate' }
   | { readonly kind: 'retranscribe'; readonly recordingId: string }
   | { readonly kind: 'wait' }
-  | { readonly kind: 'escalate'; readonly reason: string };
+  | {
+      readonly kind: 'escalate';
+      readonly reason: string;
+      /** Pipeline status to persist — `not_admitted` keeps the never-admitted meetings
+       *  out of the genuine-failure queue (and out of a doomed "Re-run"). */
+      readonly status: 'needs_attention' | 'not_admitted';
+    };
 
 /**
  * Decide what to do with an overdue meeting from its Recall recoverability + how
@@ -95,9 +110,11 @@ export function decideWatchdogAction(
       if (attempts < maxAttempts && recoverability.recordingId !== null) {
         return { kind: 'retranscribe', recordingId: recoverability.recordingId };
       }
-      return { kind: 'escalate', reason: RETRANSCRIBE_EXHAUSTED_REASON };
+      return { kind: 'escalate', reason: RETRANSCRIBE_EXHAUSTED_REASON, status: 'needs_attention' };
+    case 'not_admitted':
+      return { kind: 'escalate', reason: NOT_ADMITTED_REASON, status: 'not_admitted' };
     case 'unrecoverable':
-      return { kind: 'escalate', reason: NO_RECORDING_REASON };
+      return { kind: 'escalate', reason: NO_RECORDING_REASON, status: 'needs_attention' };
   }
 }
 
@@ -137,10 +154,11 @@ async function escalate(
   meeting: StaleMeeting,
   reason: string,
   log: FastifyBaseLogger,
+  status: 'needs_attention' | 'not_admitted' = 'needs_attention',
 ): Promise<void> {
   const patched = await db
     .from('meetings')
-    .update({ pipeline_status: 'needs_attention' })
+    .update({ pipeline_status: status })
     .eq('id', meeting.id);
   if (patched.error !== null) throw new Error(`watchdog: flag meeting ${meeting.id}: ${patched.error.message}`);
   await notifyLead(db, meeting, reason);
@@ -192,6 +210,7 @@ export function createWatchdogProcessor(
     const region = process.env.RECALL_REGION;
 
     let flagged = 0;
+    let notAdmitted = 0;
     let regenerated = 0;
     let retranscribed = 0;
 
@@ -235,8 +254,9 @@ export function createWatchdogProcessor(
             );
             break;
           case 'escalate':
-            await escalate(db, meeting, action.reason, log);
-            flagged += 1;
+            await escalate(db, meeting, action.reason, log, action.status);
+            if (action.status === 'not_admitted') notAdmitted += 1;
+            else flagged += 1;
             break;
         }
       } catch (err) {
@@ -246,9 +266,12 @@ export function createWatchdogProcessor(
       }
     }
 
-    if (flagged > 0 || regenerated > 0 || retranscribed > 0 || candidates.length > 0) {
-      log.info({ scanned: candidates.length, flagged, regenerated, retranscribed }, 'watchdog sweep');
+    if (flagged > 0 || notAdmitted > 0 || regenerated > 0 || retranscribed > 0 || candidates.length > 0) {
+      log.info(
+        { scanned: candidates.length, flagged, notAdmitted, regenerated, retranscribed },
+        'watchdog sweep',
+      );
     }
-    return { scanned: candidates.length, flagged, regenerated, retranscribed };
+    return { scanned: candidates.length, flagged, notAdmitted, regenerated, retranscribed };
   };
 }

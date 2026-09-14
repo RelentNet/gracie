@@ -39,7 +39,11 @@ export interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, size = 'md' }: StatusBadgeProps): React.JSX.Element {
-  const style = STATUS_STYLES[status];
+  // Fall back rather than crash: `status` is derived from a DB enum, and the DB can
+  // legitimately carry a value this build predates (a migration lands before the app
+  // redeploys). Indexing blind used to throw a TypeError and take the whole panel
+  // down; an unknown status is a cosmetic problem, never a broken page.
+  const style = STATUS_STYLES[status] ?? STATUS_STYLES['needs-review'];
   return (
     <span
       className="inline-flex items-center gap-1 rounded-md font-medium"
