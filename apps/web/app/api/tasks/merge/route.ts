@@ -6,14 +6,16 @@
  */
 import { NextResponse } from 'next/server';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { mergeTasks } from '@/lib/data/tasks';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) {
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Administrator access required' } },
         { status: 403 },

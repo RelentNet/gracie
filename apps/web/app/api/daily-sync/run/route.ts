@@ -11,7 +11,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { getUserIdByLogtoId } from '@/lib/data/users';
 import { enqueueDailySync } from '@/lib/queue';
 
@@ -20,7 +20,8 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!isAdmin(user)) {
       return NextResponse.json({ error: { code: 'forbidden', message: 'Admin only' } }, { status: 403 });
     }

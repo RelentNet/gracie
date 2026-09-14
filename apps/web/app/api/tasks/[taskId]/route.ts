@@ -12,7 +12,7 @@ import { NextResponse } from 'next/server';
 import { TASK_STATUSES } from '@gracie/shared';
 import type { TaskStatus } from '@gracie/shared';
 
-import { getRequestUser, isAdmin, isEditor } from '@/lib/api-auth';
+import { isAdmin, isEditor, requireRequestUser } from '@/lib/api-auth';
 import { deleteTask, updateTask, type TaskPatch } from '@/lib/data/tasks';
 import { enqueueRelationshipHealth } from '@/lib/queue';
 
@@ -30,7 +30,9 @@ export async function PATCH(
   { params }: { params: Promise<{ taskId: string }> },
 ): Promise<NextResponse> {
   try {
-    if (!isEditor(await getRequestUser())) {
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isEditor(authed)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Editor access required' } },
         { status: 403 },
@@ -108,7 +110,9 @@ export async function DELETE(
   { params }: { params: Promise<{ taskId: string }> },
 ): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) {
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Administrator access required' } },
         { status: 403 },

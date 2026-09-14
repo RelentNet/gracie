@@ -7,7 +7,7 @@
  */
 import { NextResponse } from 'next/server';
 
-import { getRequestUser, isEditor } from '@/lib/api-auth';
+import { isEditor, requireRequestUser } from '@/lib/api-auth';
 import { createClientNote, getClientDetail, getClientNotes } from '@/lib/data/client-detail';
 import { getUserIdByLogtoId } from '@/lib/data/users';
 
@@ -40,7 +40,8 @@ export async function POST(
   { params }: { params: Promise<{ clientId: string }> },
 ): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!isEditor(user)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Editor access required' } },

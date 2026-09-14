@@ -10,7 +10,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-import { getRequestUser, isAdmin, isEditor } from '@/lib/api-auth';
+import { isAdmin, isEditor, requireRequestUser } from '@/lib/api-auth';
 import { createTask, getTaskBoardVisibleToAll, listTasksForBoard } from '@/lib/data/tasks';
 import { enqueueRelationshipHealth } from '@/lib/queue';
 
@@ -24,7 +24,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // The cross-client list backs the Task Board. Admin-only unless the operator has
     // revealed the board to everyone (Settings → Company); regular users otherwise read
     // tasks per-client. Fail closed on a settings-read blip (treat as hidden → 403).
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!isAdmin(user) && !(await getTaskBoardVisibleToAll().catch(() => false))) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Administrator access required' } },
@@ -45,7 +46,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
 export async function POST(request: Request): Promise<NextResponse> {
   try {
-    if (!isEditor(await getRequestUser())) {
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isEditor(authed)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Editor access required' } },
         { status: 403 },

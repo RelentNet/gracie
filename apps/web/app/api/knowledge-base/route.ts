@@ -14,7 +14,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import type { KbStatus } from '@gracie/shared';
 import { putObject } from '@gracie/shared/storage';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { canEditRole } from '@/lib/data/files';
 import {
   buildKbKey,
@@ -52,7 +52,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     // Any role may read the KB, but the request must be authenticated — when Logto
     // is configured this rejects anonymous callers (mirrors the chat/POST routes).
-    await getRequestUser();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
 
     const params = req.nextUrl.searchParams;
     const search = params.get('search')?.trim();
@@ -78,7 +79,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!canEditRole(user.role)) {
       return jsonError('forbidden', 'Adding knowledge-base documents requires editor role', 403);
     }

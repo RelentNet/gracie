@@ -14,7 +14,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { putObject } from '@gracie/shared/storage';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { canEditRole } from '@/lib/data/files';
 import { getClient } from '@/lib/data/clients';
 import { getFolderById } from '@/lib/data/folders';
@@ -49,7 +49,8 @@ function readString(value: FormDataEntryValue | null): string | null {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!canEditRole(user.role)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Upload requires editor role' } },

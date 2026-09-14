@@ -6,7 +6,7 @@
  */
 import { NextResponse } from 'next/server';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { getTaskNotes } from '@/lib/data/tasks';
 
 export async function GET(
@@ -14,7 +14,8 @@ export async function GET(
   context: { params: Promise<{ taskId: string }> },
 ): Promise<NextResponse> {
   try {
-    await getRequestUser();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
     const { taskId } = await context.params;
     const notes = await getTaskNotes(taskId);
     return NextResponse.json({ notes });

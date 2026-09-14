@@ -17,11 +17,12 @@
  * `proxy_buffering off` for chunks to flush live (a tracked deploy follow-up).
  */
 import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { formatSseData, liveTranscriptChannel } from '@gracie/shared';
 
 import { getMeetingById } from '@/lib/data/meeting-occurrence';
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { createLiveSubscriber, readBufferedUtterances } from '@/lib/live-transcript';
 
 // ioredis is Node-only, and the stream must not be statically optimized.
@@ -47,7 +48,8 @@ export async function GET(
 
   // Gate BEFORE opening the stream.
   try {
-    await getRequestUser();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
   } catch {
     return new Response('Unauthorized', { status: 401 });
   }

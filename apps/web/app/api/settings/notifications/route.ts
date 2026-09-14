@@ -11,7 +11,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import {
   getNotificationSettings,
   setNotificationSettings,
@@ -31,7 +31,9 @@ function badRequest(message: string): NextResponse {
 
 export async function GET(): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) return forbidden();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) return forbidden();
     return NextResponse.json({ settings: await getNotificationSettings() });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -54,7 +56,9 @@ function asBool(value: unknown, field: string): boolean | { error: string } {
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) return forbidden();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) return forbidden();
     const body = (await request.json().catch(() => ({}))) as PatchBody;
 
     const patch: {

@@ -11,7 +11,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { CLIENT_TYPES } from '@gracie/shared';
 import type { ClientType } from '@gracie/shared';
 
-import { getRequestUser, isEditor } from '@/lib/api-auth';
+import { isEditor, requireRequestUser } from '@/lib/api-auth';
 import { createOrgFromMeeting } from '@/lib/data/calendar';
 
 function asType(value: unknown): ClientType | undefined {
@@ -29,7 +29,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   try {
-    if (!isEditor(await getRequestUser())) {
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isEditor(authed)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Editor access required' } },
         { status: 403 },

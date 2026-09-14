@@ -8,12 +8,13 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { getAutoJoin, setAutoJoin } from '@/lib/data/calendar';
 
 export async function GET(): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     const autoJoinMeetings = await getAutoJoin(user.userId);
     return NextResponse.json({ autoJoinMeetings });
   } catch (error) {
@@ -28,7 +29,8 @@ interface AutoJoinBody {
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     const body = (await request.json().catch(() => ({}))) as AutoJoinBody;
     if (typeof body.enabled !== 'boolean') {
       return NextResponse.json(

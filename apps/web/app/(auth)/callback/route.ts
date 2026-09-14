@@ -1,9 +1,11 @@
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { getLogtoContext, handleSignIn } from '@logto/next/server-actions';
 
 import { upsertUserFromLogto } from '@/lib/data/users';
 import { baseUrl, isLogtoConfigured, logtoConfig } from '@/lib/logto';
+import { RETURN_TO_COOKIE, safeReturnPath } from '@/lib/return-path';
 
 /**
  * Logto OAuth callback. Exchanges the authorization code, establishes the
@@ -22,5 +24,10 @@ export async function GET(request: Request): Promise<NextResponse> {
   // Build the redirect from the app's known public origin, NOT request.url —
   // behind the Traefik/NPM proxy request.url is the internal http://localhost:3000,
   // which would bounce the browser to a dead localhost address after sign-in.
-  return NextResponse.redirect(new URL('/home', baseUrl));
+  // Back to the page the user was on when their session expired (set by /sign-in),
+  // re-validated here; otherwise home.
+  const jar = await cookies();
+  const returnTo = safeReturnPath(jar.get(RETURN_TO_COOKIE)?.value);
+  jar.delete(RETURN_TO_COOKIE);
+  return NextResponse.redirect(new URL(returnTo ?? '/home', baseUrl));
 }

@@ -7,7 +7,7 @@
  */
 import { NextResponse } from 'next/server';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { enqueueCalendarScan } from '@/lib/queue';
 
 // bullmq/ioredis are Node-only — force the Node.js runtime (not edge).
@@ -15,7 +15,9 @@ export const runtime = 'nodejs';
 
 export async function POST(): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) {
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) {
       return NextResponse.json({ error: { code: 'forbidden', message: 'Admin only' } }, { status: 403 });
     }
     const jobId = await enqueueCalendarScan({ source: 'manual' });

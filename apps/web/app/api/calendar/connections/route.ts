@@ -6,12 +6,13 @@
  */
 import { NextResponse } from 'next/server';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { getConnectionStatus } from '@/lib/data/calendar';
 
 export async function GET(): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     const status = await getConnectionStatus(user.userId, isAdmin(user));
     return NextResponse.json({ status });
   } catch (error) {

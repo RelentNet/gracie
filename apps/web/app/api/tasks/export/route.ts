@@ -12,7 +12,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { CLIENT_TYPES } from '@gracie/shared';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { attachmentDisposition } from '@/lib/content-disposition';
 import { listClients } from '@/lib/data/clients';
 import { getTaskBoardVisibleToAll, listTasks } from '@/lib/data/tasks';
@@ -26,7 +26,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     // Admin-only unless the operator has revealed the board to everyone (the export
     // button rides along with the board). Fail closed on a settings-read blip.
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!isAdmin(user) && !(await getTaskBoardVisibleToAll().catch(() => false))) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Administrator access required' } },

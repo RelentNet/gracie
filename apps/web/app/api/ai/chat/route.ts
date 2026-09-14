@@ -16,7 +16,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getActiveProvider } from '@gracie/db';
 import { assembleChatPrompt, type AIMessage } from '@gracie/shared';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { resolveTools } from '@/lib/ai/tool-loop';
 import { WEB_TOOLS, executeWebTool } from '@/lib/ai/web-tools';
 import { webAccessGuidance } from '@/lib/ai/web-prompt';
@@ -63,7 +63,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     if (clientId === '') return jsonError('bad_request', 'clientId is required', 400);
     if (message === '') return jsonError('bad_request', 'message is required', 400);
 
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
 
     const client = await getChatClient(clientId);
     if (client === null) return jsonError('not_found', 'Client not found', 404);

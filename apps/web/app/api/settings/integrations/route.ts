@@ -12,7 +12,7 @@ import { NextResponse } from 'next/server';
 import { listIntegrations } from '@gracie/db';
 import { PROVIDER_IDS } from '@gracie/shared';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 
 // Node-only (@gracie/db service-role client + @gracie/shared provider ids).
 export const runtime = 'nodejs';
@@ -21,7 +21,9 @@ const AI_PROVIDER_SERVICES = new Set<string>(PROVIDER_IDS);
 
 export async function GET(): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) {
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Admin only' } },
         { status: 403 },

@@ -7,7 +7,7 @@
  */
 import { NextResponse } from 'next/server';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { redactClientForRole } from '@/lib/data/clients';
 import {
   getClientDetail,
@@ -28,7 +28,9 @@ export async function GET(
         { status: 404 },
       );
     }
-    const admin = isAdmin(await getRequestUser());
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    const admin = isAdmin(authed);
     const [lastMeeting, tasks] = await Promise.all([
       getLatestClientMeeting(clientId),
       getClientTasks(clientId),

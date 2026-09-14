@@ -6,7 +6,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { listCalendarMeetings } from '@/lib/data/calendar';
 
 /** Default window when the caller omits from/to: last 31 days → next 62 days. */
@@ -27,7 +27,8 @@ function parseIso(value: string | null): string | null {
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    await getRequestUser();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
     const defaults = defaultWindow();
     const fromIso = parseIso(request.nextUrl.searchParams.get('from')) ?? defaults.fromIso;
     const toIso = parseIso(request.nextUrl.searchParams.get('to')) ?? defaults.toIso;

@@ -12,7 +12,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { getRequestUser, isEditor } from '@/lib/api-auth';
+import { isEditor, requireRequestUser } from '@/lib/api-auth';
 import { addClientDomain, listClientDomains, removeClientDomain } from '@/lib/data/clients';
 
 function forbidden(): NextResponse {
@@ -38,7 +38,9 @@ export async function GET(
   { params }: { params: Promise<{ clientId: string }> },
 ): Promise<NextResponse> {
   try {
-    if (!isEditor(await getRequestUser())) return forbidden();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isEditor(authed)) return forbidden();
     const { clientId } = await params;
     const domains = await listClientDomains(clientId);
     return NextResponse.json({ domains });
@@ -52,7 +54,9 @@ export async function POST(
   { params }: { params: Promise<{ clientId: string }> },
 ): Promise<NextResponse> {
   try {
-    if (!isEditor(await getRequestUser())) return forbidden();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isEditor(authed)) return forbidden();
     const { clientId } = await params;
     const body = (await request.json().catch(() => ({}))) as { domain?: unknown };
     if (typeof body.domain !== 'string' || body.domain.trim() === '') {
@@ -73,7 +77,9 @@ export async function DELETE(
   { params }: { params: Promise<{ clientId: string }> },
 ): Promise<NextResponse> {
   try {
-    if (!isEditor(await getRequestUser())) return forbidden();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isEditor(authed)) return forbidden();
     const { clientId } = await params;
     const domain = request.nextUrl.searchParams.get('domain');
     if (domain === null || domain.trim() === '') {
