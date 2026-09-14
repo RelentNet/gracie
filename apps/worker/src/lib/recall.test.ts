@@ -279,6 +279,66 @@ test('classifyRecordings: no recording at all → unrecoverable', () => {
   assert.equal(classifyRecordings({}).state, 'unrecoverable');
 });
 
+// --- not_admitted: nobody let the bot in (the 2026-09-01 root cause) ---------------
+// Real shapes taken from the live sweep: 48/48 stuck meetings had ZERO recordings and
+// terminated in the waiting room. These MUST NOT read as generic `unrecoverable`, or
+// the UI offers a "Re-run" that is guaranteed to fail.
+
+test('classifyRecordings: waiting-room timeout, no recording → not_admitted (not unrecoverable)', () => {
+  const rec = classifyRecordings({
+    recordings: [],
+    status_changes: [
+      { code: 'joining_call' },
+      { code: 'in_waiting_room' },
+      { code: 'call_ended', sub_code: 'timeout_exceeded_waiting_room' },
+      { code: 'done' },
+    ],
+  });
+  assert.equal(rec.state, 'not_admitted');
+  assert.equal(rec.recordingId, null);
+  // The raw provider code is kept for support, never as the headline.
+  assert.equal(rec.detail, 'timeout_exceeded_waiting_room');
+});
+
+test('classifyRecordings: kicked from the waiting room → not_admitted', () => {
+  const rec = classifyRecordings({
+    recordings: [],
+    status_changes: [
+      { code: 'in_waiting_room' },
+      { code: 'call_ended', sub_code: 'bot_kicked_from_waiting_room' },
+    ],
+  });
+  assert.equal(rec.state, 'not_admitted');
+});
+
+test('classifyRecordings: admitted but recorded nothing → unrecoverable, NOT not_admitted', () => {
+  // The bot got in, so "nobody admitted her" would be a lie. Keep them distinct.
+  const rec = classifyRecordings({
+    recordings: [],
+    status_changes: [
+      { code: 'in_waiting_room' },
+      { code: 'in_call_recording' },
+      { code: 'call_ended', sub_code: 'bot_removed' },
+    ],
+  });
+  assert.equal(rec.state, 'unrecoverable');
+});
+
+test('classifyRecordings: a recording exists → waiting-room history is irrelevant', () => {
+  // Admitted late after waiting: there IS something to recover, so recovery wins.
+  const rec = classifyRecordings({
+    recordings: [{ id: 'rec_late', media_shortcuts: {} }],
+    status_changes: [{ code: 'in_waiting_room' }, { code: 'in_call_recording' }],
+  });
+  assert.equal(rec.state, 'retranscribe');
+  assert.equal(rec.recordingId, 'rec_late');
+});
+
+test('classifyRecordings: no recordings and no status history → unrecoverable (no false blame)', () => {
+  assert.equal(classifyRecordings({ recordings: [], status_changes: [] }).state, 'unrecoverable');
+  assert.equal(classifyRecordings({}).state, 'unrecoverable');
+});
+
 test('classifyRecordings: a done transcript on ANY recording wins over an earlier failed one', () => {
   const rec = classifyRecordings({
     recordings: [

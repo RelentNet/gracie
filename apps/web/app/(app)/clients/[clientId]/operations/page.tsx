@@ -35,6 +35,7 @@ const PIPELINE_STATUS_LABEL: Readonly<Record<PipelineStatus, string>> = {
   processing: 'Processing',
   complete: 'Complete',
   needs_attention: 'Needs Attention',
+  not_admitted: 'Never Admitted',
   cancelled: 'Cancelled',
 };
 
@@ -45,6 +46,8 @@ const PIPELINE_STATUS_COLOR: Readonly<Record<PipelineStatus, { bg: string; fg: s
   processing: { bg: 'var(--color-blue-100)', fg: 'var(--color-blue-700)' },
   complete: { bg: 'var(--color-emerald-100)', fg: 'var(--color-emerald-600)' },
   needs_attention: { bg: 'var(--color-red-100)', fg: 'var(--color-red-600)' },
+  // Amber, not red: the pipeline worked — a human never let the bot into the call.
+  not_admitted: { bg: 'var(--color-amber-100)', fg: 'var(--color-amber-600)' },
   cancelled: { bg: 'var(--color-slate-100)', fg: 'var(--color-slate-600)' },
 };
 

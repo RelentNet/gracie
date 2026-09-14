@@ -79,6 +79,13 @@ export async function POST(
       });
     }
 
+    if (recoverability.state === 'not_admitted') {
+      return jsonError(
+        'not_admitted',
+        'Gracie was never admitted to this meeting, so nothing was recorded and there is nothing to recover. Admit Gracie when she asks to join, or turn on automatic admission.',
+        400,
+      );
+    }
     if (recoverability.state === 'unrecoverable' || recoverability.recordingId === null) {
       return jsonError('unrecoverable', 'No recording was captured — there’s nothing to recover.', 400);
     }

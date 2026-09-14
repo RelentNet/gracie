@@ -26,6 +26,10 @@ function jsonError(code: string, message: string, status: number): NextResponse 
   return NextResponse.json({ error: { code, message } }, { status });
 }
 
+/** Plain-language refusal for a meeting the bot was never let into (docs §6). */
+const NOT_ADMITTED_MESSAGE =
+  'Gracie was never admitted to this meeting, so nothing was recorded and there is nothing to re-run. Admit Gracie when she asks to join, or turn on automatic admission.';
+
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ meetingId: string }> },
@@ -48,6 +52,13 @@ export async function POST(
     if (meeting === null) return jsonError('not_found', 'Meeting not found', 404);
     if (meeting.botJobId === null || meeting.botJobId === '') {
       return jsonError('no_recording', 'This meeting has no bot recording to regenerate from.', 400);
+    }
+    // A never-admitted bot HAS a bot id but produced no recording, so the id alone is
+    // not proof there is anything to regenerate. Without this guard every re-run on
+    // such a meeting burned a job and logged a red "no transcript" failure (39 of them
+    // before 2026-09-01) — a guaranteed-to-fail action the UI must never take.
+    if (meeting.pipelineStatus === 'not_admitted') {
+      return jsonError('not_admitted', NOT_ADMITTED_MESSAGE, 400);
     }
 
     const jobId = await enqueueGenerate({ meetingId: meeting.id, botJobId: meeting.botJobId });

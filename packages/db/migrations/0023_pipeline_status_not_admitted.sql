@@ -1,0 +1,16 @@
+-- 0023: `not_admitted` pipeline status — the bot was never let into the meeting.
+--
+-- Diagnosis (2026-09-01): every one of the 48 meetings sitting in `needs_attention`
+-- had ZERO Recall recordings and died in the waiting room —
+-- `call_ended/timeout_exceeded_waiting_room` (46) or `bot_kicked_from_waiting_room` (2).
+-- Nobody admitted Gracie. Those meetings were indistinguishable from real pipeline
+-- failures, so staff clicked "Re-run" on 39 of them; every one failed with
+-- "Recall returned no transcript and no durable copy is stored", turning one human
+-- problem into 39 red errors.
+--
+-- Its own status lets the fleet view say what actually happened, offer no button
+-- that cannot work, and keep the real failure queue honest.
+--
+-- NOTE: `alter type ... add value` cannot share a transaction with statements that
+-- USE the new value, so the backfill lives in 0024.
+alter type pipeline_status add value if not exists 'not_admitted';

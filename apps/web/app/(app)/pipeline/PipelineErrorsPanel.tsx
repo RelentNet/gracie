@@ -31,22 +31,34 @@ interface FleetRowView {
   readonly durationS: number | null;
   readonly botJobId: string | null;
   readonly canRetrigger: boolean;
-  readonly recovery: 'regenerate' | 'retranscribe' | 'unrecoverable' | null;
+  readonly recovery: 'regenerate' | 'retranscribe' | 'not_admitted' | 'unrecoverable' | null;
   readonly reason: FleetReason;
 }
 interface RunsResponse {
   readonly runs: readonly FleetRowView[];
 }
 
-type Filter = 'all' | 'needs_attention' | 'in_progress' | 'success' | 'errors';
+type Filter = 'all' | 'needs_attention' | 'not_admitted' | 'in_progress' | 'success' | 'errors';
 
 const FILTERS: readonly { readonly id: Filter; readonly label: string }[] = [
   { id: 'needs_attention', label: 'Needs attention' },
+  { id: 'not_admitted', label: 'Never admitted' },
   { id: 'in_progress', label: 'In progress' },
   { id: 'errors', label: 'Errors' },
   { id: 'success', label: 'Success' },
   { id: 'all', label: 'All' },
 ];
+
+/**
+ * The state a row is FILED under. A run row's own status is `failed` (the run really
+ * did fail), but when the live Recall pre-flight says the bot was never admitted, the
+ * honest bucket is "Never admitted", not "Errors" — the pipeline did its job; nobody
+ * let Gracie in. Without this, one un-admitted meeting shows up twice in red: once as a
+ * stuck meeting and once as the doomed re-run someone tried on it.
+ */
+function rowState(r: Pick<FleetRowView, 'state' | 'recovery'>): FleetState {
+  return r.recovery === 'not_admitted' ? 'not_admitted' : r.state;
+}
 
 function matchesFilter(state: FleetState, filter: Filter): boolean {
   switch (filter) {
@@ -65,6 +77,7 @@ const STATE_LABEL: Record<FleetState, string> = {
   failed: 'Failed',
   in_progress: 'In progress',
   needs_attention: 'Needs attention',
+  not_admitted: 'Never admitted',
   skipped: 'Skipped',
 };
 
@@ -74,6 +87,8 @@ const STATE_COLOR: Record<FleetState, readonly [string, string]> = {
   partial: ['var(--color-amber-50, #fffbeb)', 'var(--color-amber-700, #b45309)'],
   failed: ['var(--color-red-50, #fef2f2)', 'var(--color-red-700, #b91c1c)'],
   needs_attention: ['var(--color-red-50, #fef2f2)', 'var(--color-red-700, #b91c1c)'],
+  // Amber, not red: nothing is broken in the pipeline — a human never let the bot in.
+  not_admitted: ['var(--color-amber-50, #fffbeb)', 'var(--color-amber-700, #b45309)'],
   in_progress: ['var(--color-sky-50, #f0f9ff)', 'var(--color-sky-700, #0369a1)'],
   skipped: ['var(--color-slate-100, #f1f5f9)', 'var(--text-secondary)'],
 };
@@ -148,15 +163,22 @@ export function PipelineErrorsPanel(): React.JSX.Element {
 
   // Counts per filter (for the tab badges) — computed once per load.
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { all: 0, needs_attention: 0, in_progress: 0, success: 0, errors: 0 };
+    const c: Record<Filter, number> = {
+      all: 0,
+      needs_attention: 0,
+      not_admitted: 0,
+      in_progress: 0,
+      success: 0,
+      errors: 0,
+    };
     for (const r of runs ?? []) {
-      for (const f of FILTERS) if (matchesFilter(r.state, f.id)) c[f.id] += 1;
+      for (const f of FILTERS) if (matchesFilter(rowState(r), f.id)) c[f.id] += 1;
     }
     return c;
   }, [runs]);
 
   const visible = useMemo(
-    () => (runs ?? []).filter((r) => matchesFilter(r.state, filter)),
+    () => (runs ?? []).filter((r) => matchesFilter(rowState(r), filter)),
     [runs, filter],
   );
 
@@ -166,6 +188,8 @@ export function PipelineErrorsPanel(): React.JSX.Element {
   const emptyCopy =
     filter === 'needs_attention'
       ? 'Nothing needs attention. Every meeting either generated its notes or is still processing.'
+      : filter === 'not_admitted'
+        ? 'Gracie was let into every meeting she was invited to. Nothing was missed.'
       : filter === 'errors'
         ? 'No failed or partial runs.'
         : filter === 'in_progress'
@@ -191,6 +215,8 @@ export function PipelineErrorsPanel(): React.JSX.Element {
       <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
         Every meeting Gracie tried to write notes for — done, in progress, or stuck. “Needs attention”
         meetings were recorded but never generated their notes; re-run to create them from the recording.
+        “Never admitted” meetings are different: Gracie was never let in, so there is no recording and
+        nothing to re-run — admit her when she asks to join, or turn on automatic admission.
       </span>
 
       {/* Status filter */}
@@ -270,8 +296,8 @@ export function PipelineErrorsPanel(): React.JSX.Element {
                       </span>
                     </Td>
                     <Td>
-                      <Badge bg={STATE_COLOR[r.state][0]} fg={STATE_COLOR[r.state][1]}>
-                        {STATE_LABEL[r.state]}
+                      <Badge bg={STATE_COLOR[rowState(r)][0]} fg={STATE_COLOR[rowState(r)][1]}>
+                        {STATE_LABEL[rowState(r)]}
                       </Badge>
                     </Td>
                     <Td>
@@ -324,6 +350,12 @@ function renderAction(
   if (r.meetingId === null) return <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>—</span>;
   const meetingId = r.meetingId;
 
+  // Never admitted → nothing was ever recorded, so EVERY recovery action would fail.
+  // Checked before `canRetrigger`, which only knows a bot was dispatched (it was — it
+  // just sat outside), and which is what previously offered a doomed "Re-run".
+  if (rowState(r) === 'not_admitted') {
+    return <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Never recorded</span>;
+  }
   if (r.recovery === 'unrecoverable') {
     return <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>Nothing to recover</span>;
   }

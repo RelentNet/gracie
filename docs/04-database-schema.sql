@@ -34,7 +34,7 @@ create type meeting_type        as enum (
 create type meeting_source      as enum ('calendar', 'manual');
 create type pipeline_status     as enum (
   'scheduled', 'in_progress', 'awaiting_transcript', 'processing',
-  'complete', 'needs_attention', 'cancelled'
+  'complete', 'needs_attention', 'not_admitted', 'cancelled'
 );
 
 create type document_type       as enum (
