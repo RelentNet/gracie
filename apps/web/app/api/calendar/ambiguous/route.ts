@@ -6,13 +6,15 @@
  */
 import { NextResponse } from 'next/server';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { listAmbiguousMeetings } from '@/lib/data/calendar';
 import { listClients } from '@/lib/data/clients';
 
 export async function GET(): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) {
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) {
       return NextResponse.json({ error: { code: 'forbidden', message: 'Admin only' } }, { status: 403 });
     }
     const [meetings, clients] = await Promise.all([listAmbiguousMeetings(), listClients()]);

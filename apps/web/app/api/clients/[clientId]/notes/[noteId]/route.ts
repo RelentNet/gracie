@@ -9,7 +9,7 @@
  */
 import { NextResponse } from 'next/server';
 
-import { getRequestUser, isAdmin, isEditor } from '@/lib/api-auth';
+import { isAdmin, isEditor, requireRequestUser } from '@/lib/api-auth';
 import {
   deleteClientNote,
   getClientNote,
@@ -33,7 +33,8 @@ export async function PATCH(
   { params }: { params: Promise<{ clientId: string; noteId: string }> },
 ): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!isEditor(user)) return forbidden('Editor access required');
     const { noteId } = await params;
     const note = await getClientNote(noteId);
@@ -64,7 +65,8 @@ export async function DELETE(
   { params }: { params: Promise<{ clientId: string; noteId: string }> },
 ): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!isEditor(user)) return forbidden('Editor access required');
     const { noteId } = await params;
     const note = await getClientNote(noteId);

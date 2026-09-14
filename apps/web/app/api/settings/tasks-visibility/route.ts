@@ -14,7 +14,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { can } from '@gracie/shared';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { getUserIdByLogtoId } from '@/lib/data/users';
 import { getTaskBoardVisibleToAll, setTaskBoardVisibleToAll } from '@/lib/data/tasks';
 
@@ -27,7 +27,8 @@ function forbidden(): NextResponse {
 
 export async function GET(): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!can(user.role, 'settings.access')) return forbidden();
     return NextResponse.json({ visible: await getTaskBoardVisibleToAll() });
   } catch (error) {
@@ -38,7 +39,8 @@ export async function GET(): Promise<NextResponse> {
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!can(user.role, 'settings.access')) return forbidden();
 
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;

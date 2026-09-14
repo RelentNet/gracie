@@ -4,7 +4,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { assignMeetingClient } from '@/lib/data/calendar';
 
 interface AssignBody {
@@ -14,7 +14,9 @@ interface AssignBody {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) {
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) {
       return NextResponse.json({ error: { code: 'forbidden', message: 'Admin only' } }, { status: 403 });
     }
     const body = (await request.json().catch(() => ({}))) as AssignBody;

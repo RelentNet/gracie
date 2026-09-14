@@ -4,12 +4,13 @@
  */
 import { NextResponse } from 'next/server';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { listClientCadence } from '@/lib/data/calendar';
 
 export async function GET(): Promise<NextResponse> {
   try {
-    await getRequestUser();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
     const cadence = await listClientCadence();
     return NextResponse.json({ cadence });
   } catch (error) {

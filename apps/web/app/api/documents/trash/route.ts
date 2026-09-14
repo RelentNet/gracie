@@ -16,7 +16,7 @@ import { NextResponse } from 'next/server';
 
 import { can } from '@gracie/shared';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { listTrash } from '@/lib/data/documents';
 import { getUserIdByLogtoId } from '@/lib/data/users';
 import { getTrashRetentionDays } from '@/lib/data/settings-documents';
@@ -30,7 +30,8 @@ function purgesAt(deletedAt: string, retentionDays: number): string {
 
 export async function GET(): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!can(user.role, 'file.deleteOwn') && !can(user.role, 'file.deleteAny')) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'The recycle bin requires editor role' } },

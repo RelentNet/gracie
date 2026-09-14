@@ -13,7 +13,7 @@ import { NextResponse } from 'next/server';
 import { CLIENT_CADENCES, CLIENT_TYPES, FEE_TIERS } from '@gracie/shared';
 import type { ClientCadence, ClientType, FeeTier } from '@gracie/shared';
 
-import { getRequestUser, isAdmin, isEditor } from '@/lib/api-auth';
+import { isAdmin, isEditor, requireRequestUser } from '@/lib/api-auth';
 import { redactClientForRole, updateClient, type ClientPatch } from '@/lib/data/clients';
 import { enqueueRelationshipHealth } from '@/lib/queue';
 
@@ -43,7 +43,8 @@ export async function PATCH(
   { params }: { params: Promise<{ clientId: string }> },
 ): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!isEditor(user)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Editor access required' } },

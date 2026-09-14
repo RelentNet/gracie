@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import { NotificationBell } from '@/components/NotificationBell';
+import { SessionWatcher } from '@/components/SessionWatcher';
 import { Sidebar } from '@/components/Sidebar';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { TimezoneAutoDefault } from '@/components/TimezoneAutoDefault';
@@ -36,6 +37,9 @@ export default async function AppLayout({
       {/* Silently defaults the user's profile timezone from the browser on first
           load if unset; renders nothing. */}
       <TimezoneAutoDefault />
+      {/* Detects a stale sign-in and prompts a clean re-login instead of letting
+          actions silently fail. Only meaningful with real (Logto) auth. */}
+      {isLogtoConfigured() ? <SessionWatcher /> : null}
       <div className="flex h-dvh overflow-hidden">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">

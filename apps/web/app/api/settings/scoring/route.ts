@@ -16,7 +16,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { can, HEALTH_SIGNAL_KEYS, CLIENT_CADENCES, type HealthSignalKey, type ClientCadence } from '@gracie/shared';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { getUserIdByLogtoId } from '@/lib/data/users';
 import { enqueueRelationshipHealthSweep } from '@/lib/queue';
 import {
@@ -40,7 +40,8 @@ function badRequest(message: string): NextResponse {
 
 export async function GET(): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!can(user.role, 'scoring.configure')) return forbidden();
     return NextResponse.json({ config: await getScoringConfig(), defaults: getScoringDefaults() });
   } catch (error) {
@@ -123,7 +124,8 @@ function parsePatch(body: Record<string, unknown>): ScoringConfigPatch | { error
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!can(user.role, 'scoring.configure')) return forbidden();
 
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;

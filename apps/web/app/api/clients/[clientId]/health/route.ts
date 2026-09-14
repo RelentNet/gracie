@@ -15,7 +15,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { HEALTH_SIGNAL_KEYS } from '@gracie/shared';
 import type { HealthSignalKey } from '@gracie/shared';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import {
   clearHealthAdjustment,
   getClientHealth,
@@ -47,7 +47,8 @@ export async function GET(
   { params }: { params: Promise<{ clientId: string }> },
 ): Promise<NextResponse> {
   try {
-    await getRequestUser();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
     const { clientId } = await params;
     const health = await getClientHealth(clientId);
     if (health === null) return notFound();
@@ -63,7 +64,8 @@ export async function POST(
   { params }: { params: Promise<{ clientId: string }> },
 ): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!isAdmin(user)) return adminOnly();
     const { clientId } = await params;
 
@@ -118,7 +120,9 @@ export async function DELETE(
   { params }: { params: Promise<{ clientId: string }> },
 ): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) return adminOnly();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) return adminOnly();
     const { clientId } = await params;
     const signal = request.nextUrl.searchParams.get('signal');
     if (!isSignal(signal)) {

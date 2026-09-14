@@ -9,7 +9,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { moveObject } from '@gracie/shared/storage';
 
 import { getServerClient } from '@gracie/db';
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { canAccessKey, canEditRole } from '@/lib/data/files';
 
 interface MoveBody {
@@ -19,7 +19,8 @@ interface MoveBody {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!canEditRole(user.role)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Move requires editor role' } },

@@ -21,7 +21,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { docxToPreviewHtml, xlsxToRows } from '@gracie/shared/extract';
 import { getObjectBytes } from '@gracie/shared/storage';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { canAccessKey } from '@/lib/data/files';
 import { parseCsv } from '@/lib/csv';
 
@@ -70,7 +70,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     const allowed = await canAccessKey(key, user.role);
     if (!allowed) {
       return NextResponse.json(

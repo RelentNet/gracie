@@ -9,7 +9,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { canEditRole } from '@/lib/data/files';
 import { getClient } from '@/lib/data/clients';
 import { filterVisibleFolders, listFolders } from '@/lib/data/documents';
@@ -18,7 +18,8 @@ import { clientSlug } from '@/lib/data/uploads';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     const clientId = request.nextUrl.searchParams.get('clientId') ?? undefined;
     const folders = await listFolders(clientId);
     const payload = filterVisibleFolders(folders, user.role);
@@ -48,7 +49,8 @@ interface CreateFolderBody {
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!canEditRole(user.role)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Creating folders requires editor role' } },

@@ -8,7 +8,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { clearIntegrationSecret, isManageableService, setIntegration, type Json } from '@gracie/db';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 
 function forbidden(): NextResponse {
   return NextResponse.json({ error: { code: 'forbidden', message: 'Admin only' } }, { status: 403 });
@@ -26,7 +26,9 @@ export async function PUT(
   { params }: { params: Promise<{ service: string }> },
 ): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) return forbidden();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) return forbidden();
     const { service } = await params;
     if (!isManageableService(service)) return unknownService(service);
 
@@ -53,7 +55,9 @@ export async function DELETE(
   { params }: { params: Promise<{ service: string }> },
 ): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) return forbidden();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) return forbidden();
     const { service } = await params;
     if (!isManageableService(service)) return unknownService(service);
     await clearIntegrationSecret(service);

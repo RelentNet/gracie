@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 
 import { can, canRoleSee, toVisibilityRule, type Role } from '@gracie/shared';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { getUserIdByLogtoId } from '@/lib/data/users';
 import { getFolderById, softDeleteFolderCascade, updateFolder } from '@/lib/data/folders';
 import { parseAclInput, parseName, requiresAdminToApply, type AclInput } from '@/lib/documents-acl';
@@ -48,7 +48,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!can(user.role, 'folder.manage')) {
       return jsonError('forbidden', 'Editing folders requires editor role', 403);
     }
@@ -99,7 +100,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!can(user.role, 'folder.delete')) {
       return jsonError('forbidden', 'Deleting folders requires admin', 403);
     }

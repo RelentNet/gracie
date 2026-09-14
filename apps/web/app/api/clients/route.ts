@@ -9,7 +9,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { CLIENT_CADENCES, CLIENT_TYPES, FEE_TIERS } from '@gracie/shared';
 import type { ClientCadence, ClientType, FeeTier } from '@gracie/shared';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { backfillOrgDomains } from '@/lib/data/calendar';
 import { createClient, listClients, redactClientForRole } from '@/lib/data/clients';
 
@@ -34,7 +34,8 @@ function resolveTypes(value: string | null): readonly ClientType[] | undefined {
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     const admin = isAdmin(user);
     const clients = await listClients(resolveTypes(request.nextUrl.searchParams.get('type')));
     const payload = clients.map((c) => redactClientForRole(c, admin));
@@ -78,7 +79,9 @@ function asDomains(value: unknown): string[] | undefined {
 
 export async function POST(request: Request): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) {
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Admin only' } },
         { status: 403 },

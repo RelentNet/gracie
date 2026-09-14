@@ -10,7 +10,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { getTimezoneByLogtoId, setTimezoneByLogtoId } from '@/lib/data/users';
 import { isValidTimeZone } from '@/lib/timezones';
 
@@ -22,7 +22,8 @@ function jsonError(code: string, message: string, status: number): NextResponse 
 
 export async function GET(): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     const timezone = await getTimezoneByLogtoId(user.userId);
     return NextResponse.json({ timezone });
   } catch (error) {
@@ -36,7 +37,8 @@ interface TimezoneBody {
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     const body = (await request.json().catch(() => ({}))) as TimezoneBody;
     if (!isValidTimeZone(body.timezone)) {
       return jsonError('bad_request', 'A valid IANA timezone id is required.', 400);

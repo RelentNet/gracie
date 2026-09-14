@@ -11,6 +11,8 @@
  */
 import 'server-only';
 
+import { NextResponse } from 'next/server';
+
 import type { Role } from '@gracie/shared';
 
 import { MOCK_USER } from './auth-shared';
@@ -61,6 +63,30 @@ export async function getRequestUser(): Promise<RequestUser> {
     role = resolveRole(context);
   }
   return { userId, role };
+}
+
+/** The standard 401 body every route returns for a missing/stale session. */
+export function unauthorizedResponse(): NextResponse {
+  return NextResponse.json({ error: { code: 'unauthorized', message: 'Sign in required' } }, { status: 401 });
+}
+
+/**
+ * Route-handler form of {@link getRequestUser}: the caller, or a ready 401 response
+ * when there is no valid session. Use at the call site and return the response:
+ *
+ *   const user = await requireRequestUser();
+ *   if (user instanceof NextResponse) return user;
+ *
+ * Without this, a stale session's `unauthorized` error fell into a route's generic
+ * catch and came back as a 500 — indistinguishable from a real failure, so the
+ * browser couldn't tell the user to sign in again (it just "errored out").
+ */
+export async function requireRequestUser(): Promise<RequestUser | NextResponse> {
+  try {
+    return await getRequestUser();
+  } catch {
+    return unauthorizedResponse();
+  }
 }
 
 export function isAdmin(user: RequestUser): boolean {

@@ -10,7 +10,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { getRequestUser, isEditor } from '@/lib/api-auth';
+import { isEditor, requireRequestUser } from '@/lib/api-auth';
 import { linkMeetingOrg, unlinkMeetingOrg } from '@/lib/data/calendar';
 import { addClientDomain } from '@/lib/data/clients';
 
@@ -31,7 +31,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   try {
-    if (!isEditor(await getRequestUser())) {
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isEditor(authed)) {
       return NextResponse.json(
         { error: { code: 'forbidden', message: 'Editor access required' } },
         { status: 403 },

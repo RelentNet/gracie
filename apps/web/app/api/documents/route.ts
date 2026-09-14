@@ -12,7 +12,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import {
   filterVisibleDocuments,
   filterVisibleFolders,
@@ -22,7 +22,8 @@ import {
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     const clientId = request.nextUrl.searchParams.get('clientId') ?? undefined;
 
     const [documents, folders] = await Promise.all([

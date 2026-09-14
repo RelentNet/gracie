@@ -10,7 +10,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { isConsented } from '@/lib/contact-import-consent';
 import { getConsentList, setConsent } from '@/lib/data/contact-import-consent';
 import { getEmailByLogtoId, getUserIdByLogtoId } from '@/lib/data/users';
@@ -23,7 +23,8 @@ function jsonError(code: string, message: string, status: number): NextResponse 
 
 export async function GET(): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     const email = await getEmailByLogtoId(user.userId);
     if (email === null) return jsonError('no_profile', 'No user profile for the current session.', 404);
     return NextResponse.json({ allowed: isConsented(email, await getConsentList()) });
@@ -34,7 +35,8 @@ export async function GET(): Promise<NextResponse> {
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     const email = await getEmailByLogtoId(user.userId);
     if (email === null) return jsonError('no_profile', 'No user profile for the current session.', 404);
 

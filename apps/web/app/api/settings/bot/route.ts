@@ -15,7 +15,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getBotConfig, setBotAvatar, setBotConfig } from '@gracie/db';
 import type { BotConfig, BotTranscriptProvider } from '@gracie/db';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 
 // @gracie/db (service-role client) is Node-only — force the Node.js runtime.
 export const runtime = 'nodejs';
@@ -47,7 +47,9 @@ function toClient(config: BotConfig): Record<string, unknown> {
 
 export async function GET(): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) return forbidden();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) return forbidden();
     return NextResponse.json({ config: toClient(await getBotConfig()) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -95,7 +97,9 @@ function normalizeAvatar(jpegB64: string): { b64: string } | { error: string } {
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) return forbidden();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) return forbidden();
     const body = (await request.json().catch(() => ({}))) as BotPatchBody;
 
     const patch: {

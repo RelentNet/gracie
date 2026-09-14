@@ -10,7 +10,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { isConsented } from '@/lib/contact-import-consent';
 import { getConsentList } from '@/lib/data/contact-import-consent';
 import { enqueueOutlookContactsImport, getOutlookContactsImportStatus } from '@/lib/queue';
@@ -24,7 +24,9 @@ function forbidden(): NextResponse {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) return forbidden();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) return forbidden();
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const mailbox = typeof body.mailbox === 'string' ? body.mailbox.trim() : '';
     if (mailbox === '' || !mailbox.includes('@')) {
@@ -54,7 +56,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) return forbidden();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) return forbidden();
     const jobId = request.nextUrl.searchParams.get('jobId');
     if (jobId === null || jobId === '') {
       return NextResponse.json(

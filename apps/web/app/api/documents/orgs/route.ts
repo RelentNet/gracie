@@ -11,12 +11,13 @@
  */
 import { NextResponse } from 'next/server';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { listDocumentOwnerOrgs } from '@/lib/data/documents';
 
 export async function GET(): Promise<NextResponse> {
   try {
-    await getRequestUser();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
     const orgs = await listDocumentOwnerOrgs();
     return NextResponse.json({ orgs });
   } catch (error) {

@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 
 import { can } from '@gracie/shared';
 
-import { getRequestUser, isEditor, type RequestUser } from './api-auth';
+import { isEditor, requireRequestUser, type RequestUser } from './api-auth';
 import { getSessionUser } from './session-user';
 
 /** 403 for a failed permission gate. */
@@ -45,7 +45,8 @@ export function fail(error: unknown, code = 'contacts_failed'): NextResponse {
  * the user, or a `NextResponse` to return immediately when unauthorized.
  */
 export async function requireViewer(): Promise<RequestUser | NextResponse> {
-  const user = await getRequestUser();
+  const user = await requireRequestUser();
+  if (user instanceof NextResponse) return user;
   if (!can(user.role, 'contacts.view')) return forbidden('Access denied');
   return user;
 }
@@ -55,7 +56,8 @@ export async function requireViewer(): Promise<RequestUser | NextResponse> {
  * Returns the user, or a `NextResponse` to return immediately when unauthorized.
  */
 export async function requireEditor(): Promise<RequestUser | NextResponse> {
-  const user = await getRequestUser();
+  const user = await requireRequestUser();
+  if (user instanceof NextResponse) return user;
   if (!isEditor(user)) return forbidden();
   return user;
 }

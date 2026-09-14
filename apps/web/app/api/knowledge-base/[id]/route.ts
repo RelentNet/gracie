@@ -11,7 +11,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { deleteObject } from '@gracie/shared/storage';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { canEditRole } from '@/lib/data/files';
 import {
   deleteKnowledgeBaseDocument,
@@ -76,7 +76,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!canEditRole(user.role)) {
       return jsonError('forbidden', 'Editing knowledge-base documents requires editor role', 403);
     }
@@ -103,7 +104,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) {
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) {
       return jsonError('forbidden', 'Deleting knowledge-base documents requires admin', 403);
     }
 

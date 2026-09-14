@@ -18,7 +18,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getObjectStream } from '@gracie/shared/storage';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import { canAccessKey } from '@/lib/data/files';
 import { attachmentDisposition } from '@/lib/content-disposition';
 
@@ -51,7 +51,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       );
     }
 
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     const allowed = await canAccessKey(key, user.role);
     if (!allowed) {
       return NextResponse.json(

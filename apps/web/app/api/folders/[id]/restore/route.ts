@@ -12,7 +12,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { can } from '@gracie/shared';
 
-import { getRequestUser } from '@/lib/api-auth';
+import { requireRequestUser } from '@/lib/api-auth';
 import {
   getFolderById,
   restoreAncestorFolders,
@@ -32,7 +32,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   try {
-    const user = await getRequestUser();
+    const user = await requireRequestUser();
+    if (user instanceof NextResponse) return user;
     if (!can(user.role, 'folder.delete')) {
       return jsonError('forbidden', 'Restoring folders requires admin', 403);
     }

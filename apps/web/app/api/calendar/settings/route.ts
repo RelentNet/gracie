@@ -10,7 +10,7 @@
  */
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { getRequestUser, isAdmin } from '@/lib/api-auth';
+import { isAdmin, requireRequestUser } from '@/lib/api-auth';
 import { getBotDispatchEnabled, setBotDispatchEnabled } from '@/lib/data/calendar';
 
 function forbidden(): NextResponse {
@@ -19,7 +19,9 @@ function forbidden(): NextResponse {
 
 export async function GET(): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) return forbidden();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) return forbidden();
     const botDispatchEnabled = await getBotDispatchEnabled();
     return NextResponse.json({ botDispatchEnabled });
   } catch (error) {
@@ -37,7 +39,9 @@ interface SettingsBody {
 
 export async function PATCH(request: NextRequest): Promise<NextResponse> {
   try {
-    if (!isAdmin(await getRequestUser())) return forbidden();
+    const authed = await requireRequestUser();
+    if (authed instanceof NextResponse) return authed;
+    if (!isAdmin(authed)) return forbidden();
     const body = (await request.json().catch(() => ({}))) as SettingsBody;
     if (typeof body.enabled !== 'boolean') {
       return NextResponse.json(
