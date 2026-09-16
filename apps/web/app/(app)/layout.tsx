@@ -5,6 +5,7 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { SessionWatcher } from '@/components/SessionWatcher';
 import { Sidebar } from '@/components/Sidebar';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { VersionBadge } from '@/components/VersionBadge';
 import { TimezoneAutoDefault } from '@/components/TimezoneAutoDefault';
 import { MobileNavToggle } from '@/components/ui/MobileNavToggle';
 import { NavCollapseProvider } from '@/components/ui/nav-collapse';
@@ -49,6 +50,8 @@ export default async function AppLayout({
           >
             <MobileNavToggle />
             <div className="flex-1" />
+            {/* Running version → What's New (dot until the latest release is seen). */}
+            <VersionBadge />
             <ThemeToggle />
             <NotificationBell />
           </header>

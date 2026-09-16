@@ -67,7 +67,20 @@
   .path b.addon{background:rgba(107,111,224,.16);}
   .note{font-size:13px;color:var(--color-text-secondary);margin-top:20px;text-align:center;}
   code{background:var(--row-alt);padding:1px 5px;border-radius:5px;font-size:.9em;}
+  .viz-bar{display:flex;justify-content:flex-end;margin:0 0 6px;}
+  .rm-toggle{font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;padding:4px 11px;border-radius:999px;
+    border:1px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-secondary);}
+  .rm-toggle:hover{color:var(--color-text-primary);}
+  /* "hide completed": swap to the remaining-only timeline and drop shipped rows/cards */
+  html.rm-hide .rm-done, html.rm-hide .rm-full{display:none;}
+  html:not(.rm-hide) .rm-remaining{display:none;}
 </style>
+<script>
+  // Default: completed work hidden (the header still states what shipped). The
+  // viewer's choice is remembered per browser.
+  (function(){var h=true;try{var v=localStorage.getItem('roadmap-hide-completed');if(v!==null)h=v==='1';}catch(e){}
+   if(h)document.documentElement.classList.add('rm-hide');})();
+</script>
 </head>
 <body>
 <div class="wrap">
@@ -94,6 +107,8 @@
 
   <!-- ============ ROADMAP VISUAL ============ -->
   <div class="card viz">
+    <div class="viz-bar"><button type="button" class="rm-toggle" id="rm-toggle" aria-pressed="false">Show completed</button></div>
+    <div class="rm-full">
     <svg viewBox="0 0 768 590" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
     <title>GA App — build roadmap</title>
     <desc>Alpha release v0.4.0, 2026-09-16. Everything built so far is shipped and live, rolled up as the Alpha release: P1 Foundation; P2 Clients and Files; P3 Tasks; P4 Calendar; P5a Ingest; P5b Generation; P6 Intelligence; P6B Assistant; P7 Briefs, Daily Sync and Notifications; CO Contacts and Org Charts; P8 Automations; P9 Settings, Admin and Scoring; RL Responsive and Mobile; PE Editable Generation Prompts; DS Editable Daily-Sync template; UX Platform theme and shell; MW Meeting workspace; DP the team-demo push; and the Alpha node itself with three revisions: the post-demo wave, the Never-admitted pipeline status and Private-event skip, and sign-in fixes plus versioned releases with an in-app What's New. Up next: uploads pick a client and the Clients list becomes the single authority. Then Allie's asks, sign-in reliability, SharePoint parallel sync, activity reports, Gracie SMS, and Beta to P10 launch. Deferred to version 2.0: Gracie Files and n8n.</desc>
@@ -219,6 +234,64 @@
     <text x="730" y="574">Files</text>
     </g>
     </svg>
+    </div>
+    <div class="rm-remaining">
+    <svg viewBox="0 0 768 330" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <title>GA App — build roadmap</title>
+    <desc>Alpha release v0.4.0, 2026-09-16. Everything built so far is shipped and live, rolled up as the Alpha release: P1 Foundation; P2 Clients and Files; P3 Tasks; P4 Calendar; P5a Ingest; P5b Generation; P6 Intelligence; P6B Assistant; P7 Briefs, Daily Sync and Notifications; CO Contacts and Org Charts; P8 Automations; P9 Settings, Admin and Scoring; RL Responsive and Mobile; PE Editable Generation Prompts; DS Editable Daily-Sync template; UX Platform theme and shell; MW Meeting workspace; DP the team-demo push; and the Alpha node itself with three revisions: the post-demo wave, the Never-admitted pipeline status and Private-event skip, and sign-in fixes plus versioned releases with an in-app What's New. Up next: uploads pick a client and the Clients list becomes the single authority. Then Allie's asks, sign-in reliability, SharePoint parallel sync, activity reports, Gracie SMS, and Beta to P10 launch. Deferred to version 2.0: Gracie Files and n8n.</desc>
+    <text x="24" y="34" font-size="22" font-weight="700" fill="var(--color-text-primary)">GA App — build roadmap</text>
+    <text x="24" y="57" font-size="13" fill="var(--color-text-secondary)">Alpha v0.4.0 · 19 shipped &amp; live · client picker + client list up next</text>
+    <text x="744" y="78" font-size="11" text-anchor="end" fill="var(--color-text-secondary)">~88%</text>
+    <rect x="24" y="84" width="720" height="6" rx="3" fill="var(--color-border-secondary)" opacity="0.5"/>
+    <rect x="24" y="84" width="633.6" height="6" rx="3" fill="#2f9e6b"/>
+    <g transform="translate(0,-160)">
+    <line x1="70" y1="310" x2="82" y2="310" stroke="#e08a2b" stroke-width="3"/>
+    <line x1="82" y1="310" x2="700" y2="310" stroke="var(--color-border-secondary)" stroke-width="2.5"/>
+    <circle cx="70" cy="310" r="19" fill="none" stroke="#e08a2b" stroke-width="2" opacity="0.4"/>
+    <circle cx="70" cy="310" r="13" fill="#e08a2b"/>
+    <text x="70" y="313.5" font-size="9.5" font-weight="700" fill="#ffffff" text-anchor="middle">UP</text>
+    <rect x="52" y="266" width="36" height="17" rx="8.5" fill="#e08a2b"/>
+    <text x="70" y="278.5" font-size="9.5" font-weight="700" fill="#ffffff" text-anchor="middle">NEXT</text>
+    <circle cx="175" cy="310" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
+    <circle cx="280" cy="310" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
+    <circle cx="385" cy="310" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
+    <circle cx="490" cy="310" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
+    <circle cx="595" cy="310" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
+    <circle cx="700" cy="310" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
+    <text x="175" y="313.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">AQ</text>
+    <text x="280" y="313.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">AU</text>
+    <text x="385" y="313.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">SP</text>
+    <text x="490" y="313.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">AR</text>
+    <text x="595" y="313.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">GS</text>
+    <text x="700" y="313.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">P10</text>
+    <text x="70" y="335" font-size="10.5" fill="var(--color-text-primary)" font-weight="600" text-anchor="middle">Client picker</text>
+    <text x="175" y="335" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">Allie asks</text>
+    <text x="280" y="335" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">Sign-in</text>
+    <text x="385" y="335" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">SharePoint</text>
+    <text x="490" y="335" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">Reports</text>
+    <text x="595" y="335" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">SMS</text>
+    <text x="700" y="335" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">Beta &amp; Launch</text>
+    <g font-size="11" fill="var(--color-text-secondary)">
+    <circle cx="330" cy="388" r="6" fill="#e08a2b"/><text x="342" y="392">Up next</text>
+    <circle cx="420" cy="388" r="6" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/><text x="432" y="392">Ahead</text>
+    </g>
+    <line x1="24" y1="410" x2="744" y2="410" stroke="var(--color-border-secondary)" stroke-width="1" stroke-dasharray="4 4"/>
+    <text x="24" y="430" font-size="12" font-weight="700" letter-spacing="0.04em" fill="#9aa0a6">Deferred to Gracie v2.0</text>
+    <g fill="var(--color-background-primary)" stroke="#9aa0a6" stroke-width="2" stroke-dasharray="3 2">
+    <circle cx="64" cy="452" r="12"/>
+    <circle cx="730" cy="452" r="12"/>
+    </g>
+    <g font-size="9" font-weight="700" fill="#9aa0a6" text-anchor="middle">
+    <text x="64" y="455.5">n8n</text>
+    <text x="730" y="455.5">GF</text>
+    </g>
+    <g font-size="10" fill="#9aa0a6" text-anchor="middle">
+    <text x="64" y="474">Integrations</text>
+    <text x="730" y="474">Files</text>
+    </g>
+    </g>
+    </svg>
+    </div>
   </div>
 
   <div class="card">
@@ -226,47 +299,47 @@
     <table>
       <thead><tr><th>#</th><th>Phase</th><th>Status</th></tr></thead>
       <tbody>
-        <tr><td class="code">P1</td><td>Foundation</td><td><span class="badge b-done">Shipped</span></td></tr>
-        <tr><td class="code">P2</td><td>Client Profiles &amp; Files <em>(+ Documents drive v0.2.1)</em></td><td><span class="badge b-done">Shipped</span></td></tr>
-        <tr><td class="code">↳ P2.1</td><td>Editable client tabs · add task/note · finance inputs · algorithmic relationship health</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">↳ P2.2</td><td>Documents management — rename · permissions · delete, with a 60-day recycle bin</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">↳ P2.3</td><td>Documents overhaul — 3-pane preview layout, Windows-Explorer grid, inline preview (md/txt/pdf/img/svg/csv/docx/xlsx), draggable resize divider</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">↳ P2.4</td><td>Client logos + per-client <strong>Meetings</strong> tab (2 upcoming + 6 recent meetings per client)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">P3</td><td>Task Board &amp; Notes</td><td><span class="badge b-done">Shipped</span></td></tr>
-        <tr><td class="code">↳ P3.1</td><td>Task Board + wired quick-actions — board controls (status / assign / complete) now live</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">P4</td><td>Calendar Integration <em>(auto meeting pipeline)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
-        <tr><td class="code">↳ P4.1</td><td>Meetings-first orgs · multi-domain clients · reconcile · Sync now</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">↳ P4.2</td><td>On-demand meeting join — paste a link → Gracie joins &amp; records now</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">↳ P4.3</td><td>Meeting-occurrence page (Phase A) — clickable calendar → <code>/meetings/[id]</code>, status-adaptive (upcoming / in-session / ended: docs + tasks + master record + pipeline status)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">↳ P4.4</td><td>Calendar Week view — toggle between Month and Week</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">P5a</td><td>AI Pipeline — Ingest</td><td><span class="badge b-done">Shipped</span></td></tr>
-        <tr><td class="code">P5b</td><td>AI Pipeline — Generation</td><td><span class="badge b-done">Shipped</span></td></tr>
-        <tr><td class="code">P6</td><td>Intelligence &amp; Knowledge Base</td><td><span class="badge b-done">Shipped</span></td></tr>
-        <tr><td class="code">P6B</td><td>Assistant Module</td><td><span class="badge b-done">Shipped</span></td></tr>
-        <tr><td class="code">↳ P6B.1</td><td>Company-aware Assistant — read-only, role-mirrored company brain</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">↳ P6B.2</td><td>On-demand web access — SearXNG search + fetch behind a per-chat Web toggle</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">P7</td><td>Briefs · Daily Sync · Notifications <em>(internal team email via Resend)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
-        <tr><td class="code">CO</td><td>Contacts &amp; Org Charts <em>(contacts directory · per-org office hierarchy / org chart · affiliation history)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
-        <tr><td class="code">P8</td><td>Gracie Automations <em>(native scheduled tasks · agentic Assistant · confirm-before-acting)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
-        <tr><td class="code">↳ P8.1</td><td>Shorter intervals (hourly floor) &amp; before-meeting brief triggers</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">P9</td><td>Settings / Admin / Scoring <em>(in-app user &amp; role management shipped)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
-        <tr><td class="code">↳ P9.1</td><td>Pipeline fleet view — Pipeline is now a full activity log + status filter; surfaces previously-invisible stuck meetings (&ldquo;Needs attention&rdquo;) with plain-language failure reasons</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">↳ P9.2</td><td>Pipeline self-heal — the worker auto-recovers stuck meetings (retries/repairs the mechanical failures) instead of leaving them for a human</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">RL</td><td>Responsive &amp; Mobile <em>(full responsive · tables · mobile · collapsible sticky nav)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
-        <tr><td class="code">PE</td><td>Editable Generation Prompts <em>(+ tabbed Settings)</em> — admins tune the 6 post-meeting generation prompts in-app, no deploy</td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
-        <tr><td class="code">DS</td><td>Editable Daily-Sync template <em>(+ optional grounded AI brief)</em> — admins edit the 6&nbsp;AM email (text + shortcodes); optional firm-wide AI brief, off by default</td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
-        <tr><td class="code">↳ DS.1</td><td>Daily-Sync email v2 — <code>{tomorrows_meetings}</code> shortcode (and into the AI context), brief-card link cluster, empty-render fixes</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">UX</td><td>Platform theme &amp; shell <em>(indigo/glass redesign · light / dark toggle · grouped sidebar + Sign Out · Overview command-center · dark-mode logo)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
-        <tr><td class="code">MW</td><td>Meeting workspace <em>(per-occurrence page: recorded video · click-to-seek &amp; live transcript)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
-        <tr><td class="code">↳ MW.1</td><td>Record every meeting — auto bot dispatch now covers all calendar calls</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">↳ MW.2</td><td>In-meeting bot controls — leave / pause / resume buttons on the live meeting</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">↳ MW.3</td><td>In-meeting voice commands — &ldquo;Gracie, leave&rdquo; + a timed pause, shipped default-off</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">↳ MW.4</td><td>Per-meeting <strong>Send Gracie</strong> re-dispatch (re-dispatches to all users on the meeting)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">DP</td><td>Team-demo push <em>(GA-team feedback · Waves 1+2)</em> — home = Assistant + command-center · calendar rework (work-week / layout swap / collapsible attendees) · screen-share stills inline in the transcript · per-user time zones · task-lifecycle redesign · 6-month video retention · assistant task Q&amp;A + CSV export · in-meeting voice action-item capture · unassigned → domain docs · ghost-meeting guard</td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
-        <tr><td class="code">α</td><td><strong>Alpha release — v0.4.0</strong> <em>(2026-09-16 · rolls up everything above, P1 → DP, plus the post-demo wave)</em> — version number + in-app What&rsquo;s New</td><td><span class="badge b-done">Alpha · released 2026-09-16</span></td></tr>
-        <tr><td class="code">↳ α.1</td><td>Post-demo wave — multi-provider AI, per-client Task Board v2 + merge / bulk delete, Outlook contacts import, assistant pin + voice + save-to-Documents, four client tabs (#113–#130)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">↳ α.2</td><td>Pipeline honesty — <strong>Never admitted</strong> status + tab; events marked <strong>Private</strong> in Outlook never recorded or shown (#131, #132)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
-        <tr><td class="code">↳ α.3</td><td>Sign-in clarity + versioned releases — session-expired prompt, return-to-page, 401s app-wide, operations auth fix (#133); sidebar version badge + What&rsquo;s New, v0.4.0 tagged (#134)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">P1</td><td>Foundation</td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">P2</td><td>Client Profiles &amp; Files <em>(+ Documents drive v0.2.1)</em></td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P2.1</td><td>Editable client tabs · add task/note · finance inputs · algorithmic relationship health</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P2.2</td><td>Documents management — rename · permissions · delete, with a 60-day recycle bin</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P2.3</td><td>Documents overhaul — 3-pane preview layout, Windows-Explorer grid, inline preview (md/txt/pdf/img/svg/csv/docx/xlsx), draggable resize divider</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P2.4</td><td>Client logos + per-client <strong>Meetings</strong> tab (2 upcoming + 6 recent meetings per client)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">P3</td><td>Task Board &amp; Notes</td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P3.1</td><td>Task Board + wired quick-actions — board controls (status / assign / complete) now live</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">P4</td><td>Calendar Integration <em>(auto meeting pipeline)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P4.1</td><td>Meetings-first orgs · multi-domain clients · reconcile · Sync now</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P4.2</td><td>On-demand meeting join — paste a link → Gracie joins &amp; records now</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P4.3</td><td>Meeting-occurrence page (Phase A) — clickable calendar → <code>/meetings/[id]</code>, status-adaptive (upcoming / in-session / ended: docs + tasks + master record + pipeline status)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P4.4</td><td>Calendar Week view — toggle between Month and Week</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">P5a</td><td>AI Pipeline — Ingest</td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">P5b</td><td>AI Pipeline — Generation</td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">P6</td><td>Intelligence &amp; Knowledge Base</td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">P6B</td><td>Assistant Module</td><td><span class="badge b-done">Shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P6B.1</td><td>Company-aware Assistant — read-only, role-mirrored company brain</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P6B.2</td><td>On-demand web access — SearXNG search + fetch behind a per-chat Web toggle</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">P7</td><td>Briefs · Daily Sync · Notifications <em>(internal team email via Resend)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr class="rm-done"><td class="code">CO</td><td>Contacts &amp; Org Charts <em>(contacts directory · per-org office hierarchy / org chart · affiliation history)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr class="rm-done"><td class="code">P8</td><td>Gracie Automations <em>(native scheduled tasks · agentic Assistant · confirm-before-acting)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P8.1</td><td>Shorter intervals (hourly floor) &amp; before-meeting brief triggers</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">P9</td><td>Settings / Admin / Scoring <em>(in-app user &amp; role management shipped)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P9.1</td><td>Pipeline fleet view — Pipeline is now a full activity log + status filter; surfaces previously-invisible stuck meetings (&ldquo;Needs attention&rdquo;) with plain-language failure reasons</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ P9.2</td><td>Pipeline self-heal — the worker auto-recovers stuck meetings (retries/repairs the mechanical failures) instead of leaving them for a human</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">RL</td><td>Responsive &amp; Mobile <em>(full responsive · tables · mobile · collapsible sticky nav)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr class="rm-done"><td class="code">PE</td><td>Editable Generation Prompts <em>(+ tabbed Settings)</em> — admins tune the 6 post-meeting generation prompts in-app, no deploy</td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr class="rm-done"><td class="code">DS</td><td>Editable Daily-Sync template <em>(+ optional grounded AI brief)</em> — admins edit the 6&nbsp;AM email (text + shortcodes); optional firm-wide AI brief, off by default</td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ DS.1</td><td>Daily-Sync email v2 — <code>{tomorrows_meetings}</code> shortcode (and into the AI context), brief-card link cluster, empty-render fixes</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">UX</td><td>Platform theme &amp; shell <em>(indigo/glass redesign · light / dark toggle · grouped sidebar + Sign Out · Overview command-center · dark-mode logo)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr class="rm-done"><td class="code">MW</td><td>Meeting workspace <em>(per-occurrence page: recorded video · click-to-seek &amp; live transcript)</em></td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ MW.1</td><td>Record every meeting — auto bot dispatch now covers all calendar calls</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ MW.2</td><td>In-meeting bot controls — leave / pause / resume buttons on the live meeting</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ MW.3</td><td>In-meeting voice commands — &ldquo;Gracie, leave&rdquo; + a timed pause, shipped default-off</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ MW.4</td><td>Per-meeting <strong>Send Gracie</strong> re-dispatch (re-dispatches to all users on the meeting)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">DP</td><td>Team-demo push <em>(GA-team feedback · Waves 1+2)</em> — home = Assistant + command-center · calendar rework (work-week / layout swap / collapsible attendees) · screen-share stills inline in the transcript · per-user time zones · task-lifecycle redesign · 6-month video retention · assistant task Q&amp;A + CSV export · in-meeting voice action-item capture · unassigned → domain docs · ghost-meeting guard</td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
+        <tr class="rm-done"><td class="code">α</td><td><strong>Alpha release — v0.4.0</strong> <em>(2026-09-16 · rolls up everything above, P1 → DP, plus the post-demo wave)</em> — version number + in-app What&rsquo;s New</td><td><span class="badge b-done">Alpha · released 2026-09-16</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ α.1</td><td>Post-demo wave — multi-provider AI, per-client Task Board v2 + merge / bulk delete, Outlook contacts import, assistant pin + voice + save-to-Documents, four client tabs (#113–#130)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ α.2</td><td>Pipeline honesty — <strong>Never admitted</strong> status + tab; events marked <strong>Private</strong> in Outlook never recorded or shown (#131, #132)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr class="rm-done"><td class="code">↳ α.3</td><td>Sign-in clarity + versioned releases — session-expired prompt, return-to-page, 401s app-wide, operations auth fix (#133); sidebar version badge + What&rsquo;s New, v0.4.0 tagged (#134)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
         <tr><td class="code">UP</td><td>Uploads pick a client + <strong>Clients list is the single authority</strong> everywhere <em>(Allie, 9/14)</em></td><td><span class="badge b-now">Up next</span></td></tr>
         <tr><td class="code">AQ</td><td>Allie&rsquo;s 8/27 asks — <strong>copy</strong> button next to Download · document <strong>preview on the meeting page</strong> · heavier weight on the <strong>post-meeting analysis</strong> prompt</td><td><span class="badge b-todo">Not started</span></td></tr>
         <tr><td class="code">AU</td><td>Sign-in reliability — persist refreshed Logto tokens so sessions stop going stale after refresh-token rotation (~10 days)</td><td><span class="badge b-todo">Not started</span></td></tr>
@@ -279,7 +352,7 @@
     <p style="font-size:13px;color:var(--color-text-secondary);margin:14px 0 0;">Live in production at <code>gracie.graceandassociates.com</code> with Microsoft SSO. <strong>Alpha v0.4.0</strong> (2026-09-16) rolls up every package above. Bot auto-join is <strong>ON</strong> — Gracie joins every meeting with a Teams link; meetings she isn&rsquo;t admitted to show as <strong>Never admitted</strong>, and events marked Private in Outlook are skipped.</p>
   </div>
 
-  <div class="card">
+  <div class="card rm-done">
     <h2>Build log — every shipped increment (P1 → Alpha v0.4.0 · Jun–Sep 2026)</h2>
     <table>
       <thead><tr><th>PR</th><th>Step</th><th>What shipped</th></tr></thead>
@@ -421,6 +494,17 @@
 
   <p class="note">Generated by the roadmap skill · source of truth: <code>docs/09-build-phases.md</code> + <code>docs/plan/</code> + auto-memory</p>
 </div>
+<script>
+  (function(){
+    var root=document.documentElement, btn=document.getElementById('rm-toggle');
+    function sync(){var hidden=root.classList.contains('rm-hide');
+      btn.textContent=hidden?'Show completed':'Hide completed';btn.setAttribute('aria-pressed',String(!hidden));}
+    btn.addEventListener('click',function(){root.classList.toggle('rm-hide');
+      try{localStorage.setItem('roadmap-hide-completed',root.classList.contains('rm-hide')?'1':'0');}catch(e){}
+      sync();});
+    sync();
+  })();
+</script>
 <script type="application/json" id="roadmap-model">
 {
   "meta": {
