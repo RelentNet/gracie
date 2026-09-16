@@ -1,12 +1,19 @@
+import { redirect } from 'next/navigation';
+
 import { Card } from '@/components/ui/Card';
 import { PageContainer } from '@/components/ui/PageContainer';
 import { CHANGELOG } from '@/lib/changelog';
+import { isLogtoConfigured, logtoConfig, safeGetLogtoContext } from '@/lib/logto';
 import { TYPE } from '@/lib/typography';
 
 /**
  * What's New — the in-app changelog (any signed-in role). Rendered from
  * `lib/changelog.ts`, the same source as the sidebar version number, so the two
  * can never disagree.
+ *
+ * Guards itself as well as relying on the app layout: this page has no data
+ * calls, so without its own check Next streamed the full changelog to signed-out
+ * visitors before the layout's redirect took effect.
  */
 export const metadata = { title: 'What’s New · GA App' };
 
@@ -20,7 +27,12 @@ function formatDate(iso: string): string {
   });
 }
 
-export default function WhatsNewPage(): React.JSX.Element {
+export default async function WhatsNewPage(): Promise<React.JSX.Element> {
+  if (isLogtoConfigured()) {
+    const { isAuthenticated } = await safeGetLogtoContext(logtoConfig);
+    if (!isAuthenticated) redirect('/login');
+  }
+
   return (
     <PageContainer width="md" className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
