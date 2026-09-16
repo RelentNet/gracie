@@ -262,15 +262,19 @@ export default function AssistantPage(): React.JSX.Element {
   };
 
   return (
-    <div className="flex h-[calc(100dvh-4rem)] gap-4">
-      {/* Desktop sidebar (static on md+). */}
-      <Card className="hidden w-72 shrink-0 flex-col p-3 md:flex">
+    // `@container`: the conversation list docks based on the width THIS panel
+    // actually has (it's narrower inside Home's layout, and much narrower when a
+    // user runs a large OS/browser zoom), not on the window's breakpoint — so the
+    // chat column never gets squeezed to a sliver.
+    <div className="@container flex h-[calc(100dvh-4rem)] gap-4">
+      {/* Docked conversation list (when the assistant has ≥ 48rem). */}
+      <Card className="hidden w-72 shrink-0 flex-col p-3 @3xl:flex">
         <ConversationList {...conversationListProps} />
       </Card>
 
-      {/* Mobile drawer (below md): full-screen overlay + off-canvas panel. */}
+      {/* Drawer (when the list isn't docked): full-screen overlay + off-canvas panel. */}
       {navOpen ? (
-        <div className="fixed inset-0 z-40 flex md:hidden" role="dialog" aria-modal="true" aria-label="Conversations">
+        <div className="fixed inset-0 z-40 flex @3xl:hidden" role="dialog" aria-modal="true" aria-label="Conversations">
           <div
             className="absolute inset-0"
             style={{ backgroundColor: 'rgba(15, 23, 42, 0.5)' }}
@@ -298,7 +302,7 @@ export default function AssistantPage(): React.JSX.Element {
           <button
             type="button"
             onClick={(): void => setNavOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 md:hidden"
+            className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 @3xl:hidden"
             style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-primary)', ...TYPE.bodyStrong }}
           >
             <PanelLeft aria-hidden="true" size={16} />

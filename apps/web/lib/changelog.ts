@@ -31,6 +31,22 @@ export interface Release {
 /** Newest first. */
 export const CHANGELOG: readonly Release[] = [
   {
+    version: '0.4.3',
+    date: '2026-09-16',
+    title: 'Works better with a zoomed-in screen',
+    stage: 'Alpha',
+    sections: [
+      {
+        heading: 'Fixed',
+        items: [
+          'Sign Out and My Settings stay on screen when your computer is zoomed in (for example 150% on a 1920×1200 display) — the menu above them scrolls instead.',
+          'Home: the chat box no longer gets squeezed to a sliver on smaller or zoomed screens. The conversation list tucks behind a Conversations button when space is tight.',
+          'Documents: the file list no longer disappears between the folders and the preview. On zoomed screens the preview opens over the file browser, with a close button.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.4.2',
     date: '2026-09-16',
     title: 'Version in the top bar + a tidier roadmap',
