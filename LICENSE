@@ -1,0 +1,41 @@
+Copyright (c) 2026 RelentNet. All rights reserved.
+
+PROPRIETARY LICENSE — SOURCE AVAILABLE, NO USE
+
+This software and its source code (the "Software") are made publicly
+viewable for reference and transparency only. No license, express or
+implied, is granted under any copyright, patent, trademark, or other
+intellectual-property right, except as expressly stated below.
+
+PERMITTED
+  You may view and read the Software as published in this repository.
+
+PROHIBITED
+  Except with the prior written permission of the copyright holder, you
+  may NOT:
+    - copy, reproduce, download for use, or redistribute the Software, in
+      whole or in part, in any form;
+    - use, run, execute, or deploy the Software for any purpose, personal,
+      educational, internal, or commercial;
+    - modify, adapt, translate, or create derivative works of the Software;
+    - sublicense, sell, rent, lease, or lend the Software;
+    - use the Software, or any portion of it, to train, fine-tune, or
+      evaluate machine-learning or AI models.
+
+  GitHub's Terms of Service permit viewing and forking within GitHub; this
+  license grants no rights beyond those the Terms of Service require.
+
+RESERVATION OF RIGHTS
+  All rights not expressly granted here are reserved by the copyright
+  holder. Any use of the Software not expressly permitted above is
+  prohibited and may violate copyright and other laws.
+
+DISCLAIMER
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+  OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+  IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES,
+  OR OTHER LIABILITY ARISING FROM OR IN CONNECTION WITH THE SOFTWARE.
+
+For licensing inquiries, contact the copyright holder via
+https://github.com/RelentNet/gracie.
