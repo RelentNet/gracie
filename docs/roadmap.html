@@ -73,9 +73,10 @@
 <div class="wrap">
   <header class="doc">
     <h1>GA App — Build Roadmap</h1>
-    <p class="sub">Codename <code>gracie</code> · snapshot 2026-08-06 · <strong>18 phases shipped &amp; live</strong> <em>(+ 19 in-place revisions across P2 / P3 / P4 / P6B / P8 / P9 / DS / MW)</em> · <span style="color:var(--now)">Gracie SMS up next</span> · then <span style="color:var(--ahead)">P10 Launch</span> · Gracie Files + n8n deferred to v2.0</p>
+    <p class="sub">Codename <code>gracie</code> · snapshot 2026-09-16 · <strong>Alpha v0.4.0 released</strong> — <strong>19 build packages shipped &amp; live</strong> <em>(+ 22 in-place revisions)</em> rolled up as the Alpha release · <span style="color:var(--now)">upload client picker + single client list up next</span> · then <span style="color:var(--ahead)">Beta → P10 Launch</span> · Gracie Files + n8n deferred to v2.0</p>
     <div class="chips">
       <span class="chip">● Live in production — gracie.graceandassociates.com</span>
+      <span class="chip">α Alpha v0.4.0 — versioned releases + in-app What&rsquo;s New</span>
       <span class="chip">✓ Microsoft SSO</span>
       <span class="chip">✓ Auto meeting pipeline (Calendar)</span>
       <span class="chip">✓ Meeting workspace — video · transcript · bot controls</span>
@@ -87,114 +88,135 @@
       <span class="chip">✓ Responsive &amp; mobile</span>
       <span class="chip">✓ Light / dark platform theme</span>
       <span class="chip">✓ Editable AI prompts &amp; daily-sync</span>
+      <span class="chip">✓ Pipeline: Never-admitted status · Private events skipped</span>
     </div>
   </header>
 
   <!-- ============ ROADMAP VISUAL ============ -->
   <div class="card viz">
-    <svg viewBox="0 0 768 490" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <svg viewBox="0 0 768 590" xmlns="http://www.w3.org/2000/svg" role="img" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
     <title>GA App — build roadmap</title>
-    <desc>Eighteen build packages shipped and live, plus nineteen in-place revisions shown as their own nodes: P1 Foundation; P2 Clients and Files (P2.1 editable tabs, P2.2 documents management, P2.3 documents overhaul, P2.4 client logos and Meetings tab); P3 Tasks (P3.1 Task Board and wired actions); P4 Calendar (P4.1 meetings-first, P4.2 on-demand join, P4.3 meeting-occurrence page, P4.4 Week view); P5a Ingest; P5b Generation; P6 Intelligence; P6B Assistant (P6B.1 company-aware, P6B.2 web access); P7 Briefs Daily Sync and Notifications; CO Contacts and Org Charts; P8 Automations (P8.1 shorter intervals and meeting triggers); P9 Settings Admin and Scoring (P9.1 pipeline fleet view, P9.2 pipeline self-heal); RL Responsive and Mobile; PE Editable Generation Prompts; DS Editable Daily-Sync template (DS.1 email v2); UX Platform theme and shell (indigo/glass redesign, light/dark toggle, grouped sidebar, command-center, dark-mode logo); MW Meeting workspace (recorded video, click-to-seek and live transcript, MW.1 record every meeting, MW.2 in-meeting bot controls, MW.3 voice commands, MW.4 Send-Gracie re-dispatch); and DP the team-demo push (home = assistant plus command-center, calendar rework, screen-share stills in the transcript, per-user time zones, task-lifecycle redesign, six-month video retention, assistant task Q&amp;A and CSV export, in-meeting voice action-item capture, unassigned meetings to a domain-named document area, ghost-meeting guard). Up next: Gracie SMS, a two-way text channel. Then P10 Launch. Deferred to version 2.0: Gracie Files and n8n. Live in production with Microsoft SSO.</desc>
+    <desc>Alpha release v0.4.0, 2026-09-16. Everything built so far is shipped and live, rolled up as the Alpha release: P1 Foundation; P2 Clients and Files; P3 Tasks; P4 Calendar; P5a Ingest; P5b Generation; P6 Intelligence; P6B Assistant; P7 Briefs, Daily Sync and Notifications; CO Contacts and Org Charts; P8 Automations; P9 Settings, Admin and Scoring; RL Responsive and Mobile; PE Editable Generation Prompts; DS Editable Daily-Sync template; UX Platform theme and shell; MW Meeting workspace; DP the team-demo push; and the Alpha node itself with three revisions: the post-demo wave, the Never-admitted pipeline status and Private-event skip, and sign-in fixes plus versioned releases with an in-app What's New. Up next: uploads pick a client and the Clients list becomes the single authority. Then Allie's asks, sign-in reliability, SharePoint parallel sync, activity reports, Gracie SMS, and Beta to P10 launch. Deferred to version 2.0: Gracie Files and n8n.</desc>
     <text x="24" y="34" font-size="22" font-weight="700" fill="var(--color-text-primary)">GA App — build roadmap</text>
-    <text x="24" y="57" font-size="13" fill="var(--color-text-secondary)">18 shipped &amp; live · full build log below · Gracie SMS up next</text>
-    <text x="744" y="78" font-size="11" text-anchor="end" fill="var(--color-text-secondary)">~95%</text>
+    <text x="24" y="57" font-size="13" fill="var(--color-text-secondary)">Alpha v0.4.0 · 19 shipped &amp; live · client picker + client list up next</text>
+    <text x="744" y="78" font-size="11" text-anchor="end" fill="var(--color-text-secondary)">~88%</text>
     <rect x="24" y="84" width="720" height="6" rx="3" fill="var(--color-border-secondary)" opacity="0.5"/>
-    <rect x="24" y="84" width="684" height="6" rx="3" fill="#2f9e6b"/>
+    <rect x="24" y="84" width="633.6" height="6" rx="3" fill="#2f9e6b"/>
     <line x1="64" y1="180" x2="730" y2="180" stroke="#2f9e6b" stroke-width="3"/>
-    <path d="M730,180 C730,250 70,250 70,310" fill="none" stroke="var(--color-border-secondary)" stroke-width="2.5"/>
-    <line x1="70" y1="310" x2="82" y2="310" stroke="#e08a2b" stroke-width="3"/>
-    <line x1="82" y1="310" x2="700" y2="310" stroke="var(--color-border-secondary)" stroke-width="2.5"/>
+    <line x1="64" y1="250" x2="730" y2="250" stroke="#2f9e6b" stroke-width="3"/>
+    <path d="M730,180 C760,180 760,250 730,250" fill="none" stroke="#2f9e6b" stroke-width="3"/>
+    <path d="M64,250 C64,330 70,330 70,410" fill="none" stroke="var(--color-border-secondary)" stroke-width="2.5"/>
+    <line x1="70" y1="410" x2="82" y2="410" stroke="#e08a2b" stroke-width="3"/>
+    <line x1="82" y1="410" x2="700" y2="410" stroke="var(--color-border-secondary)" stroke-width="2.5"/>
     <g fill="#2f9e6b">
     <circle cx="64" cy="180" r="13"/>
-    <circle cx="103" cy="180" r="13"/>
-    <circle cx="142" cy="180" r="13"/>
-    <circle cx="182" cy="180" r="13"/>
-    <circle cx="221" cy="180" r="13"/>
-    <circle cx="260" cy="180" r="13"/>
-    <circle cx="299" cy="180" r="13"/>
-    <circle cx="338" cy="180" r="13"/>
-    <circle cx="377" cy="180" r="13"/>
-    <circle cx="417" cy="180" r="13"/>
-    <circle cx="456" cy="180" r="13"/>
-    <circle cx="495" cy="180" r="13"/>
-    <circle cx="534" cy="180" r="13"/>
-    <circle cx="573" cy="180" r="13"/>
-    <circle cx="612" cy="180" r="13"/>
-    <circle cx="652" cy="180" r="13"/>
-    <circle cx="691" cy="180" r="13"/>
+    <circle cx="138" cy="180" r="13"/>
+    <circle cx="212" cy="180" r="13"/>
+    <circle cx="286" cy="180" r="13"/>
+    <circle cx="360" cy="180" r="13"/>
+    <circle cx="434" cy="180" r="13"/>
+    <circle cx="508" cy="180" r="13"/>
+    <circle cx="582" cy="180" r="13"/>
+    <circle cx="656" cy="180" r="13"/>
     <circle cx="730" cy="180" r="13"/>
+    <circle cx="730" cy="250" r="13"/>
+    <circle cx="647" cy="250" r="13"/>
+    <circle cx="564" cy="250" r="13"/>
+    <circle cx="480" cy="250" r="13"/>
+    <circle cx="397" cy="250" r="13"/>
+    <circle cx="314" cy="250" r="13"/>
+    <circle cx="231" cy="250" r="13"/>
+    <circle cx="147" cy="250" r="13"/>
+    <circle cx="64" cy="250" r="13"/>
     </g>
     <g font-size="9.5" font-weight="700" fill="#ffffff" text-anchor="middle">
     <text x="64" y="183.5">P1</text>
-    <text x="103" y="183.5">P2</text>
-    <text x="142" y="183.5">P3</text>
-    <text x="182" y="183.5">P4</text>
-    <text x="221" y="183.5">P5a</text>
-    <text x="260" y="183.5">P5b</text>
-    <text x="299" y="183.5">P6</text>
-    <text x="338" y="183.5">P6B</text>
-    <text x="377" y="183.5">P7</text>
-    <text x="417" y="183.5">CO</text>
-    <text x="456" y="183.5">P8</text>
-    <text x="495" y="183.5">P9</text>
-    <text x="534" y="183.5">RL</text>
-    <text x="573" y="183.5">PE</text>
-    <text x="612" y="183.5">DS</text>
-    <text x="652" y="183.5">UX</text>
-    <text x="691" y="183.5">MW</text>
-    <text x="730" y="183.5">DP</text>
+    <text x="138" y="183.5">P2</text>
+    <text x="212" y="183.5">P3</text>
+    <text x="286" y="183.5">P4</text>
+    <text x="360" y="183.5">P5a</text>
+    <text x="434" y="183.5">P5b</text>
+    <text x="508" y="183.5">P6</text>
+    <text x="582" y="183.5">P6B</text>
+    <text x="656" y="183.5">P7</text>
+    <text x="730" y="183.5">CO</text>
+    <text x="730" y="253.5">P8</text>
+    <text x="647" y="253.5">P9</text>
+    <text x="564" y="253.5">RL</text>
+    <text x="480" y="253.5">PE</text>
+    <text x="397" y="253.5">DS</text>
+    <text x="314" y="253.5">UX</text>
+    <text x="231" y="253.5">MW</text>
+    <text x="147" y="253.5">DP</text>
+    <text x="64" y="253.5">α</text>
     </g>
     <g font-size="10" fill="var(--color-text-secondary)" text-anchor="middle">
     <text x="64" y="205">Foundation</text>
-    <text x="103" y="205">Clients</text>
-    <text x="142" y="205">Tasks</text>
-    <text x="182" y="205">Calendar</text>
-    <text x="221" y="205">Ingest</text>
-    <text x="260" y="205">Gen</text>
-    <text x="299" y="205">Intel</text>
-    <text x="338" y="205">Assistant</text>
-    <text x="377" y="205">Briefs</text>
-    <text x="417" y="205">Contacts</text>
-    <text x="456" y="205">Automations</text>
-    <text x="495" y="205">Settings</text>
-    <text x="534" y="205">Responsive</text>
-    <text x="573" y="205">Prompts</text>
-    <text x="612" y="205">Daily Sync</text>
-    <text x="652" y="205">Theme</text>
-    <text x="691" y="205">Meetings</text>
-    <text x="730" y="205">Demo push</text>
+    <text x="138" y="205">Clients</text>
+    <text x="212" y="205">Tasks</text>
+    <text x="286" y="205">Calendar</text>
+    <text x="360" y="205">Ingest</text>
+    <text x="434" y="205">Gen</text>
+    <text x="508" y="205">Intel</text>
+    <text x="582" y="205">Assistant</text>
+    <text x="656" y="205">Briefs</text>
+    <text x="730" y="205">Contacts</text>
+    <text x="730" y="228">Automations</text>
+    <text x="647" y="228">Settings</text>
+    <text x="564" y="228">Responsive</text>
+    <text x="480" y="228">Prompts</text>
+    <text x="397" y="228">Daily Sync</text>
+    <text x="314" y="228">Theme</text>
+    <text x="231" y="228">Meetings</text>
+    <text x="147" y="228">Demo push</text>
+    <text x="64" y="228">Alpha v0.4.0</text>
     </g>
-    <g stroke="#2f9e6b" stroke-width="1.5" stroke-dasharray="2 2"><line x1="103" y1="167" x2="103" y2="70"/><line x1="142" y1="167" x2="142" y2="150"/><line x1="182" y1="167" x2="182" y2="70"/><line x1="338" y1="167" x2="338" y2="118"/><line x1="456" y1="167" x2="456" y2="150"/><line x1="495" y1="167" x2="495" y2="118"/><line x1="612" y1="167" x2="612" y2="150"/><line x1="691" y1="167" x2="691" y2="70"/></g>
-    <g fill="#2f9e6b"><circle cx="103" cy="150" r="7"/><circle cx="103" cy="126" r="7"/><circle cx="103" cy="102" r="7"/><circle cx="103" cy="78" r="7"/><circle cx="142" cy="142" r="8"/><circle cx="182" cy="150" r="7"/><circle cx="182" cy="126" r="7"/><circle cx="182" cy="102" r="7"/><circle cx="182" cy="78" r="7"/><circle cx="338" cy="150" r="7"/><circle cx="338" cy="126" r="7"/><circle cx="456" cy="142" r="8"/><circle cx="495" cy="150" r="7"/><circle cx="495" cy="126" r="7"/><circle cx="612" cy="142" r="8"/><circle cx="691" cy="150" r="7"/><circle cx="691" cy="126" r="7"/><circle cx="691" cy="102" r="7"/><circle cx="691" cy="78" r="7"/></g>
-    <g font-size="9.5" font-weight="700" fill="#2f9e6b"><text x="114" y="153" text-anchor="start">P2.1</text><text x="114" y="129" text-anchor="start">P2.2</text><text x="114" y="105" text-anchor="start">P2.3</text><text x="114" y="81" text-anchor="start">P2.4</text><text x="142" y="127" text-anchor="middle">P3.1</text><text x="193" y="153" text-anchor="start">P4.1</text><text x="193" y="129" text-anchor="start">P4.2</text><text x="193" y="105" text-anchor="start">P4.3</text><text x="193" y="81" text-anchor="start">P4.4</text><text x="349" y="153" text-anchor="start">P6B.1</text><text x="349" y="129" text-anchor="start">P6B.2</text><text x="456" y="127" text-anchor="middle">P8.1</text><text x="506" y="153" text-anchor="start">P9.1</text><text x="506" y="129" text-anchor="start">P9.2</text><text x="612" y="127" text-anchor="middle">DS.1</text><text x="680" y="153" text-anchor="end">MW.1</text><text x="680" y="129" text-anchor="end">MW.2</text><text x="680" y="105" text-anchor="end">MW.3</text><text x="680" y="81" text-anchor="end">MW.4</text></g>
-    <circle cx="70" cy="310" r="19" fill="none" stroke="#e08a2b" stroke-width="2" opacity="0.4"/>
-    <circle cx="70" cy="310" r="13" fill="#e08a2b"/>
-    <text x="70" y="313.5" font-size="9.5" font-weight="700" fill="#ffffff" text-anchor="middle">GS</text>
-    <rect x="52" y="266" width="36" height="17" rx="8.5" fill="#e08a2b"/>
-    <text x="70" y="278.5" font-size="9.5" font-weight="700" fill="#ffffff" text-anchor="middle">NEXT</text>
-    <circle cx="700" cy="310" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
-    <text x="700" y="313.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">P10</text>
-    <text x="70" y="335" font-size="10.5" fill="var(--color-text-primary)" font-weight="600" text-anchor="middle">SMS</text>
-    <text x="700" y="335" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">Launch</text>
+    <g stroke="#2f9e6b" stroke-width="1.5" stroke-dasharray="2 2"><line x1="138" y1="167" x2="138" y2="70"/><line x1="212" y1="167" x2="212" y2="150"/><line x1="286" y1="167" x2="286" y2="70"/><line x1="582" y1="167" x2="582" y2="102"/><line x1="730" y1="263" x2="730" y2="280"/><line x1="647" y1="263" x2="647" y2="328"/><line x1="397" y1="263" x2="397" y2="280"/><line x1="231" y1="263" x2="231" y2="360"/><line x1="64" y1="263" x2="64" y2="336"/></g>
+    <g fill="#2f9e6b"><circle cx="138" cy="150" r="7"/><circle cx="138" cy="126" r="7"/><circle cx="138" cy="102" r="7"/><circle cx="138" cy="78" r="7"/><circle cx="212" cy="142" r="8"/><circle cx="286" cy="150" r="7"/><circle cx="286" cy="126" r="7"/><circle cx="286" cy="102" r="7"/><circle cx="286" cy="78" r="7"/><circle cx="582" cy="134" r="7"/><circle cx="582" cy="110" r="7"/><circle cx="730" cy="288" r="8"/><circle cx="647" cy="296" r="7"/><circle cx="647" cy="320" r="7"/><circle cx="397" cy="288" r="8"/><circle cx="231" cy="280" r="7"/><circle cx="231" cy="304" r="7"/><circle cx="231" cy="328" r="7"/><circle cx="231" cy="352" r="7"/><circle cx="64" cy="280" r="7"/><circle cx="64" cy="304" r="7"/><circle cx="64" cy="328" r="7"/></g>
+    <g font-size="9.5" font-weight="700" fill="#2f9e6b"><text x="149" y="153" text-anchor="start">P2.1</text><text x="149" y="129" text-anchor="start">P2.2</text><text x="149" y="105" text-anchor="start">P2.3</text><text x="149" y="81" text-anchor="start">P2.4</text><text x="212" y="127" text-anchor="middle">P3.1</text><text x="297" y="153" text-anchor="start">P4.1</text><text x="297" y="129" text-anchor="start">P4.2</text><text x="297" y="105" text-anchor="start">P4.3</text><text x="297" y="81" text-anchor="start">P4.4</text><text x="593" y="137" text-anchor="start">P6B.1</text><text x="593" y="113" text-anchor="start">P6B.2</text><text x="718" y="291" text-anchor="end">P8.1</text><text x="658" y="299" text-anchor="start">P9.1</text><text x="658" y="323" text-anchor="start">P9.2</text><text x="397" y="303" text-anchor="middle">DS.1</text><text x="242" y="283" text-anchor="start">MW.1</text><text x="242" y="307" text-anchor="start">MW.2</text><text x="242" y="331" text-anchor="start">MW.3</text><text x="242" y="355" text-anchor="start">MW.4</text><text x="75" y="283" text-anchor="start">α.1</text><text x="75" y="307" text-anchor="start">α.2</text><text x="75" y="331" text-anchor="start">α.3</text></g>
+    <circle cx="70" cy="410" r="19" fill="none" stroke="#e08a2b" stroke-width="2" opacity="0.4"/>
+    <circle cx="70" cy="410" r="13" fill="#e08a2b"/>
+    <text x="70" y="413.5" font-size="9.5" font-weight="700" fill="#ffffff" text-anchor="middle">UP</text>
+    <rect x="52" y="366" width="36" height="17" rx="8.5" fill="#e08a2b"/>
+    <text x="70" y="378.5" font-size="9.5" font-weight="700" fill="#ffffff" text-anchor="middle">NEXT</text>
+    <circle cx="175" cy="410" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
+    <circle cx="280" cy="410" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
+    <circle cx="385" cy="410" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
+    <circle cx="490" cy="410" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
+    <circle cx="595" cy="410" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
+    <circle cx="700" cy="410" r="13" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/>
+    <text x="175" y="413.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">AQ</text>
+    <text x="280" y="413.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">AU</text>
+    <text x="385" y="413.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">SP</text>
+    <text x="490" y="413.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">AR</text>
+    <text x="595" y="413.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">GS</text>
+    <text x="700" y="413.5" font-size="9" font-weight="700" fill="var(--color-text-secondary)" text-anchor="middle">P10</text>
+    <text x="70" y="435" font-size="10.5" fill="var(--color-text-primary)" font-weight="600" text-anchor="middle">Client picker</text>
+    <text x="175" y="435" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">Allie asks</text>
+    <text x="280" y="435" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">Sign-in</text>
+    <text x="385" y="435" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">SharePoint</text>
+    <text x="490" y="435" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">Reports</text>
+    <text x="595" y="435" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">SMS</text>
+    <text x="700" y="435" font-size="10.5" fill="var(--color-text-secondary)" text-anchor="middle">Beta &amp; Launch</text>
     <g font-size="11" fill="var(--color-text-secondary)">
-    <circle cx="110" cy="388" r="6" fill="#2f9e6b"/><text x="122" y="392">Shipped &amp; live</text>
-    <circle cx="232" cy="388" r="4" fill="#2f9e6b"/><text x="241" y="392">Revision</text>
-    <circle cx="330" cy="388" r="6" fill="#e08a2b"/><text x="342" y="392">Up next</text>
-    <circle cx="420" cy="388" r="6" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/><text x="432" y="392">Ahead</text>
+    <circle cx="110" cy="488" r="6" fill="#2f9e6b"/><text x="122" y="492">Shipped &amp; live</text>
+    <circle cx="232" cy="488" r="4" fill="#2f9e6b"/><text x="241" y="492">Revision</text>
+    <circle cx="330" cy="488" r="6" fill="#e08a2b"/><text x="342" y="492">Up next</text>
+    <circle cx="420" cy="488" r="6" fill="var(--color-background-primary)" stroke="var(--color-border-secondary)" stroke-width="2"/><text x="432" y="492">Ahead</text>
     </g>
-    <line x1="24" y1="410" x2="744" y2="410" stroke="var(--color-border-secondary)" stroke-width="1" stroke-dasharray="4 4"/>
-    <text x="24" y="430" font-size="12" font-weight="700" letter-spacing="0.04em" fill="#9aa0a6">Deferred to Gracie v2.0</text>
+    <line x1="24" y1="510" x2="744" y2="510" stroke="var(--color-border-secondary)" stroke-width="1" stroke-dasharray="4 4"/>
+    <text x="24" y="530" font-size="12" font-weight="700" letter-spacing="0.04em" fill="#9aa0a6">Deferred to Gracie v2.0</text>
     <g fill="var(--color-background-primary)" stroke="#9aa0a6" stroke-width="2" stroke-dasharray="3 2">
-    <circle cx="64" cy="452" r="12"/>
-    <circle cx="730" cy="452" r="12"/>
+    <circle cx="64" cy="552" r="12"/>
+    <circle cx="730" cy="552" r="12"/>
     </g>
     <g font-size="9" font-weight="700" fill="#9aa0a6" text-anchor="middle">
-    <text x="64" y="455.5">n8n</text>
-    <text x="730" y="455.5">GF</text>
+    <text x="64" y="555.5">n8n</text>
+    <text x="730" y="555.5">GF</text>
     </g>
     <g font-size="10" fill="#9aa0a6" text-anchor="middle">
-    <text x="64" y="474">Integrations</text>
-    <text x="730" y="474">Files</text>
+    <text x="64" y="574">Integrations</text>
+    <text x="730" y="574">Files</text>
     </g>
     </svg>
   </div>
@@ -241,15 +263,24 @@
         <tr><td class="code">↳ MW.3</td><td>In-meeting voice commands — &ldquo;Gracie, leave&rdquo; + a timed pause, shipped default-off</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
         <tr><td class="code">↳ MW.4</td><td>Per-meeting <strong>Send Gracie</strong> re-dispatch (re-dispatches to all users on the meeting)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
         <tr><td class="code">DP</td><td>Team-demo push <em>(GA-team feedback · Waves 1+2)</em> — home = Assistant + command-center · calendar rework (work-week / layout swap / collapsible attendees) · screen-share stills inline in the transcript · per-user time zones · task-lifecycle redesign · 6-month video retention · assistant task Q&amp;A + CSV export · in-meeting voice action-item capture · unassigned → domain docs · ghost-meeting guard</td><td><span class="badge b-done">Shipped &amp; live</span></td></tr>
-        <tr><td class="code">GS</td><td>Gracie SMS — two-way text channel (SMS gateway)</td><td><span class="badge b-now">Up next</span></td></tr>
-        <tr><td class="code">P10</td><td>Testing · Security · Launch</td><td><span class="badge b-todo">Not started</span></td></tr>
+        <tr><td class="code">α</td><td><strong>Alpha release — v0.4.0</strong> <em>(2026-09-16 · rolls up everything above, P1 → DP, plus the post-demo wave)</em> — version number + in-app What&rsquo;s New</td><td><span class="badge b-done">Alpha · released 2026-09-16</span></td></tr>
+        <tr><td class="code">↳ α.1</td><td>Post-demo wave — multi-provider AI, per-client Task Board v2 + merge / bulk delete, Outlook contacts import, assistant pin + voice + save-to-Documents, four client tabs (#113–#130)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr><td class="code">↳ α.2</td><td>Pipeline honesty — <strong>Never admitted</strong> status + tab; events marked <strong>Private</strong> in Outlook never recorded or shown (#131, #132)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr><td class="code">↳ α.3</td><td>Sign-in clarity + versioned releases — session-expired prompt, return-to-page, 401s app-wide, operations auth fix (#133); sidebar version badge + What&rsquo;s New, v0.4.0 tagged (#134)</td><td><span class="badge b-done">Revision — shipped</span></td></tr>
+        <tr><td class="code">UP</td><td>Uploads pick a client + <strong>Clients list is the single authority</strong> everywhere <em>(Allie, 9/14)</em></td><td><span class="badge b-now">Up next</span></td></tr>
+        <tr><td class="code">AQ</td><td>Allie&rsquo;s 8/27 asks — <strong>copy</strong> button next to Download · document <strong>preview on the meeting page</strong> · heavier weight on the <strong>post-meeting analysis</strong> prompt</td><td><span class="badge b-todo">Not started</span></td></tr>
+        <tr><td class="code">AU</td><td>Sign-in reliability — persist refreshed Logto tokens so sessions stop going stale after refresh-token rotation (~10 days)</td><td><span class="badge b-todo">Not started</span></td></tr>
+        <tr><td class="code">SP</td><td>SharePoint <strong>parallel sync</strong> — frequent delta sync of a dedicated &ldquo;Gracie&rdquo; SharePoint folder into Documents <em>(runs alongside SharePoint, not a replacement)</em></td><td><span class="badge b-todo">Not started</span></td></tr>
+        <tr><td class="code">AR</td><td>Activity reports — spoken notes build a running per-client log; month-end report from a user template</td><td><span class="badge b-todo">Not started</span></td></tr>
+        <tr><td class="code">GS</td><td>Gracie SMS — two-way text channel (SMS gateway)</td><td><span class="badge b-todo">Not started</span></td></tr>
+        <tr><td class="code">P10</td><td>Testing · Security · <strong>Beta → Launch</strong></td><td><span class="badge b-todo">Not started</span></td></tr>
       </tbody>
     </table>
-    <p style="font-size:13px;color:var(--color-text-secondary);margin:14px 0 0;">Already <strong>live in production</strong> at <code>gracie.graceandassociates.com</code> with Microsoft SSO — remaining phases add to a running product. Bot auto-join kill-switch is deliberately <strong>OFF</strong> (taking bots live is a separate explicit decision).</p>
+    <p style="font-size:13px;color:var(--color-text-secondary);margin:14px 0 0;">Live in production at <code>gracie.graceandassociates.com</code> with Microsoft SSO. <strong>Alpha v0.4.0</strong> (2026-09-16) rolls up every package above. Bot auto-join is <strong>ON</strong> — Gracie joins every meeting with a Teams link; meetings she isn&rsquo;t admitted to show as <strong>Never admitted</strong>, and events marked Private in Outlook are skipped.</p>
   </div>
 
   <div class="card">
-    <h2>Build log — every shipped increment (P1 → DP · Jun–Aug 2026)</h2>
+    <h2>Build log — every shipped increment (P1 → Alpha v0.4.0 · Jun–Sep 2026)</h2>
     <table>
       <thead><tr><th>PR</th><th>Step</th><th>What shipped</th></tr></thead>
       <tbody>
@@ -318,21 +349,44 @@
         <tr><td class="code">#109</td><td>DP</td><td><strong>In-meeting voice action-item capture</strong> — say &ldquo;action item&rdquo; in the call and it&rsquo;s captured as a task, shipped <strong>default-off</strong>.</td></tr>
         <tr><td class="code">#110</td><td>DP</td><td><strong>Unassigned meetings → domain docs</strong> — an unassigned meeting&rsquo;s output routes into a <strong>domain-named document area</strong> until an org is created.</td></tr>
         <tr><td class="code">#111</td><td>DP</td><td><strong>Ghost-meeting guard</strong> — an <strong>attendance gate</strong> plus an ignore list stop no-show / ghost meetings from being treated as recorded.</td></tr>
+        <tr><td class="code">#113</td><td>α</td><td><strong>Calendar connections → Settings → Users</strong>.</td></tr>
+        <tr><td class="code">#114</td><td>α</td><td><strong>Attendance-gate hotfix</strong> — reads real participant events and fails open when empty.</td></tr>
+        <tr><td class="code">#115</td><td>α</td><td><strong>Multi-provider AI</strong> via the Vercel AI SDK — provider / model / key picker (OpenAI default).</td></tr>
+        <tr><td class="code">#116</td><td>α</td><td><strong>Four client tabs</strong> — Clients / Partners / Past clients / Prospective.</td></tr>
+        <tr><td class="code">#117</td><td>α</td><td>Documents — <strong>client folder auto-created</strong> on add; explicit <strong>Submit</strong> on upload.</td></tr>
+        <tr><td class="code">#118</td><td>α</td><td>Nav / home cleanup — dropped Overview / Assistant / Daily-Sync nav items; home briefs scroll.</td></tr>
+        <tr><td class="code">#119</td><td>α</td><td>Calendar — reclaimed dead space; combined cadence / needs-client bar; scrolling agenda.</td></tr>
+        <tr><td class="code">#120</td><td>α</td><td><strong>All AI-SDK providers</strong> + free-text models + Ollama + custom OpenAI-compatible provider.</td></tr>
+        <tr><td class="code">#121</td><td>α</td><td><strong>Outlook / Office 365 contacts import</strong> via MS Graph (admin-triggered, deduped).</td></tr>
+        <tr><td class="code">#122</td><td>α</td><td>Task Board <strong>visibility toggle</strong> — admin-only until revealed.</td></tr>
+        <tr><td class="code">#123</td><td>α</td><td>Task Board <strong>merge</strong> + <strong>mass-delete</strong>.</td></tr>
+        <tr><td class="code">#124</td><td>α</td><td>Documents layout — wider folder panel, smaller list, bigger preview.</td></tr>
+        <tr><td class="code">#125</td><td>α</td><td>Uploads — <strong>client-side image compression</strong> under the edge proxy body limit.</td></tr>
+        <tr><td class="code">#126</td><td>α</td><td>Assistant — <strong>pin chats</strong> + <strong>voice-to-text</strong> input.</td></tr>
+        <tr><td class="code">#127</td><td>α</td><td><strong>Per-client, last-meeting Task Board</strong> (Allie&rsquo;s Aug-21 vision).</td></tr>
+        <tr><td class="code">#128</td><td>α</td><td>Outlook import <strong>opt-in allow-list</strong> (admin roster + self-serve in My Settings).</td></tr>
+        <tr><td class="code">#129</td><td>α</td><td><strong>PostHog</strong> product analytics (client-side, privacy-first).</td></tr>
+        <tr><td class="code">#130</td><td>α</td><td>Assistant <strong>create_document</strong> — save chat output straight into Documents.</td></tr>
+        <tr><td class="code">#131</td><td>α.2</td><td><strong>Never admitted</strong> pipeline status + tab — 68 stuck meetings were bots left in the waiting room, not pipeline failures; no doomed Re-run button.</td></tr>
+        <tr><td class="code">#132</td><td>α.2</td><td>Events marked <strong>Private</strong> in Outlook are never ingested — hidden from Gracie and never recorded (Private flag only, no title keywords).</td></tr>
+        <tr><td class="code">#133</td><td>α.3</td><td><strong>Session-expired prompt</strong> + return-to-page; <strong>401s on all routes</strong>; the client operations endpoint now requires sign-in.</td></tr>
+        <tr><td class="code">#134</td><td>α.3</td><td><strong>Version number + What&rsquo;s New</strong> — sidebar badge, in-app changelog; <strong>v0.4.0 Alpha</strong> tagged and released.</td></tr>
       </tbody>
     </table>
-    <p style="font-size:13px;color:var(--color-text-secondary);margin:12px 0 0;">The complete record of every merged PR from foundation through the team-demo push (Waves 1+2). Revisions <strong>P2.1–P2.4 / P3.1 / P4.1–P4.4 / P6B.1 / P6B.2 / P8.1 / P9.1 / P9.2 / DS.1 / MW.1–MW.4</strong> also appear as their own nodes on the timeline above. (Roadmap-tooling chores #23/#24/#34/#36 and doc snapshots #96/#100/#101 omitted.)</p>
+    <p style="font-size:13px;color:var(--color-text-secondary);margin:12px 0 0;">The complete record of every merged PR from foundation through <strong>Alpha v0.4.0</strong>. Revisions <strong>P2.1–P2.4 / P3.1 / P4.1–P4.4 / P6B.1 / P6B.2 / P8.1 / P9.1 / P9.2 / DS.1 / MW.1–MW.4 / α.1–α.3</strong> also appear as their own nodes on the timeline above. (Roadmap-tooling chores #23/#24/#34/#36 and doc snapshots #96/#100/#101/#112 omitted.) Release notes: <a href="https://github.com/RelentNet/gracie/releases/tag/v0.4.0">v0.4.0</a>.</p>
   </div>
 
   <div class="card">
-    <h2>Up next — Gracie SMS (two-way text)</h2>
-    <p style="margin:0 0 6px;"><strong style="color:var(--now)">Gracie SMS</strong> — a <strong>two-way text channel</strong> over an SMS gateway: staff text Gracie and get replies / alerts by SMS, outside the web app.</p>
-    <p style="margin:0;font-size:13.5px;color:var(--color-text-secondary);">The <strong>team-demo push</strong> (Waves 1+2) shipped in full — <strong>Gracie SMS</strong> is next, then <strong>P10</strong> testing / security / launch. <em>(Gracie Files + n8n remain deferred to v2.0.)</em></p>
+    <h2>Up next — uploads pick a client + one client list</h2>
+    <p style="margin:0 0 6px;"><strong style="color:var(--now)">UP · Client picker + client authority</strong> — every upload requires choosing a client from the current Clients list, and every other client list in Gracie derives from that one list <em>(Allie, 9/14)</em>.</p>
+    <p style="margin:0 0 6px;"><strong>AQ · Allie&rsquo;s asks</strong> — copy button beside Download, document preview on the meeting page, and a heavier post-meeting-analysis prompt.</p>
+    <p style="margin:0;font-size:13.5px;color:var(--color-text-secondary);"><strong>Alpha v0.4.0</strong> shipped 2026-09-16. Releases are now numbered and planned (nightly, one at a time) so any regression traces to a single version.</p>
   </div>
 
   <div class="card">
     <h2>Critical path from here</h2>
-    <p class="path"><b>Gracie SMS</b> → <b>P10 testing / security</b> → <b>Launch</b></p>
-    <p style="font-size:13.5px;color:var(--color-text-secondary);margin:6px 0 0;">The <strong>team-demo push</strong> shipped — next is <strong>Gracie SMS</strong> (two-way text), then <strong>P10</strong> testing / security / launch. Gracie Files + n8n deferred to v2.0.</p>
+    <p class="path"><b>Client picker + client authority</b> → <b>Allie&rsquo;s asks</b> → <b>Sign-in reliability</b> → <b>SharePoint sync</b> → <b>Activity reports</b> → <b>Gracie SMS</b> → <b>Beta → P10 Launch</b></p>
+    <p style="font-size:13.5px;color:var(--color-text-secondary);margin:6px 0 0;">Alpha is complete. The biggest non-code lever is <strong>getting Gracie admitted</strong> to meetings (Teams auto-admit / team habit) — until then those meetings land in <em>Never admitted</em>.</p>
   </div>
 
   <div class="card">
@@ -347,12 +401,15 @@
   <div class="card">
     <h2>Open follow-ups (non-blocking)</h2>
     <ul>
+      <li><strong>Admit Gracie</strong> — enable Teams auto-admit or make it a team habit; 68 meetings so far were lost in the waiting room (incl. client calls).</li>
+      <li>⚠️ <strong>Repo is public again</strong> (to unblock Coolify) — no secrets found, but infra IPs + client names are exposed. Recommend private + a read-only deploy key.</li>
+      <li>Calendar scan covers only <strong>3 calendars</strong> (Cynthia / Allie / Daniel) — add staff to the Outlook calendar group if their own meetings should record.</li>
       <li><strong>Task follow-on</strong> — the redesigned task lifecycle (#106) still needs sync-transcript <strong>closing</strong> + a <strong>consolidation</strong> prompt (auto-close tasks resolved in a later meeting, and de-duplicate/consolidate related tasks).</li>
       <li>⚠️ Firewall or remove the public SearXNG <code>…sslip.io</code> domain (keyless + limiter-off on the box's public IP).</li>
       <li>Rotate the temp Resend API key at hardening; move it into encrypted credentials.</li>
       <li>Calendar page (<code>page.tsx</code>, ~1.5k lines) — structural cleanup into components/hooks.</li>
       <li>Chat retrieval: embeddings for documents in <strong>restricted folders</strong> still bypass the folder gate <em>(deletion now clears them — #47 — but visibility does not)</em>.</li>
-      <li>Document-move endpoint isn't transaction-safe; session-less API returns 500 instead of 401.</li>
+      <li>Document-move endpoint isn&rsquo;t transaction-safe. <em>(Session-less 500 → 401 fixed in #133.)</em></li>
       <li>NPM <code>proxy_buffering off</code> for live chat streaming; back up <code>docs/SECRETS.md</code> + track the MS Graph secret's 24-month expiry.</li>
       <li>Deleting a file revokes <strong>new</strong> access only — an already-issued presigned URL keeps serving the object for the rest of its 15-min window (MinIO validates the signature, not our DB). Closing it means proxying downloads instead of presigning.</li>
       <li>Documents <strong>mark-reviewed</strong> (brief exists).</li>
@@ -369,13 +426,14 @@
   "meta": {
     "title": "GA App — Build Roadmap",
     "svgTitle": "GA App — build roadmap",
-    "snapshot": "2026-08-06",
-    "progress": 95,
-    "subtitle": "Codename <code>gracie<\/code> · snapshot 2026-08-06 · <strong>18 phases shipped &amp; live<\/strong> <em>(+ 19 in-place revisions across P2 / P3 / P4 / P6B / P8 / P9 / DS / MW)<\/em> · <span style=\"color:var(--now)\">Gracie SMS up next<\/span> · then <span style=\"color:var(--ahead)\">P10 Launch<\/span> · Gracie Files + n8n deferred to v2.0",
-    "svgSubtitle": "18 shipped & live · full build log below · Gracie SMS up next",
-    "desc": "Eighteen build packages shipped and live, plus nineteen in-place revisions shown as their own nodes: P1 Foundation; P2 Clients and Files (P2.1 editable tabs, P2.2 documents management, P2.3 documents overhaul, P2.4 client logos and Meetings tab); P3 Tasks (P3.1 Task Board and wired actions); P4 Calendar (P4.1 meetings-first, P4.2 on-demand join, P4.3 meeting-occurrence page, P4.4 Week view); P5a Ingest; P5b Generation; P6 Intelligence; P6B Assistant (P6B.1 company-aware, P6B.2 web access); P7 Briefs Daily Sync and Notifications; CO Contacts and Org Charts; P8 Automations (P8.1 shorter intervals and meeting triggers); P9 Settings Admin and Scoring (P9.1 pipeline fleet view, P9.2 pipeline self-heal); RL Responsive and Mobile; PE Editable Generation Prompts; DS Editable Daily-Sync template (DS.1 email v2); UX Platform theme and shell (indigo/glass redesign, light/dark toggle, grouped sidebar, command-center, dark-mode logo); MW Meeting workspace (recorded video, click-to-seek and live transcript, MW.1 record every meeting, MW.2 in-meeting bot controls, MW.3 voice commands, MW.4 Send-Gracie re-dispatch); and DP the team-demo push (home = assistant plus command-center, calendar rework, screen-share stills in the transcript, per-user time zones, task-lifecycle redesign, six-month video retention, assistant task Q&A and CSV export, in-meeting voice action-item capture, unassigned meetings to a domain-named document area, ghost-meeting guard). Up next: Gracie SMS, a two-way text channel. Then P10 Launch. Deferred to version 2.0: Gracie Files and n8n. Live in production with Microsoft SSO.",
+    "snapshot": "2026-09-16",
+    "progress": 88,
+    "subtitle": "Codename <code>gracie<\/code> · snapshot 2026-09-16 · <strong>Alpha v0.4.0 released<\/strong> — <strong>19 build packages shipped &amp; live<\/strong> <em>(+ 22 in-place revisions)<\/em> rolled up as the Alpha release · <span style=\"color:var(--now)\">upload client picker + single client list up next<\/span> · then <span style=\"color:var(--ahead)\">Beta → P10 Launch<\/span> · Gracie Files + n8n deferred to v2.0",
+    "svgSubtitle": "Alpha v0.4.0 · 19 shipped & live · client picker + client list up next",
+    "desc": "Alpha release v0.4.0, 2026-09-16. Everything built so far is shipped and live, rolled up as the Alpha release: P1 Foundation; P2 Clients and Files; P3 Tasks; P4 Calendar; P5a Ingest; P5b Generation; P6 Intelligence; P6B Assistant; P7 Briefs, Daily Sync and Notifications; CO Contacts and Org Charts; P8 Automations; P9 Settings, Admin and Scoring; RL Responsive and Mobile; PE Editable Generation Prompts; DS Editable Daily-Sync template; UX Platform theme and shell; MW Meeting workspace; DP the team-demo push; and the Alpha node itself with three revisions: the post-demo wave, the Never-admitted pipeline status and Private-event skip, and sign-in fixes plus versioned releases with an in-app What's New. Up next: uploads pick a client and the Clients list becomes the single authority. Then Allie's asks, sign-in reliability, SharePoint parallel sync, activity reports, Gracie SMS, and Beta to P10 launch. Deferred to version 2.0: Gracie Files and n8n.",
     "chips": [
       "● Live in production — gracie.graceandassociates.com",
+      "α Alpha v0.4.0 — versioned releases + in-app What&rsquo;s New",
       "✓ Microsoft SSO",
       "✓ Auto meeting pipeline (Calendar)",
       "✓ Meeting workspace — video · transcript · bot controls",
@@ -386,7 +444,8 @@
       "✓ Settings · Admin · Scoring",
       "✓ Responsive &amp; mobile",
       "✓ Light / dark platform theme",
-      "✓ Editable AI prompts &amp; daily-sync"
+      "✓ Editable AI prompts &amp; daily-sync",
+      "✓ Pipeline: Never-admitted status · Private events skipped"
     ],
     "footer": "Generated by the roadmap skill · source of truth: <code>docs/09-build-phases.md<\/code> + <code>docs/plan/<\/code> + auto-memory"
   },
@@ -620,25 +679,86 @@
       "revisions": []
     },
     {
-      "code": "GS",
-      "short": "SMS",
-      "label": "Gracie SMS — two-way text channel (SMS gateway)",
+      "code": "α",
+      "short": "Alpha v0.4.0",
+      "status": "shipped",
+      "label": "<strong>Alpha release — v0.4.0<\/strong> <em>(2026-09-16 · rolls up everything above, P1 → DP, plus the post-demo wave)<\/em> — version number + in-app What&rsquo;s New",
+      "statusLabel": "Alpha · released 2026-09-16",
+      "revisions": [
+        {
+          "code": "α.1",
+          "label": "Post-demo wave — multi-provider AI, per-client Task Board v2 + merge / bulk delete, Outlook contacts import, assistant pin + voice + save-to-Documents, four client tabs (#113–#130)"
+        },
+        {
+          "code": "α.2",
+          "label": "Pipeline honesty — <strong>Never admitted<\/strong> status + tab; events marked <strong>Private<\/strong> in Outlook never recorded or shown (#131, #132)"
+        },
+        {
+          "code": "α.3",
+          "label": "Sign-in clarity + versioned releases — session-expired prompt, return-to-page, 401s app-wide, operations auth fix (#133); sidebar version badge + What&rsquo;s New, v0.4.0 tagged (#134)"
+        }
+      ]
+    },
+    {
+      "code": "UP",
+      "short": "Client picker",
       "status": "next",
       "statusLabel": "Up next",
+      "label": "Uploads pick a client + <strong>Clients list is the single authority<\/strong> everywhere <em>(Allie, 9/14)<\/em>",
+      "revisions": []
+    },
+    {
+      "code": "AQ",
+      "short": "Allie asks",
+      "status": "ahead",
+      "statusLabel": "Not started",
+      "label": "Allie&rsquo;s 8/27 asks — <strong>copy<\/strong> button next to Download · document <strong>preview on the meeting page<\/strong> · heavier weight on the <strong>post-meeting analysis<\/strong> prompt",
+      "revisions": []
+    },
+    {
+      "code": "AU",
+      "short": "Sign-in",
+      "status": "ahead",
+      "statusLabel": "Not started",
+      "label": "Sign-in reliability — persist refreshed Logto tokens so sessions stop going stale after refresh-token rotation (~10 days)",
+      "revisions": []
+    },
+    {
+      "code": "SP",
+      "short": "SharePoint",
+      "status": "ahead",
+      "statusLabel": "Not started",
+      "label": "SharePoint <strong>parallel sync<\/strong> — frequent delta sync of a dedicated &ldquo;Gracie&rdquo; SharePoint folder into Documents <em>(runs alongside SharePoint, not a replacement)<\/em>",
+      "revisions": []
+    },
+    {
+      "code": "AR",
+      "short": "Reports",
+      "status": "ahead",
+      "statusLabel": "Not started",
+      "label": "Activity reports — spoken notes build a running per-client log; month-end report from a user template",
+      "revisions": []
+    },
+    {
+      "code": "GS",
+      "short": "SMS",
+      "status": "ahead",
+      "statusLabel": "Not started",
+      "label": "Gracie SMS — two-way text channel (SMS gateway)",
       "revisions": []
     },
     {
       "code": "P10",
-      "short": "Launch",
-      "label": "Testing · Security · Launch",
+      "short": "Beta & Launch",
       "status": "ahead",
       "statusLabel": "Not started",
+      "label": "Testing · Security · <strong>Beta → Launch<\/strong>",
       "revisions": []
     }
   ],
-  "tableNote": "Already <strong>live in production<\/strong> at <code>gracie.graceandassociates.com<\/code> with Microsoft SSO — remaining phases add to a running product. Bot auto-join kill-switch is deliberately <strong>OFF<\/strong> (taking bots live is a separate explicit decision).",
+  "tableNote": "Live in production at <code>gracie.graceandassociates.com<\/code> with Microsoft SSO. <strong>Alpha v0.4.0<\/strong> (2026-09-16) rolls up every package above. Bot auto-join is <strong>ON<\/strong> — Gracie joins every meeting with a Teams link; meetings she isn&rsquo;t admitted to show as <strong>Never admitted<\/strong>, and events marked Private in Outlook are skipped.",
   "buildLog": {
-    "title": "Build log — every shipped increment (P1 → DP · Jun–Aug 2026)",
+    "title": "Build log — every shipped increment (P1 → Alpha v0.4.0 · Jun–Sep 2026)",
     "rows": [
       {
         "pr": "init",
@@ -964,43 +1084,171 @@
         "pr": "#111",
         "step": "DP",
         "what": "<strong>Ghost-meeting guard<\/strong> — an <strong>attendance gate<\/strong> plus an ignore list stop no-show / ghost meetings from being treated as recorded."
+      },
+      {
+        "pr": "#113",
+        "step": "α",
+        "what": "<strong>Calendar connections → Settings → Users<\/strong>."
+      },
+      {
+        "pr": "#114",
+        "step": "α",
+        "what": "<strong>Attendance-gate hotfix<\/strong> — reads real participant events and fails open when empty."
+      },
+      {
+        "pr": "#115",
+        "step": "α",
+        "what": "<strong>Multi-provider AI<\/strong> via the Vercel AI SDK — provider / model / key picker (OpenAI default)."
+      },
+      {
+        "pr": "#116",
+        "step": "α",
+        "what": "<strong>Four client tabs<\/strong> — Clients / Partners / Past clients / Prospective."
+      },
+      {
+        "pr": "#117",
+        "step": "α",
+        "what": "Documents — <strong>client folder auto-created<\/strong> on add; explicit <strong>Submit<\/strong> on upload."
+      },
+      {
+        "pr": "#118",
+        "step": "α",
+        "what": "Nav / home cleanup — dropped Overview / Assistant / Daily-Sync nav items; home briefs scroll."
+      },
+      {
+        "pr": "#119",
+        "step": "α",
+        "what": "Calendar — reclaimed dead space; combined cadence / needs-client bar; scrolling agenda."
+      },
+      {
+        "pr": "#120",
+        "step": "α",
+        "what": "<strong>All AI-SDK providers<\/strong> + free-text models + Ollama + custom OpenAI-compatible provider."
+      },
+      {
+        "pr": "#121",
+        "step": "α",
+        "what": "<strong>Outlook / Office 365 contacts import<\/strong> via MS Graph (admin-triggered, deduped)."
+      },
+      {
+        "pr": "#122",
+        "step": "α",
+        "what": "Task Board <strong>visibility toggle<\/strong> — admin-only until revealed."
+      },
+      {
+        "pr": "#123",
+        "step": "α",
+        "what": "Task Board <strong>merge<\/strong> + <strong>mass-delete<\/strong>."
+      },
+      {
+        "pr": "#124",
+        "step": "α",
+        "what": "Documents layout — wider folder panel, smaller list, bigger preview."
+      },
+      {
+        "pr": "#125",
+        "step": "α",
+        "what": "Uploads — <strong>client-side image compression<\/strong> under the edge proxy body limit."
+      },
+      {
+        "pr": "#126",
+        "step": "α",
+        "what": "Assistant — <strong>pin chats<\/strong> + <strong>voice-to-text<\/strong> input."
+      },
+      {
+        "pr": "#127",
+        "step": "α",
+        "what": "<strong>Per-client, last-meeting Task Board<\/strong> (Allie&rsquo;s Aug-21 vision)."
+      },
+      {
+        "pr": "#128",
+        "step": "α",
+        "what": "Outlook import <strong>opt-in allow-list<\/strong> (admin roster + self-serve in My Settings)."
+      },
+      {
+        "pr": "#129",
+        "step": "α",
+        "what": "<strong>PostHog<\/strong> product analytics (client-side, privacy-first)."
+      },
+      {
+        "pr": "#130",
+        "step": "α",
+        "what": "Assistant <strong>create_document<\/strong> — save chat output straight into Documents."
+      },
+      {
+        "pr": "#131",
+        "step": "α.2",
+        "what": "<strong>Never admitted<\/strong> pipeline status + tab — 68 stuck meetings were bots left in the waiting room, not pipeline failures; no doomed Re-run button."
+      },
+      {
+        "pr": "#132",
+        "step": "α.2",
+        "what": "Events marked <strong>Private<\/strong> in Outlook are never ingested — hidden from Gracie and never recorded (Private flag only, no title keywords)."
+      },
+      {
+        "pr": "#133",
+        "step": "α.3",
+        "what": "<strong>Session-expired prompt<\/strong> + return-to-page; <strong>401s on all routes<\/strong>; the client operations endpoint now requires sign-in."
+      },
+      {
+        "pr": "#134",
+        "step": "α.3",
+        "what": "<strong>Version number + What&rsquo;s New<\/strong> — sidebar badge, in-app changelog; <strong>v0.4.0 Alpha<\/strong> tagged and released."
       }
     ],
-    "note": "The complete record of every merged PR from foundation through the team-demo push (Waves 1+2). Revisions <strong>P2.1–P2.4 / P3.1 / P4.1–P4.4 / P6B.1 / P6B.2 / P8.1 / P9.1 / P9.2 / DS.1 / MW.1–MW.4<\/strong> also appear as their own nodes on the timeline above. (Roadmap-tooling chores #23/#24/#34/#36 and doc snapshots #96/#100/#101 omitted.)"
+    "note": "The complete record of every merged PR from foundation through <strong>Alpha v0.4.0<\/strong>. Revisions <strong>P2.1–P2.4 / P3.1 / P4.1–P4.4 / P6B.1 / P6B.2 / P8.1 / P9.1 / P9.2 / DS.1 / MW.1–MW.4 / α.1–α.3<\/strong> also appear as their own nodes on the timeline above. (Roadmap-tooling chores #23/#24/#34/#36 and doc snapshots #96/#100/#101/#112 omitted.) Release notes: <a href=\"https://github.com/RelentNet/gracie/releases/tag/v0.4.0\">v0.4.0<\/a>."
   },
   "addons": {
-    "title": "Up next — Gracie SMS (two-way text)",
+    "title": "Up next — uploads pick a client + one client list",
     "items": [
       {
-        "html": "<strong style=\"color:var(--now)\">Gracie SMS<\/strong> — a <strong>two-way text channel<\/strong> over an SMS gateway: staff text Gracie and get replies / alerts by SMS, outside the web app."
+        "html": "<strong style=\"color:var(--now)\">UP · Client picker + client authority<\/strong> — every upload requires choosing a client from the current Clients list, and every other client list in Gracie derives from that one list <em>(Allie, 9/14)<\/em>."
+      },
+      {
+        "html": "<strong>AQ · Allie&rsquo;s asks<\/strong> — copy button beside Download, document preview on the meeting page, and a heavier post-meeting-analysis prompt."
       }
     ],
-    "note": "The <strong>team-demo push<\/strong> (Waves 1+2) shipped in full — <strong>Gracie SMS<\/strong> is next, then <strong>P10<\/strong> testing / security / launch. <em>(Gracie Files + n8n remain deferred to v2.0.)<\/em>"
+    "note": "<strong>Alpha v0.4.0<\/strong> shipped 2026-09-16. Releases are now numbered and planned (nightly, one at a time) so any regression traces to a single version."
   },
   "criticalPath": {
     "title": "Critical path from here",
     "steps": [
       {
+        "label": "Client picker + client authority"
+      },
+      {
+        "label": "Allie&rsquo;s asks"
+      },
+      {
+        "label": "Sign-in reliability"
+      },
+      {
+        "label": "SharePoint sync"
+      },
+      {
+        "label": "Activity reports"
+      },
+      {
         "label": "Gracie SMS"
       },
       {
-        "label": "P10 testing / security"
-      },
-      {
-        "label": "Launch"
+        "label": "Beta → P10 Launch"
       }
     ],
-    "note": "The <strong>team-demo push<\/strong> shipped — next is <strong>Gracie SMS<\/strong> (two-way text), then <strong>P10<\/strong> testing / security / launch. Gracie Files + n8n deferred to v2.0."
+    "note": "Alpha is complete. The biggest non-code lever is <strong>getting Gracie admitted<\/strong> to meetings (Teams auto-admit / team habit) — until then those meetings land in <em>Never admitted<\/em>."
   },
   "followUps": {
     "title": "Open follow-ups (non-blocking)",
     "items": [
+      "<strong>Admit Gracie<\/strong> — enable Teams auto-admit or make it a team habit; 68 meetings so far were lost in the waiting room (incl. client calls).",
+      "⚠️ <strong>Repo is public again<\/strong> (to unblock Coolify) — no secrets found, but infra IPs + client names are exposed. Recommend private + a read-only deploy key.",
+      "Calendar scan covers only <strong>3 calendars<\/strong> (Cynthia / Allie / Daniel) — add staff to the Outlook calendar group if their own meetings should record.",
       "<strong>Task follow-on<\/strong> — the redesigned task lifecycle (#106) still needs sync-transcript <strong>closing<\/strong> + a <strong>consolidation<\/strong> prompt (auto-close tasks resolved in a later meeting, and de-duplicate/consolidate related tasks).",
       "⚠️ Firewall or remove the public SearXNG <code>…sslip.io<\/code> domain (keyless + limiter-off on the box's public IP).",
       "Rotate the temp Resend API key at hardening; move it into encrypted credentials.",
       "Calendar page (<code>page.tsx<\/code>, ~1.5k lines) — structural cleanup into components/hooks.",
       "Chat retrieval: embeddings for documents in <strong>restricted folders<\/strong> still bypass the folder gate <em>(deletion now clears them — #47 — but visibility does not)<\/em>.",
-      "Document-move endpoint isn't transaction-safe; session-less API returns 500 instead of 401.",
+      "Document-move endpoint isn&rsquo;t transaction-safe. <em>(Session-less 500 → 401 fixed in #133.)<\/em>",
       "NPM <code>proxy_buffering off<\/code> for live chat streaming; back up <code>docs/SECRETS.md<\/code> + track the MS Graph secret's 24-month expiry.",
       "Deleting a file revokes <strong>new<\/strong> access only — an already-issued presigned URL keeps serving the object for the rest of its 15-min window (MinIO validates the signature, not our DB). Closing it means proxying downloads instead of presigning.",
       "Documents <strong>mark-reviewed<\/strong> (brief exists).",
