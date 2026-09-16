@@ -12,6 +12,7 @@ import { canSeeTaskBoard } from '@/lib/client-display';
 import { NAV_GROUPS } from '@/lib/navigation';
 import { TYPE } from '@/lib/typography';
 import { ClientAvatar } from '@/components/ClientAvatar';
+import { VersionBadge } from '@/components/VersionBadge';
 import { useNavCollapse } from '@/components/ui/nav-collapse';
 
 /**
@@ -298,6 +299,8 @@ export function Sidebar(): React.JSX.Element {
             <LogOut aria-hidden="true" size={16} className="shrink-0" />
             <span className={labelHidden}>Sign Out</span>
           </a>
+          {/* Running version → What's New (dot until the latest release is seen). */}
+          <VersionBadge collapsed={collapsed} />
         </div>
       </nav>
     </>
