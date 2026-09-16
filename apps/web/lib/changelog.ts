@@ -31,6 +31,22 @@ export interface Release {
 /** Newest first. */
 export const CHANGELOG: readonly Release[] = [
   {
+    version: '0.4.1',
+    date: '2026-09-16',
+    title: 'Alpha roadmap + a sign-in fix',
+    stage: 'Alpha',
+    sections: [
+      {
+        heading: 'Improved',
+        items: ['The roadmap in Settings now shows the Alpha release and what’s coming next.'],
+      },
+      {
+        heading: 'Fixed',
+        items: ['The What’s New page now requires you to be signed in, like the rest of Gracie.'],
+      },
+    ],
+  },
+  {
     version: '0.4.0',
     date: '2026-09-16',
     title: 'Alpha — Gracie runs your meetings end to end',
