@@ -31,6 +31,9 @@ import {
 } from '@gracie/db';
 import type { Database, ServerClient } from '@gracie/db';
 import {
+  AI_FAILURE_HEADLINE,
+  AI_FAILURE_TITLE,
+  classifyAiFailure,
   EMBEDDING_DIMENSIONS,
   deriveInitialsFromName,
   deriveOrgNameFromDomain,
@@ -1404,6 +1407,10 @@ async function notifyAttendees(
  * On the final failed attempt: flag the meeting, write a failed `pipeline_runs`
  * row, raise a `pipeline_failed` in-app notification to the meeting lead (else
  * attendees), and email the Admins (allowlist-gated, best-effort) — P7 §5.
+ *
+ * AI-provider failures staff can't fix with Re-run (out of credits, rejected
+ * key) get a plain-language title/body naming the fix. An out-of-credits outage
+ * fails EVERY meeting, so its admin email goes out at most once an hour.
  */
 async function markRunFailed(
   db: ServerClient,
@@ -1426,6 +1433,14 @@ async function markRunFailed(
     error_message: message.slice(0, 1000),
   });
 
+  const aiFailure = classifyAiFailure(message);
+  const titleFor = (label: string): string =>
+    aiFailure !== null ? `${AI_FAILURE_TITLE[aiFailure]} — notes for ${label} are waiting` : `Generation failed for ${label}`;
+  const plainBody =
+    aiFailure !== null
+      ? AI_FAILURE_HEADLINE[aiFailure]
+      : 'The meeting pipeline failed after retries. Review or re-run it from the Pipeline.';
+
   // Alert: in-app to the relevant user(s) + email to admins.
   const { data: meeting } = await db
     .from('meetings')
@@ -1442,15 +1457,38 @@ async function markRunFailed(
     const rows: NotificationInsert[] = recipients.map((userId) => ({
       user_id: userId,
       type: 'pipeline_failed',
-      title: `Generation failed for ${label}`,
-      body: 'The meeting pipeline failed after retries. Review or re-run it from the Pipeline.',
+      title: titleFor(label),
+      body: plainBody,
       link,
     }));
     const { error } = await db.from('notifications').insert(rows);
     if (error !== null) log.warn({ err: error.message }, 'generate: could not insert pipeline_failed notification');
   }
+  if (aiFailure === 'out_of_credits' && (await creditOutageAlreadyEmailed(db, meetingId))) {
+    log.warn({ meetingId }, 'generate: AI account out of credits — admin already emailed this hour');
+    return;
+  }
   await emailAdminsForAlert(
-    { type: 'pipeline_failed', title: `Generation failed for ${label}`, body: message.slice(0, 300), link },
+    {
+      type: 'pipeline_failed',
+      title: titleFor(label),
+      body: aiFailure !== null ? `${plainBody}\n\nDetails: ${message.slice(0, 300)}` : message.slice(0, 300),
+      link: aiFailure !== null ? '/pipeline' : link,
+    },
     { logger: log, db },
   );
+}
+
+/** Did ANOTHER meeting already fail for lack of AI credits in the last hour (so admins were emailed)? */
+async function creditOutageAlreadyEmailed(db: ServerClient, meetingId: string): Promise<boolean> {
+  const since = new Date(Date.now() - 60 * 60_000).toISOString();
+  const { data, error } = await db
+    .from('pipeline_runs')
+    .select('error_message')
+    .eq('status', 'failed')
+    .neq('meeting_id', meetingId)
+    .gte('created_at', since)
+    .limit(50);
+  if (error !== null) return false; // unsure → send the email
+  return (data ?? []).some((r) => classifyAiFailure(r.error_message) === 'out_of_credits');
 }

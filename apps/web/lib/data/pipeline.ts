@@ -10,6 +10,7 @@ import 'server-only';
 
 import { getCredential, getServerClient } from '@gracie/db';
 import type { PipelineStatus } from '@gracie/shared';
+import { classifyAiFailure } from '@gracie/shared/constants';
 import { classifyRecallRecoverability, type RecallRecoveryState } from '@gracie/shared/recall';
 
 import {
@@ -185,6 +186,9 @@ export async function listPipelineFleet(
   const withRecovery = allRows.map((r): FleetRowView => {
     const rec = r.botJobId !== null ? recoveryByBot.get(r.botJobId) : undefined;
     if (rec === undefined) return r;
+    // An AI-account failure keeps its own headline (it names the admin fix); the
+    // recording is fine, so the recovery button still applies once that's done.
+    if (classifyAiFailure(r.reason.detail) !== null) return { ...r, recovery: rec.state };
     return { ...r, recovery: rec.state, reason: describeRecovery(rec.state, rec.detail) };
   });
 

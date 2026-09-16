@@ -5,6 +5,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { classifyAiFailure } from '@gracie/shared/constants';
+
 import { describePipelineState } from './pipeline-reason';
 
 test('provider transcript failure reads as recording-fine, notes-failed (never the raw code)', () => {
@@ -37,4 +39,22 @@ test('skipped surfaces the plain-language note as the headline', () => {
 
 test('success has no error detail', () => {
   assert.equal(describePipelineState({ state: 'success' }).detail, null);
+});
+
+test('AI account out of credits names the admin fix (not a bare re-run)', () => {
+  const raw =
+    'Failed after 3 attempts. Last error: AI_APICallError: You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.';
+  const r = describePipelineState({ state: 'failed', errorMessage: raw, hasRecording: true });
+  assert.match(r.headline, /out of credits/i);
+  assert.match(r.headline, /admin/i);
+  assert.equal(r.detail, raw);
+});
+
+test('classifyAiFailure: credits beat rate-limit wording; keys and throttling recognised; others ignored', () => {
+  assert.equal(classifyAiFailure('429 You exceeded your current quota, please check your plan'), 'out_of_credits');
+  assert.equal(classifyAiFailure('Error code: 429 - insufficient_quota'), 'out_of_credits');
+  assert.equal(classifyAiFailure('Incorrect API key provided: sk-...'), 'bad_api_key');
+  assert.equal(classifyAiFailure('Rate limit reached for gpt-4.1-mini'), 'rate_limited');
+  assert.equal(classifyAiFailure('generate: Recall returned no transcript'), null);
+  assert.equal(classifyAiFailure(null), null);
 });

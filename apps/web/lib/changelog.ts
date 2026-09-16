@@ -31,6 +31,20 @@ export interface Release {
 /** Newest first. */
 export const CHANGELOG: readonly Release[] = [
   {
+    version: '0.4.4',
+    date: '2026-09-16',
+    title: 'Clear alerts when the AI account needs attention',
+    stage: 'Alpha',
+    sections: [
+      {
+        heading: 'Improved',
+        items: [
+          'If Gracie’s AI account runs out of credits (or its key stops working), alerts and the Pipeline page now say so plainly and tell an admin what to fix — instead of a generic “generation failed”. Admins get one email per hour about it, not one per meeting.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.4.3',
     date: '2026-09-16',
     title: 'Works better with a zoomed-in screen',
