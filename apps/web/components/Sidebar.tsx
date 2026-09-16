@@ -110,8 +110,8 @@ export function Sidebar(): React.JSX.Element {
           )}
         </button>
 
-        <div className="flex flex-col gap-1">
-          <div className="mb-3 flex items-center gap-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-1">
+          <div className="mb-3 flex shrink-0 items-center gap-2 [@media(max-height:860px)]:mb-1">
             <Link
               href="/home"
               aria-label="GA App — home"
@@ -171,7 +171,9 @@ export function Sidebar(): React.JSX.Element {
             </button>
           </div>
 
-          <div className="flex flex-col">
+          {/* Scrolls on its own when the window is short (large OS/browser zoom) so the
+              account card with Sign Out below always stays on screen. */}
+          <div className="-mr-2 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain pr-2">
             {visibleGroups.map((group, groupIndex) => (
               <div
                 key={group.header ?? `group-${groupIndex}`}
@@ -208,7 +210,7 @@ export function Sidebar(): React.JSX.Element {
                           rel={item.external ? 'noopener noreferrer' : undefined}
                           prefetch={item.external ? false : undefined}
                           aria-current={isActive ? 'page' : undefined}
-                          className={`nav-item flex items-center gap-3 rounded-lg px-3 py-2 transition-colors ${linkJustify}`}
+                          className={`nav-item flex items-center gap-3 rounded-lg px-3 py-2 transition-colors [@media(max-height:860px)]:py-1.5 ${linkJustify}`}
                           style={{
                             // Inactive items leave bg unset so the `.nav-item:hover`
                             // rule (theme.css) can supply the brand-soft highlight.
@@ -230,7 +232,7 @@ export function Sidebar(): React.JSX.Element {
         </div>
 
         <div
-          className={`flex flex-col gap-3 rounded-lg border p-3 ${collapsed ? 'md:p-2' : ''}`}
+          className={`mt-2 flex shrink-0 flex-col gap-3 rounded-lg border p-3 [@media(max-height:860px)]:gap-1 [@media(max-height:860px)]:p-2 ${collapsed ? 'md:p-2' : ''}`}
           style={{ backgroundColor: 'var(--surface-2)', borderColor: 'var(--hair)' }}
         >
           <div className={`flex items-center gap-3 ${collapsed ? 'md:justify-center' : ''}`}>
@@ -281,7 +283,7 @@ export function Sidebar(): React.JSX.Element {
             href="/my-settings"
             title={collapsed ? 'My Settings' : undefined}
             aria-current={pathname === '/my-settings' ? 'page' : undefined}
-            className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors ${linkJustify}`}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors [@media(max-height:860px)]:py-1 ${linkJustify}`}
             style={{ color: 'var(--text-secondary)', ...TYPE.bodyStrong }}
           >
             <UserCog aria-hidden="true" size={16} className="shrink-0" />
@@ -292,7 +294,7 @@ export function Sidebar(): React.JSX.Element {
           <a
             href="/sign-out"
             title={collapsed ? 'Sign Out' : undefined}
-            className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors ${linkJustify}`}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors [@media(max-height:860px)]:py-1 ${linkJustify}`}
             style={{ color: 'var(--text-secondary)', ...TYPE.bodyStrong }}
           >
             <LogOut aria-hidden="true" size={16} className="shrink-0" />

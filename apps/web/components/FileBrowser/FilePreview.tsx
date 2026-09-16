@@ -139,7 +139,7 @@ export function FilePreview({ document: doc, onClose }: FilePreviewProps): React
             type="button"
             aria-label="Close preview"
             onClick={onClose}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md lg:hidden"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md xl:hidden"
             style={{ color: 'var(--text-secondary)', background: 'transparent', cursor: 'pointer' }}
           >
             <X size={18} />

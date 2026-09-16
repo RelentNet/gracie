@@ -140,11 +140,31 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
   // and persisted like the view pref. SSR-safe: starts from the default, saved value
   // applied after mount. Both list and grid views share this (same preview column).
   const [previewWidth, setPreviewWidth] = useState(DEFAULT_PREVIEW_WIDTH);
+  // Live width of the pane grid, so the preview is clamped to the space that's
+  // actually there — on first paint, on window resize, and under large OS/browser
+  // zoom — not only while dragging. The saved preference stays unclamped.
+  const [gridWidth, setGridWidth] = useState<number | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  // Callback ref: the grid only mounts after the loading state, so observe it
+  // whenever it (re)appears rather than once on first render.
+  const [gridEl, setGridEl] = useState<HTMLDivElement | null>(null);
+  const setGridRef = useCallback((el: HTMLDivElement | null): void => {
+    gridRef.current = el;
+    setGridEl(el);
+  }, []);
   const draggingRef = useRef(false);
   const widthRef = useRef(DEFAULT_PREVIEW_WIDTH);
 
   const refresh = useCallback((): void => setRefreshNonce((n) => n + 1), []);
+
+  useEffect(() => {
+    if (gridEl === null || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry !== undefined) setGridWidth(entry.contentRect.width);
+    });
+    observer.observe(gridEl);
+    return (): void => observer.disconnect();
+  }, [gridEl]);
 
   useEffect(() => {
     try {
@@ -555,6 +575,11 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
     onDelete: editable ? (doc): void => setDeleteTarget({ kind: 'file', document: doc }) : undefined,
   };
 
+  // What the preview column actually renders at: the saved preference, clamped to
+  // the grid's live width (xl template: tree 20rem · files · handle · preview).
+  const effectivePreviewWidth =
+    gridWidth === null ? previewWidth : clampPreviewWidth(previewWidth, gridWidth, view === 'list');
+
   return (
     // Fills the page (width + height). On lg the three panes each scroll
     // independently; on mobile it falls back to natural flow (the app shell scrolls).
@@ -589,14 +614,16 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
       </header>
 
       {/* `--preview-w` drives the last (preview) column; the 6px column before it is
-          the drag handle. Below lg the whole thing collapses to a single column. */}
+          the drag handle. xl+: tree | files | handle | preview. lg–xl (incl. large
+          desktop zoom): tree | files, with the preview as a drawer. Below lg: one
+          column. */}
       <div
-        ref={gridRef}
-        style={{ '--preview-w': `${previewWidth}px` } as React.CSSProperties}
+        ref={setGridRef}
+        style={{ '--preview-w': `${effectivePreviewWidth}px` } as React.CSSProperties}
         className={`grid grid-cols-1 gap-0 lg:min-h-0 lg:flex-1 lg:grid-rows-1 ${
           view === 'grid'
-            ? 'lg:grid-cols-[minmax(0,1fr)_6px_var(--preview-w)]'
-            : 'lg:grid-cols-[20rem_minmax(0,1fr)_6px_var(--preview-w)]'
+            ? 'xl:grid-cols-[minmax(0,1fr)_6px_var(--preview-w)]'
+            : 'lg:grid-cols-[16rem_minmax(0,1fr)] xl:grid-cols-[20rem_minmax(0,1fr)_6px_var(--preview-w)]'
         }`}
       >
         {view === 'grid' ? null : (
@@ -616,7 +643,7 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
           </aside>
         )}
         <div
-          className="min-w-0 border-b p-4 lg:border-b-0 lg:border-r lg:min-h-0 lg:overflow-y-auto"
+          className="min-w-0 border-b p-4 lg:border-b-0 lg:min-h-0 lg:overflow-y-auto xl:border-r"
           style={{ borderColor: 'var(--border-subtle)' }}
         >
           {selectedKey === TRASH_KEY ? (
@@ -650,7 +677,7 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
             </div>
           )}
         </div>
-        {/* Drag handle between the file area and the preview (lg only — below lg the
+        {/* Drag handle between the file area and the preview (xl only — below xl the
             preview is a drawer, so there's no divider to drag). Pointer capture keeps
             the drag alive off the 6px hit-area; keyboard arrows resize too. */}
         <div
@@ -658,21 +685,21 @@ export function DriveBrowser({ scope }: DriveBrowserProps): React.JSX.Element {
           aria-orientation="vertical"
           aria-label="Resize preview pane"
           aria-valuemin={MIN_PREVIEW_WIDTH}
-          aria-valuenow={Math.round(previewWidth)}
+          aria-valuenow={Math.round(effectivePreviewWidth)}
           tabIndex={0}
           onPointerDown={onHandlePointerDown}
           onPointerMove={onHandlePointerMove}
           onPointerUp={onHandlePointerUp}
           onKeyDown={onHandleKeyDown}
-          className="group hidden touch-none select-none lg:block lg:min-h-0 lg:cursor-col-resize"
+          className="group hidden touch-none select-none xl:block xl:min-h-0 xl:cursor-col-resize"
           style={{ backgroundColor: 'var(--border-subtle)' }}
         >
           <div className="h-full w-full transition-colors group-hover:bg-[var(--color-blue-400)] group-focus-visible:bg-[var(--color-blue-500)] group-active:bg-[var(--color-blue-500)]" />
         </div>
-        {/* Preview: inline third column on lg; a full-screen drawer on mobile when a
-            file is selected, and hidden on mobile otherwise. */}
+        {/* Preview: inline last column on xl; below xl a full-screen drawer when a
+            file is selected, and hidden otherwise. */}
         <section
-          className={`bg-white lg:static lg:z-auto lg:block lg:min-h-0 lg:overflow-hidden ${
+          className={`bg-white xl:static xl:z-auto xl:block xl:min-h-0 xl:overflow-hidden ${
             selectedFile !== null ? 'fixed inset-0 z-40 overflow-hidden' : 'hidden'
           }`}
         >
