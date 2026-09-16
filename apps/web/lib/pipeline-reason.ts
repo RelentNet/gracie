@@ -15,6 +15,8 @@
  * (a bot job exists) used when a live classification isn't available.
  */
 
+import { AI_FAILURE_HEADLINE, classifyAiFailure } from '@gracie/shared/constants';
+
 /** Unified fleet state shown in the Pipeline activity feed. */
 export type FleetState =
   | 'success'
@@ -93,6 +95,11 @@ export function describePipelineState(input: DescribeInput): FleetReason {
     case 'failed':
       if (input.hasRecording === false) {
         return { headline: 'No recording was captured — there’s nothing to recover.', detail };
+      }
+      // AI account problems (no credits / bad key) — Re-run can't help until an admin acts.
+      {
+        const ai = classifyAiFailure(raw);
+        if (ai !== null) return { headline: AI_FAILURE_HEADLINE[ai], detail };
       }
       if (raw !== '' && isProviderTranscriptFailure(raw)) {
         return { headline: 'The recording is fine, but the notes couldn’t be created. Re-run to try again.', detail };
