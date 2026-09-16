@@ -8,6 +8,7 @@ import {
   Contact,
   Zap,
   GitBranch,
+  LifeBuoy,
   Settings,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -89,6 +90,9 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       // Pipeline is admin-only at the route level, but the link stays visible to
       // all roles by request (no `requires` gate).
       { label: 'Pipeline', href: '/pipeline', Icon: GitBranch },
+      // Support — any role can report a problem or idea (works in every browser,
+      // unlike the BugHerd extension). Sidebar appends ?from=<current page>.
+      { label: 'Support', href: '/support', Icon: LifeBuoy },
       // Settings is Admin-only (docs/08 §6, D14): gated by settings.access. The build
       // roadmap now lives as an admin-only tab inside Settings (not the sidebar).
       { label: 'Settings', href: '/settings', Icon: Settings, requires: 'settings.access' },

@@ -112,6 +112,8 @@ export const NOTIFICATION_TYPES = [
   'pipeline_failed',
   // P8: reminder-action deliveries + advanced-request admin alerts (Bell).
   'automation',
+  // In-app Support tab submissions (admins' bell).
+  'support_request',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

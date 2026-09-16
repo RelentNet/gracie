@@ -200,7 +200,12 @@ export function Sidebar(): React.JSX.Element {
                     return (
                       <li key={item.href}>
                         <Link
-                          href={item.href}
+                          // Support records which page the user came from.
+                          href={
+                            item.href === '/support' && pathname !== '/support'
+                              ? `/support?from=${encodeURIComponent(pathname)}`
+                              : item.href
+                          }
                           // Native tooltip surfaces the label in the collapsed icon rail.
                           title={collapsed ? item.label : undefined}
                           // External targets (e.g. a raw-HTML route handler) open in a
@@ -260,20 +265,24 @@ export function Sidebar(): React.JSX.Element {
                     {roleBadge.label}
                   </span>
                 )}
-                <span className="inline-flex items-center gap-1" title="Calendar connection">
-                  <span
-                    aria-hidden="true"
-                    className="size-2 rounded-full"
-                    style={{
-                      backgroundColor: user.isCalendarConnected
-                        ? 'var(--color-emerald-500)'
-                        : 'var(--color-slate-500)',
-                    }}
-                  />
-                  <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-                    {user.isCalendarConnected ? 'Calendar' : 'Offline'}
+                {/* Calendar-sync status is an admin troubleshooting aid; for staff the
+                    "Offline" label read as "you're offline" (Scott, 2026-09-16). */}
+                {user.role === 'admin' ? (
+                  <span className="inline-flex items-center gap-1" title="Calendar connection">
+                    <span
+                      aria-hidden="true"
+                      className="size-2 rounded-full"
+                      style={{
+                        backgroundColor: user.isCalendarConnected
+                          ? 'var(--color-emerald-500)'
+                          : 'var(--color-slate-500)',
+                      }}
+                    />
+                    <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
+                      {user.isCalendarConnected ? 'Calendar sync on' : 'Calendar sync off'}
+                    </span>
                   </span>
-                </span>
+                ) : null}
               </span>
             </div>
           </div>

@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 import { PageContainer } from '@/components/ui/PageContainer';
 import { ErrorState } from '@/components/ui/StateViews';
 import { Tabs } from '@/components/ui/Tabs';
@@ -16,6 +18,7 @@ import { DailySyncSettingsPanel } from './DailySyncSettingsPanel';
 import { GenerationPromptsPanel } from './GenerationPromptsPanel';
 import { NotificationSettingsPanel } from './NotificationSettingsPanel';
 import { ScoringSettingsPanel } from './ScoringSettingsPanel';
+import { SupportInboxPanel } from './SupportInboxPanel';
 import { UsersPanel } from './UsersPanel';
 
 /**
@@ -30,6 +33,13 @@ import { UsersPanel } from './UsersPanel';
  */
 export default function SettingsPage(): React.JSX.Element {
   const { can } = useAuth();
+  // `?tab=support` (from the admin bell) opens that tab. Read after mount so the page
+  // needs no Suspense boundary; the Tabs remount via `key` once it's known.
+  const [initialTab, setInitialTab] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab !== null) setInitialTab(tab);
+  }, []);
 
   if (!can('settings.access')) {
     return (
@@ -56,9 +66,12 @@ export default function SettingsPage(): React.JSX.Element {
       </header>
 
       <Tabs
+        key={initialTab ?? 'default'}
+        defaultTabId={initialTab}
         ariaLabel="Settings sections"
         items={[
           { id: 'users', label: 'Users', content: <UsersPanel /> },
+          { id: 'support', label: 'Support', content: <SupportInboxPanel /> },
           { id: 'company', label: 'Company', content: <CompanySettingsPanel /> },
           { id: 'contacts', label: 'Contacts', content: <ContactsSettingsPanel /> },
           { id: 'bot', label: 'Meeting Bot', content: <BotSettingsPanel /> },

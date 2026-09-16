@@ -1545,6 +1545,55 @@ export type Database = {
           },
         ]
       }
+      support_requests: {
+        Row: {
+          app_version: string | null
+          browser: string | null
+          category: string
+          created_at: string
+          id: string
+          message: string
+          page_url: string | null
+          resolved_at: string | null
+          screen: string | null
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          app_version?: string | null
+          browser?: string | null
+          category: string
+          created_at?: string
+          id?: string
+          message: string
+          page_url?: string | null
+          resolved_at?: string | null
+          screen?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          app_version?: string | null
+          browser?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          message?: string
+          page_url?: string | null
+          resolved_at?: string | null
+          screen?: string | null
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_requests_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_notes: {
         Row: {
           author_user_id: string | null
@@ -1817,6 +1866,7 @@ export type Database = {
         | "calendar_disconnect"
         | "pipeline_failed"
         | "automation"
+        | "support_request"
       pipeline_run_source: "recall" | "manual_upload"
       pipeline_run_status: "success" | "failed" | "partial"
       pipeline_status:
@@ -2020,6 +2070,7 @@ export const Constants = {
         "calendar_disconnect",
         "pipeline_failed",
         "automation",
+        "support_request",
       ],
       pipeline_run_source: ["recall", "manual_upload"],
       pipeline_run_status: ["success", "failed", "partial"],

@@ -3,7 +3,7 @@
  *
  * A subtype is NOT the DB `document_type` enum; it selects the DESTINATION folder
  * for a manual upload (the drive-feel filing rule, docs/plan p2fix §2):
- *   - Proposal / Capability Deck / Email Thread → a subfolder under `Uploads`
+ *   - Proposal / Capability Deck / Email Thread / Opportunity → a subfolder under `Uploads`
  *   - Transcript                                → the Admin-only `Transcripts` folder
  *   - Other                                     → the `Uploads` root
  *
@@ -12,7 +12,7 @@
  * `segment` is appended to `clients/<slug>/` server-side to form the folder path.
  */
 export interface UploadSubtype {
-  readonly value: 'proposal' | 'capability_deck' | 'email_thread' | 'transcript' | 'other';
+  readonly value: 'proposal' | 'capability_deck' | 'email_thread' | 'opportunity' | 'transcript' | 'other';
   readonly label: string;
   /** Path segment under `clients/<slug>/` for this subtype's folder. */
   readonly segment: string;
@@ -42,6 +42,14 @@ export const UPLOAD_SUBTYPES: readonly UploadSubtype[] = [
     label: 'Email Thread',
     segment: 'uploads/email-threads',
     displayName: 'Email Threads',
+    restricted: false,
+  },
+  {
+    // Scott's GovWin/RFI workflow (2026-09-16): opportunities filed per client.
+    value: 'opportunity',
+    label: 'Opportunity',
+    segment: 'uploads/opportunities',
+    displayName: 'Opportunities',
     restricted: false,
   },
   {
