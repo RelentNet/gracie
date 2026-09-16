@@ -31,6 +31,25 @@ export interface Release {
 /** Newest first. */
 export const CHANGELOG: readonly Release[] = [
   {
+    version: '0.4.5',
+    date: '2026-09-16',
+    title: 'A Support tab for everyone',
+    stage: 'Alpha',
+    sections: [
+      {
+        heading: 'New',
+        items: [
+          'Support tab in the sidebar: tell the team when something isn’t working, when Gracie couldn’t do what you asked, or share an idea. It works in any browser, attaches the page you were on automatically, and you can follow the status of your requests.',
+          'New “Opportunity” document type when uploading — files go into each client’s Opportunities folder.',
+        ],
+      },
+      {
+        heading: 'Improved',
+        items: ['The calendar “Offline” label under your name is gone — it only described calendar syncing and was easy to misread.'],
+      },
+    ],
+  },
+  {
     version: '0.4.4',
     date: '2026-09-16',
     title: 'Clear alerts when the AI account needs attention',
