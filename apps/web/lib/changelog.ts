@@ -31,6 +31,21 @@ export interface Release {
 /** Newest first. */
 export const CHANGELOG: readonly Release[] = [
   {
+    version: '0.4.2',
+    date: '2026-09-16',
+    title: 'Version in the top bar + a tidier roadmap',
+    stage: 'Alpha',
+    sections: [
+      {
+        heading: 'Improved',
+        items: [
+          'The version number now sits in the top bar next to the light/dark toggle and notifications — click it to see what’s new.',
+          'The roadmap (Settings → Roadmap) opens showing only the work still ahead. Use “Show completed” to see everything that’s already shipped.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.4.1',
     date: '2026-09-16',
     title: 'Alpha roadmap + a sign-in fix',
@@ -55,7 +70,7 @@ export const CHANGELOG: readonly Release[] = [
       {
         heading: 'New',
         items: [
-          'Version numbers and this What’s New page. The version in the sidebar shows a dot when something new has shipped — click it to see what changed.',
+          'Version numbers and this What’s New page. The version number shows a dot when something new has shipped — click it to see what changed.',
           'A page for every meeting: the recording, a transcript you can click to jump to that moment, screen-share snapshots, and the documents Gracie wrote. You can follow the transcript live while a meeting is happening.',
           'Gracie joins every meeting that has a Teams link. You can send her in yourself, ask her to leave or pause, or say “Gracie, action item…” during the call.',
           'Home is now your assistant, with today’s meetings, your tasks, and anything that needs attention at a glance.',
