@@ -14,6 +14,7 @@ import { useRefresh } from '@/lib/refresh';
 import { Lock, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
+import { BrandPresetPicker } from './BrandPresetPicker';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { apiClient } from '@/lib/api-client';
@@ -172,7 +173,7 @@ function LogoField({
 }
 
 export function CompanySettingsPanel(): React.JSX.Element {
-  const { brandLogoKey, brandLogoDarkKey } = useAuth();
+  const { brandLogoKey, brandLogoDarkKey, productName } = useAuth();
   const { refresh } = useRefresh();
 
   const [floorDomains, setFloorDomains] = useState<readonly string[]>([]);
@@ -316,6 +317,10 @@ export function CompanySettingsPanel(): React.JSX.Element {
         </span>
       </div>
 
+      {/* Brand identity — white-label preset (name + palette). Applied server-side
+          via the root layout, so switching repaints the whole app at once. */}
+      <BrandPresetPicker />
+
       {/* Branding — the configurable nav logos. Each has its own upload/remove
           controls (multipart), separate from the description/domains Save below.
           The dark variant is optional: if left empty the main logo is used in
@@ -323,9 +328,9 @@ export function CompanySettingsPanel(): React.JSX.Element {
       <LogoField
         variant="light"
         label="Brand logo"
-        help="Shown in the top-left of the navigation. PNG, JPG, or SVG, up to 1 MB. Leave it unset to keep the default “GA App” wordmark."
+        help={`Shown in the top-left of the navigation. PNG, JPG, or SVG, up to 1 MB. Leave it unset to keep the default “${productName}” wordmark.`}
         initialKey={brandLogoKey}
-        emptyPreview={<span style={{ ...TYPE.sectionHeader, color: '#ffffff' }}>GA App</span>}
+        emptyPreview={<span style={{ ...TYPE.sectionHeader, color: '#ffffff' }}>{productName}</span>}
       />
       <LogoField
         variant="dark"

@@ -67,3 +67,34 @@ export function getBrandLogoDarkKey(): Promise<string | null> {
 export function setBrandLogoDarkKey(key: string, updatedByUserId: string | null): Promise<void> {
   return writeKey(BRAND_LOGO_DARK_KEY, key, updatedByUserId);
 }
+
+/**
+ * The selected brand preset id (`lib/brand-presets.ts`) and an OPTIONAL product-name
+ * override. Same scalar-string settings pattern as the logo keys — no migration.
+ *
+ * The preset supplies a product name of its own; the override exists so an operator
+ * can keep a preset's palette while calling the product something else. Empty ⇒ unset
+ * ⇒ the preset's own name wins.
+ */
+const BRAND_PRESET_ID = 'brand_preset_id';
+const BRAND_PRODUCT_NAME = 'brand_product_name';
+
+/** Read the selected preset id, or null when never set (⇒ the default preset). */
+export function getBrandPresetId(): Promise<string | null> {
+  return readKey(BRAND_PRESET_ID);
+}
+
+/** Persist the selected preset id. Admin-gated at the route. */
+export function setBrandPresetId(id: string, updatedByUserId: string | null): Promise<void> {
+  return writeKey(BRAND_PRESET_ID, id, updatedByUserId);
+}
+
+/** Read the product-name override, or null when unset (⇒ the preset's own name). */
+export function getBrandProductName(): Promise<string | null> {
+  return readKey(BRAND_PRODUCT_NAME);
+}
+
+/** Persist the product-name override ('' clears it). Admin-gated at the route. */
+export function setBrandProductName(name: string, updatedByUserId: string | null): Promise<void> {
+  return writeKey(BRAND_PRODUCT_NAME, name, updatedByUserId);
+}

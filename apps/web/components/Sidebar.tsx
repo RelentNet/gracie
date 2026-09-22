@@ -29,7 +29,8 @@ import { useNavCollapse } from '@/components/ui/nav-collapse';
  *    Always renders fully expanded regardless of the desktop collapsed state.
  */
 export function Sidebar(): React.JSX.Element {
-  const { user, can, taskBoardVisibleToAll, brandLogoKey, brandLogoDarkKey } = useAuth();
+  const { user, can, taskBoardVisibleToAll, brandLogoKey, brandLogoDarkKey, productName } =
+    useAuth();
   const { pathname } = useLocation();
   const { collapsed, toggleCollapsed, mobileOpen, closeMobile } = useNavCollapse();
 
@@ -113,7 +114,7 @@ export function Sidebar(): React.JSX.Element {
           <div className="mb-3 flex shrink-0 items-center gap-2 [@media(max-height:860px)]:mb-1">
             <Link
               to="/home"
-              aria-label="GA App — home"
+              aria-label={`${productName} — home`}
               className={`flex-1 px-3 py-2 ${collapsed ? 'md:flex md:justify-center md:px-0' : ''}`}
               style={{ ...TYPE.sectionHeader, color: 'var(--text-primary)' }}
             >
@@ -132,13 +133,13 @@ export function Sidebar(): React.JSX.Element {
                   <>
                     <img
                       src={`/api/brand/logo?v=${encodeURIComponent(brandLogoKey)}`}
-                      alt="GA App"
+                      alt={productName}
                       className="logo-light max-w-full object-contain"
                       style={{ height: '2rem', width: 'auto' }}
                     />
                     <img
                       src={`/api/brand/logo?variant=dark&v=${encodeURIComponent(brandLogoDarkKey)}`}
-                      alt="GA App"
+                      alt={productName}
                       className="logo-dark max-w-full object-contain"
                       style={{ height: '2rem', width: 'auto' }}
                     />
@@ -146,15 +147,17 @@ export function Sidebar(): React.JSX.Element {
                 ) : (
                   <img
                     src={`/api/brand/logo?v=${encodeURIComponent(brandLogoKey)}`}
-                    alt="GA App"
+                    alt={productName}
                     className="max-w-full object-contain"
                     style={{ height: '2rem', width: 'auto' }}
                   />
                 )
               ) : (
                 <>
-                  <span className={labelHidden}>GA App</span>
-                  <span className={`hidden ${collapsed ? 'md:inline' : ''}`}>GA</span>
+                  <span className={labelHidden}>{productName}</span>
+                  <span className={`hidden ${collapsed ? 'md:inline' : ''}`}>
+                    {productName.slice(0, 2)}
+                  </span>
                 </>
               )}
             </Link>

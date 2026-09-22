@@ -4,10 +4,8 @@
     <meta charset="UTF-8" />
     <!-- Correct mobile scaling: the responsive shell sizes to the device viewport. -->
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta
-      name="description"
-      content="Grace &amp; Associates — internal meeting-intelligence platform."
-    />
+    <meta name="description" content="Meeting intelligence." />
+    <!-- Replaced by the configured product name (brand preset) once known. -->
     <title>GA App</title>
     <!--
       No-flash theme init. Runs before first paint: applies the saved theme
@@ -24,6 +22,16 @@
             t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           }
           d.setAttribute('data-theme', t);
+          // Last known brand (written by src/main.tsx applyBrand) — palette and tab
+          // title before first paint; the app replaces it once the bootstrap arrives.
+          var b = JSON.parse(localStorage.getItem('brand') || 'null');
+          if (b && typeof b.css === 'string') {
+            var s = document.createElement('style');
+            s.id = 'brand';
+            s.textContent = b.css;
+            document.head.appendChild(s);
+            document.title = b.title;
+          }
         } catch (e) {}
       })();
     </script>

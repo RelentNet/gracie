@@ -51,6 +51,36 @@ interface Bootstrap {
   readonly taskBoardVisibleToAll: boolean;
   readonly brandLogoKey: string | null;
   readonly brandLogoDarkKey: string | null;
+  readonly brand: Brand;
+}
+
+/** The active white-label identity (Settings → Company → Branding). */
+interface Brand {
+  readonly presetId: string;
+  readonly productName: string;
+  /** The preset's palette as a stylesheet (lib/brand-presets.ts `brandPresetCss`). */
+  readonly css: string;
+}
+
+/**
+ * Apply a brand: its palette in a `<style id="brand">`, its name as the tab title.
+ * Also cached so index.html can apply it before first paint on the next load — no
+ * flash of the default identity. Same key and element as the script there.
+ */
+function applyBrand({ css, productName }: Brand): void {
+  let style = document.getElementById('brand');
+  if (style === null) {
+    style = document.createElement('style');
+    style.id = 'brand';
+    document.head.appendChild(style);
+  }
+  style.textContent = css;
+  document.title = productName;
+  try {
+    localStorage.setItem('brand', JSON.stringify({ css, title: productName }));
+  } catch {
+    // Storage blocked (private mode): the brand still applies, just not pre-paint.
+  }
 }
 
 /**
@@ -72,7 +102,9 @@ function SignedInRoot(): React.JSX.Element {
         return;
       }
       if (!res.ok) throw new Error(`bootstrap: ${res.status}`);
-      setBoot((await res.json()) as Bootstrap);
+      const next = (await res.json()) as Bootstrap;
+      applyBrand(next.brand);
+      setBoot(next);
     } catch (error) {
       console.error('Could not load the app bootstrap:', error);
       setFailed(true);
@@ -103,6 +135,8 @@ function SignedInRoot(): React.JSX.Element {
         taskBoardVisibleToAll={boot.taskBoardVisibleToAll}
         brandLogoKey={boot.brandLogoKey}
         brandLogoDarkKey={boot.brandLogoDarkKey}
+        productName={boot.brand.productName}
+        brandPresetId={boot.brand.presetId}
       >
         <RefreshContext.Provider value={refreshValue}>
           <Outlet />

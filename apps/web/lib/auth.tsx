@@ -14,6 +14,10 @@ import { can } from '@gracie/shared';
 import type { Permission, Role } from '@gracie/shared';
 
 import { MOCK_USER, type AuthUser } from './auth-shared';
+import { DEFAULT_BRAND_PRESET_ID, resolveBrandPreset } from './brand-presets';
+
+/** Product name when nothing is configured — the default preset's own name. */
+const DEFAULT_PRODUCT_NAME = resolveBrandPreset(null).productName;
 
 export type { AuthUser };
 
@@ -51,6 +55,15 @@ export interface AuthContextValue {
    * `brandLogoKey` in dark mode (unchanged single-logo behavior).
    */
   readonly brandLogoDarkKey: string | null;
+  /**
+   * Configured product name (Settings → Company → Branding) — what the app calls
+   * itself in the nav, in copy, and as the meeting bot's display name. Hydrated in
+   * the root layout from the active brand preset plus an optional name override,
+   * same pattern as `brandLogoKey`, so no component fetches it.
+   */
+  readonly productName: string;
+  /** Active brand preset id — lets a panel show which identity is selected. */
+  readonly brandPresetId: string;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -62,6 +75,8 @@ export function AuthProvider({
   taskBoardVisibleToAll = false,
   brandLogoKey = null,
   brandLogoDarkKey = null,
+  productName = DEFAULT_PRODUCT_NAME,
+  brandPresetId = DEFAULT_BRAND_PRESET_ID,
 }: {
   readonly children: ReactNode;
   readonly initialUser?: AuthUser;
@@ -69,6 +84,8 @@ export function AuthProvider({
   readonly taskBoardVisibleToAll?: boolean;
   readonly brandLogoKey?: string | null;
   readonly brandLogoDarkKey?: string | null;
+  readonly productName?: string;
+  readonly brandPresetId?: string;
 }): React.JSX.Element {
   const value = useMemo<AuthContextValue>(() => {
     const user = initialUser;
@@ -81,8 +98,18 @@ export function AuthProvider({
       taskBoardVisibleToAll,
       brandLogoKey,
       brandLogoDarkKey,
+      productName,
+      brandPresetId,
     };
-  }, [initialUser, healthScoresVisible, taskBoardVisibleToAll, brandLogoKey, brandLogoDarkKey]);
+  }, [
+    initialUser,
+    healthScoresVisible,
+    taskBoardVisibleToAll,
+    brandLogoKey,
+    brandLogoDarkKey,
+    productName,
+    brandPresetId,
+  ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
