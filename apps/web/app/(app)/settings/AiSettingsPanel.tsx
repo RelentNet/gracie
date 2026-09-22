@@ -180,8 +180,10 @@ export function AiSettingsPanel(): React.JSX.Element {
   // Selected value for the model <select>: a matching preset, else the Custom sentinel.
   const modelSelectValue = customMode || presetModel === null ? CUSTOM_MODEL : model;
   const showModelText = customMode || currentProvider.models.length === 0;
-  // OpenAI-for-embeddings key is a separate field only when generation is NOT OpenAI.
-  const showEmbeddingKeyField = provider !== 'openai';
+  // A separate embeddings key is needed only when the generation provider can't embed.
+  // OpenAI and OpenRouter both serve the pinned model, so their own key covers both.
+  const coversEmbeddings = provider === 'openai' || provider === 'openrouter';
+  const showEmbeddingKeyField = !coversEmbeddings;
 
   return (
     <div className="flex flex-col gap-6">
@@ -342,11 +344,13 @@ export function AiSettingsPanel(): React.JSX.Element {
       >
         <Lock size={16} aria-hidden="true" style={{ color: 'var(--text-secondary)', marginTop: 2 }} />
         <span style={{ ...TYPE.secondary, color: 'var(--text-primary)' }}>
-          <strong>Embeddings always use OpenAI:</strong>{' '}
+          <strong>Embeddings are pinned to</strong>{' '}
           <span className="font-data">{settings.embeddingModel}</span>. It’s pinned on purpose — changing it
-          would invalidate every stored document vector and require a full re-index. An OpenAI API key is
-          required for embeddings <em>even when generation runs on another provider</em>
-          {provider === 'openai' ? ' — the OpenAI key above covers both.' : '.'}
+          would invalidate every stored document vector and require a full re-index. It’s served by OpenAI
+          directly or through OpenRouter (the same model, so vectors match either way)
+          {coversEmbeddings
+            ? ` — the ${currentProvider.label} key above covers both.`
+            : '. With another generation provider, an OpenAI key is still needed for embeddings.'}
         </span>
       </div>
 

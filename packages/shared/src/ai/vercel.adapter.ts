@@ -49,6 +49,8 @@ import {
   type GenerateInput,
   type GenerateResult,
   type ProviderId,
+  OPENROUTER_BASE_URL,
+  OPENROUTER_EMBEDDING_MODEL,
 } from './provider.js';
 
 export interface VercelAIAdapterConfig {
@@ -198,6 +200,20 @@ function build(providerId: ProviderId, config: VercelAIAdapterConfig): {
     case 'perplexity': {
       const perplexity = createPerplexity({ apiKey: config.apiKey, baseURL: config.baseUrl });
       return { languageModel: (m): LanguageModel => perplexity(m), embeddingModel: null };
+    }
+    case 'openrouter': {
+      // Fixed endpoint, so no base URL needed. The one non-OpenAI provider that can
+      // embed: it serves the same pinned model (OPENROUTER_EMBEDDING_MODEL), so its
+      // vectors match OpenAI-direct ones exactly.
+      const openrouter = createOpenAICompatible({
+        name: 'openrouter',
+        baseURL: config.baseUrl ?? OPENROUTER_BASE_URL,
+        apiKey: config.apiKey,
+      });
+      return {
+        languageModel: (m): LanguageModel => openrouter(m),
+        embeddingModel: openrouter.embeddingModel(OPENROUTER_EMBEDDING_MODEL),
+      };
     }
     case 'ollama':
     case 'custom': {

@@ -23,6 +23,8 @@ import {
   listModelsForProvider,
   MODEL_CATALOG,
   OPENAI_COMPATIBLE_PROVIDERS,
+  OPENROUTER_EMBEDDING_MODEL,
+  PINNED_EMBEDDING_MODEL,
   PROVIDER_IDS,
   PROVIDER_LABELS,
   providerNeedsBaseUrl,
@@ -212,4 +214,24 @@ test('a free-text model id is not a catalog preset (findModel undefined) but is 
   // Free text never matches a preset; the adapter passes any id straight to the SDK.
   assert.equal(findModel('openai', 'gpt-5-some-future-id'), undefined);
   assert.equal(findModel('ollama', 'llama3.1'), undefined);
+});
+
+/**
+ * D9: every stored vector must come from ONE model, or similarity search compares
+ * incompatible spaces and silently returns garbage. OpenRouter is only a valid second
+ * route to embeddings because it serves that same model under a vendor prefix. If the
+ * pinned model ever changes, this fails until the OpenRouter slug is updated with it.
+ */
+test('embeddings: the OpenRouter route serves exactly the pinned model', () => {
+  assert.equal(OPENROUTER_EMBEDDING_MODEL, `openai/${PINNED_EMBEDDING_MODEL}`);
+});
+
+test('embeddings: OpenRouter needs no base URL; a provider without the pinned model refuses to embed', async () => {
+  assert.equal(providerNeedsBaseUrl('openrouter'), false);
+  assert.doesNotThrow(() => createProvider('openrouter', { apiKey: 'sk-or-x' }));
+  // Refused locally, before any network call.
+  await assert.rejects(
+    createProvider('anthropic', { apiKey: 'sk-x' }).embed({ model: PINNED_EMBEDDING_MODEL, input: ['x'] }),
+    /cannot embed/,
+  );
 });

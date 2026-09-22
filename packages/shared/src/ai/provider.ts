@@ -135,6 +135,7 @@ export const PROVIDER_IDS = [
   'xai',
   'cohere',
   'perplexity',
+  'openrouter',
   'ollama',
   'custom',
 ] as const;
@@ -153,6 +154,7 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
   xai: 'xAI (Grok)',
   cohere: 'Cohere',
   perplexity: 'Perplexity',
+  openrouter: 'OpenRouter',
   ollama: 'Ollama (local)',
   custom: 'Custom (OpenAI-compatible)',
 };
@@ -163,6 +165,18 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
  * model id as free text; Ollama's key is optional, Custom's is usually required.
  */
 export const OPENAI_COMPATIBLE_PROVIDERS: readonly ProviderId[] = ['ollama', 'custom'];
+
+/**
+ * OpenRouter — one key for every major model family, over the OpenAI-compatible
+ * shape. Unlike Custom its endpoint is fixed, so it needs no base URL in Settings.
+ *
+ * It also serves OpenAI's embedding model under this slug. That is the SAME model
+ * as {@link PINNED_EMBEDDING_MODEL}, so vectors produced through OpenRouter are
+ * interchangeable with ones produced directly — D9's "never mix vector spaces"
+ * guarantee holds whichever route embeds a document.
+ */
+export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+export const OPENROUTER_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
 
 /** Default Ollama endpoint (OpenAI-compatible path). Prefilled in Settings. */
 export const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/v1';
@@ -231,6 +245,15 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
   // Perplexity (Sonar — web-grounded)
   { providerId: 'perplexity', model: 'sonar', label: 'Sonar', supportsTools: false, supportsJson: true, costPer1MInput: 1, costPer1MOutput: 1 },
   { providerId: 'perplexity', model: 'sonar-pro', label: 'Sonar Pro', supportsTools: false, supportsJson: true, costPer1MInput: 3, costPer1MOutput: 15 },
+  // OpenRouter — slugs + list prices from openrouter.ai/api/v1/models (2026-09). All
+  // support tools + JSON mode, which the pipeline and Assistant both need. Any other
+  // OpenRouter slug still works as a free-text model id.
+  { providerId: 'openrouter', model: 'anthropic/claude-sonnet-5', label: 'Claude Sonnet 5', supportsTools: true, supportsJson: true, costPer1MInput: 2, costPer1MOutput: 10 },
+  { providerId: 'openrouter', model: 'anthropic/claude-opus-5', label: 'Claude Opus 5', supportsTools: true, supportsJson: true, costPer1MInput: 5, costPer1MOutput: 25 },
+  { providerId: 'openrouter', model: 'anthropic/claude-haiku-4.5', label: 'Claude Haiku 4.5', supportsTools: true, supportsJson: true, costPer1MInput: 1, costPer1MOutput: 5 },
+  { providerId: 'openrouter', model: 'openai/gpt-5-mini', label: 'GPT-5 mini', supportsTools: true, supportsJson: true, costPer1MInput: 0.25, costPer1MOutput: 2 },
+  { providerId: 'openrouter', model: 'openai/gpt-4o-mini', label: 'GPT-4o mini', supportsTools: true, supportsJson: true, costPer1MInput: 0.15, costPer1MOutput: 0.6 },
+  { providerId: 'openrouter', model: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', supportsTools: true, supportsJson: true, costPer1MInput: 0.3, costPer1MOutput: 2.5 },
   // Ollama + Custom have NO presets — free-text model id only (see catalog note above).
 ];
 

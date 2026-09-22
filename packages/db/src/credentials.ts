@@ -40,6 +40,7 @@ export const MANAGEABLE_SERVICES: readonly IntegrationKey[] = [
   'xai',
   'cohere',
   'perplexity',
+  'openrouter',
   'ollama',
   'custom',
   'resend',
@@ -59,6 +60,7 @@ const DEFAULT_LABELS: Record<IntegrationKey, string> = {
   xai: 'xAI (Grok) API Key',
   cohere: 'Cohere API Key',
   perplexity: 'Perplexity API Key',
+  openrouter: 'OpenRouter API Key',
   ollama: 'Ollama API Key (optional)',
   custom: 'Custom Provider API Key',
   resend: 'Resend API Key',
@@ -80,6 +82,7 @@ const ENV_FALLBACK: Partial<Record<IntegrationKey, string>> = {
   xai: 'XAI_API_KEY',
   cohere: 'COHERE_API_KEY',
   perplexity: 'PERPLEXITY_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
   resend: 'RESEND_API_KEY',
   ms_graph: 'MS_CLIENT_SECRET',
 };

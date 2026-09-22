@@ -1842,6 +1842,7 @@ export type Database = {
         | "xai"
         | "cohere"
         | "perplexity"
+        | "openrouter"
         | "ollama"
         | "custom"
         | "resend"
@@ -2044,6 +2045,7 @@ export const Constants = {
         "xai",
         "cohere",
         "perplexity",
+        "openrouter",
         "ollama",
         "custom",
         "resend",

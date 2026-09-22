@@ -10,6 +10,7 @@ import {
   DEFAULT_GENERATION_MODEL,
   DEFAULT_GENERATION_PROVIDER,
   isProviderId,
+  OPENROUTER_EMBEDDING_MODEL,
   PINNED_EMBEDDING_MODEL,
   providerNeedsBaseUrl,
   type AIProvider,
@@ -69,12 +70,26 @@ export async function getActiveProvider(): Promise<{ provider: AIProvider; model
 }
 
 /**
- * Resolve the embedder — ALWAYS OpenAI text-embedding-3-small (1536-dim, D9),
- * regardless of the selected generation provider, so switching generation to
- * Anthropic never changes stored vectors. An OpenAI key is therefore required for
- * embeddings even when generation runs on another provider.
+ * Resolve the embedder — ALWAYS text-embedding-3-small (1536-dim, D9), regardless
+ * of the selected generation provider, so switching generation never changes
+ * stored vectors.
+ *
+ * Two routes reach that one model: OpenAI directly, or OpenRouter (which serves it
+ * as `openai/text-embedding-3-small`). Same model => same vector space, so either
+ * may embed and every stored vector stays comparable. An OpenAI key wins when both
+ * are present, which keeps existing deployments on exactly the path they use today.
  */
 export async function getEmbedder(): Promise<{ provider: AIProvider; model: string }> {
-  const apiKey = await requireProviderKey('openai');
-  return { provider: createProvider('openai', { apiKey }), model: PINNED_EMBEDDING_MODEL };
+  const openaiKey = await getCredential('openai');
+  if (openaiKey !== null && openaiKey !== '') {
+    return { provider: createProvider('openai', { apiKey: openaiKey }), model: PINNED_EMBEDDING_MODEL };
+  }
+  const openrouterKey = await getCredential('openrouter');
+  if (openrouterKey !== null && openrouterKey !== '') {
+    return {
+      provider: createProvider('openrouter', { apiKey: openrouterKey }),
+      model: OPENROUTER_EMBEDDING_MODEL,
+    };
+  }
+  throw new Error('No embeddings key configured. Set an OpenAI or OpenRouter key in Settings → AI.');
 }
