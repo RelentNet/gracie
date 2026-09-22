@@ -169,10 +169,19 @@ function PipelineStatusPanel({
 }
 
 /** Documents generated for this occurrence, already filtered for the caller's role. */
-function DocumentsCard({ documents }: { readonly documents: readonly Document[] }): React.JSX.Element {
+function DocumentsCard({
+  documents,
+  productName,
+}: {
+  readonly documents: readonly Document[];
+  readonly productName: string;
+}): React.JSX.Element {
   return (
     <Card>
-      <CardHeader title="Documents" description="Everything Gracie generated from this meeting." />
+      <CardHeader
+        title="Documents"
+        description={`Everything ${productName} generated from this meeting.`}
+      />
       {documents.length > 0 ? (
         <FileList documents={documents} canEdit={false} />
       ) : (
@@ -260,6 +269,7 @@ interface OccurrenceResponse {
  */
 function EndedView({ meeting, ended }: { readonly meeting: Meeting; readonly ended: EndedData }): React.JSX.Element {
   const { documents, tasks, masterRecord, run, stills, playback } = ended;
+  const { productName } = useAuth();
 
   const fleetState = deriveMeetingFleetState({
     hasRun: run !== null,
@@ -287,7 +297,7 @@ function EndedView({ meeting, ended }: { readonly meeting: Meeting; readonly end
     <>
       <RecordingCard playback={playback} stills={stills} hasBot={hasRecording} />
       <PipelineStatusPanel headline={reason.headline} detail={reason.detail} action={linkAction} />
-      <DocumentsCard documents={documents} />
+      <DocumentsCard documents={documents} productName={productName} />
       <TasksCard tasks={tasks} />
       <MasterRecordCard entries={masterRecord} />
     </>
@@ -318,7 +328,7 @@ function PrepView({
             <span style={TYPE.bodyStrong}>Recording now</span>
           </div>
           <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }} className="mt-1">
-            This meeting is within its scheduled time and a Gracie bot was dispatched. Documents appear
+            This meeting is within its scheduled time and an assistant bot was dispatched. Documents appear
             here once it ends.
           </p>
           {/* Live bot controls: shown only when a bot is actually in the call. */}

@@ -302,7 +302,7 @@ async function getGaCompanyDescription(db: ServerClient): Promise<string> {
   const { data } = await db.from('settings').select('value').eq('key', 'ga_company_description').maybeSingle();
   return typeof data?.value === 'string' && data.value.trim() !== ''
     ? data.value
-    : 'Grace & Associates — a federal healthcare consulting firm.';
+    : 'Cambridge Building Group — a commercial general contractor in Middle Tennessee.';
 }
 
 // --- Briefs -------------------------------------------------------------------

@@ -24,6 +24,7 @@ import { localDayLabel, localTime } from '../lib/calendar-dates';
 import { meetingNeedsAttention, orgTypeLabel, toBadgeStatus } from '../lib/calendar-meeting';
 import { CreateOrgModal } from './CreateOrgModal';
 import { LinkExistingModal } from './LinkExistingModal';
+import { useAuth } from '@/lib/auth';
 
 export function DayDetail({
   dayKey,
@@ -38,7 +39,7 @@ export function DayDetail({
   readonly meetings: readonly CalendarMeeting[];
   readonly loading: boolean;
   readonly editable: boolean;
-  /** Show the manual "Send Gracie" re-dispatch action (admin + on-demand-join on). */
+  /** Show the manual "send the assistant" re-dispatch action (admin + on-demand-join on). */
   readonly canRedispatch: boolean;
   /** Show the per-meeting "Don't record" ignore-list toggle (admin / calendar.configure). */
   readonly canConfigureBot: boolean;
@@ -155,25 +156,26 @@ function ExternalAttendeesList({
 }
 
 /**
- * Manual "Send Gracie" — re-dispatch a fresh Recall bot to THIS meeting's stored
+ * Manual re-dispatch — send a fresh Recall bot to THIS meeting's stored
  * join link on demand (e.g. the auto bot timed out on a late-starting meeting).
  * Confirms, POSTs to the redispatch route, and shows a sending→Sent state.
  * Disabled (with a tooltip) when the meeting has no join link.
  */
 function RedispatchButton({ meeting }: { readonly meeting: CalendarMeeting }): React.JSX.Element {
+  const { productName } = useAuth();
   const hasLink = meeting.videoLink !== null && meeting.videoLink !== '';
   const [state, setState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [error, setError] = useState<string | null>(null);
 
   const send = useCallback((): void => {
-    if (!window.confirm('Send Gracie to this meeting now?')) return;
+    if (!window.confirm(`Send ${productName} to this meeting now?`)) return;
     setState('sending');
     setError(null);
     apiClient
       .post(`/api/calendar/meetings/${meeting.id}/redispatch`)
       .then(() => setState('sent'))
       .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : 'Failed to send Gracie');
+        setError(e instanceof Error ? e.message : `Failed to send ${productName}`);
         setState('idle');
       });
   }, [meeting.id]);
@@ -189,7 +191,7 @@ function RedispatchButton({ meeting }: { readonly meeting: CalendarMeeting }): R
           icon={<Video size={13} aria-hidden="true" />}
           onClick={send}
         >
-          {state === 'sending' ? 'Sending…' : state === 'sent' ? 'Sent' : 'Send Gracie'}
+          {state === 'sending' ? 'Sending…' : state === 'sent' ? 'Sent' : `Send ${productName}`}
         </Button>
       </span>
       {error !== null ? (
@@ -203,7 +205,7 @@ function RedispatchButton({ meeting }: { readonly meeting: CalendarMeeting }): R
 
 /**
  * "Don't record" toggle — put this meeting's recurring series (or one-off join link)
- * on the meeting-bot ignore list so Gracie stops auto-joining it (the ghost-meeting
+ * on the meeting-bot ignore list so the assistant stops auto-joining it (the ghost-meeting
  * guard for stale/duplicate calendar entries). Fully reversible: turning it back on
  * restores dispatch. Enabling asks for confirmation since it affects the whole series.
  */
@@ -214,6 +216,7 @@ function IgnoreRecordingControl({
   readonly meeting: CalendarMeeting;
   readonly onChanged: () => void;
 }): React.JSX.Element {
+  const { productName } = useAuth();
   const ignored = meeting.recordingIgnored;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -223,7 +226,7 @@ function IgnoreRecordingControl({
     if (
       enabling &&
       !window.confirm(
-        "Stop Gracie recording this meeting and its whole series? You can turn recording back on here anytime.",
+        `Stop ${productName} recording this meeting and its whole series? You can turn recording back on here anytime.`,
       )
     ) {
       return;
@@ -244,7 +247,7 @@ function IgnoreRecordingControl({
           className="inline-flex items-center gap-1"
           style={{ ...TYPE.label, color: 'var(--text-secondary)' }}
         >
-          <VideoOff size={13} aria-hidden="true" /> Gracie won&apos;t record this
+          <VideoOff size={13} aria-hidden="true" /> {productName} won&apos;t record this
         </span>
         <button
           type="button"
@@ -266,7 +269,7 @@ function IgnoreRecordingControl({
 
   return (
     <div className="flex flex-col gap-1">
-      <span title="Stop Gracie auto-joining this meeting and its series">
+      <span title={`Stop ${productName} auto-joining this meeting and its series`}>
         <Button
           size="sm"
           variant="secondary"

@@ -6,12 +6,13 @@ import { LogOut, Pause, Play } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/Button';
 import { TYPE } from '@/lib/typography';
+import { useAuth } from '@/lib/auth';
 
 /**
- * MeetingBotControls — live controls for an in-session meeting that has a Gracie bot
+ * MeetingBotControls — live controls for an in-session meeting that has an assistant bot
  * (meeting page, in-session block). Two pure Recall bot-API actions, INDEPENDENT of
  * the transcript-provider / realtime setting:
- *   - Remove Gracie — the bot leaves the call. Irreversible (it won't rejoin), so it
+ *   - Remove the assistant — the bot leaves the call. Irreversible (it won't rejoin), so it
  *     takes an inline confirm.
  *   - Pause ⇄ Resume — a manual recording toggle. While paused, a loud persistent
  *     banner makes it impossible to silently leave paused. No timer/auto-resume — a
@@ -19,11 +20,12 @@ import { TYPE } from '@/lib/typography';
  *
  * Paused state is tracked client-side (optimistic, rolled back if the call fails);
  * the page assumes recording on load (no schema change). Available to any staffer,
- * matching the per-meeting "Send Gracie" re-dispatch.
+ * matching the per-meeting re-dispatch action.
  */
-const NETWORK_ERROR = "Couldn't reach Gracie — try again.";
+const NETWORK_ERROR = "Couldn't reach the assistant — try again.";
 
 export function MeetingBotControls({ meetingId }: { readonly meetingId: string }): React.JSX.Element {
+  const { productName } = useAuth();
   const [paused, setPaused] = useState(false);
   const [left, setLeft] = useState(false);
   const [busy, setBusy] = useState<'pause' | 'leave' | null>(null);
@@ -66,7 +68,7 @@ export function MeetingBotControls({ meetingId }: { readonly meetingId: string }
   if (left) {
     return (
       <p className="mt-3" style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-        Gracie has left this meeting. She won’t rejoin.
+        {productName} has left this meeting. It won’t rejoin.
       </p>
     );
   }
@@ -84,7 +86,7 @@ export function MeetingBotControls({ meetingId }: { readonly meetingId: string }
           }}
         >
           <span style={TYPE.bodyStrong}>
-            ⏸ Recording is paused — Gracie is not capturing this meeting.
+            ⏸ Recording is paused — {productName} is not capturing this meeting.
           </span>
           <Button
             size="sm"
@@ -111,7 +113,7 @@ export function MeetingBotControls({ meetingId }: { readonly meetingId: string }
 
         {confirmLeave ? (
           <span className="inline-flex flex-wrap items-center gap-2">
-            <span style={TYPE.body}>Remove Gracie? She won’t rejoin.</span>
+            <span style={TYPE.body}>Remove {productName}? It won’t rejoin.</span>
             <Button size="sm" variant="danger" disabled={busy !== null} onClick={leave}>
               {busy === 'leave' ? 'Removing…' : 'Yes, remove'}
             </Button>
@@ -127,7 +129,7 @@ export function MeetingBotControls({ meetingId }: { readonly meetingId: string }
             disabled={busy !== null}
             onClick={(): void => setConfirmLeave(true)}
           >
-            Remove Gracie from this meeting
+            Remove {productName} from this meeting
           </Button>
         )}
       </div>

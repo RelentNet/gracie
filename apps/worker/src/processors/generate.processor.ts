@@ -1263,7 +1263,7 @@ export function createGenerateProcessor(
       const { provider, model } = await getActiveProvider();
       const gaCompanyDescription =
         (await getSettingString(db, 'ga_company_description')) ??
-        'Grace & Associates — a federal healthcare consulting firm.';
+        'Cambridge Building Group — a commercial general contractor in Middle Tennessee.';
       // Editable generation prompts (PE): admin overrides from Settings, else the
       // shared defaults. Tolerates the key being absent/malformed → all defaults.
       const prompts = resolveGenerationPrompts(

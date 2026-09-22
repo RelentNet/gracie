@@ -47,39 +47,44 @@ export interface AuthUser {
 export const MOCK_ROLE: Role = 'admin';
 
 /**
- * Mock identities aligned to the seeded users so role-based ownership rules
- * (e.g. viewer "mark own task complete") stay testable before real Logto users.
+ * Mock identities, aligned to the seeded users so role-based ownership rules
+ * (e.g. viewer "mark own task complete") behave correctly without Logto.
+ *
+ * `internalId` is the seeded `users.id` from `packages/db/seed/demo-cbg.ts` — the
+ * uuid ownership checks compare against. Re-running that seed keeps these stable
+ * (its ids are deterministic hashes), but changing a person's key there would
+ * need the matching id updated here.
  */
 export const MOCK_IDENTITIES: Readonly<Record<Role, AuthUser>> = {
   admin: {
-    id: 'usr_allie',
-    internalId: 'usr_allie',
-    name: 'Allie Grace',
-    email: 'agrace@graceandassociates.com',
-    initials: 'AG',
+    id: 'demo|terry',
+    internalId: '249eb1cf-d1c7-5564-a5bb-6a8b1cdd4116',
+    name: 'Terry Gilley',
+    email: 'tgilley@cambridgebg.com',
+    initials: 'TG',
     role: 'admin',
     isCalendarConnected: true,
-    timezone: 'America/New_York',
+    timezone: 'America/Chicago',
   },
   standard: {
-    id: 'usr_sarah',
-    internalId: 'usr_sarah',
-    name: 'Sarah Chen',
-    email: 'schen@graceandassociates.com',
-    initials: 'SC',
+    id: 'demo|marcus',
+    internalId: '5ec1b114-4f5e-5256-ae7a-5159cd6e56df',
+    name: 'Marcus Webb',
+    email: 'mwebb@cambridgebg.com',
+    initials: 'MW',
     role: 'standard',
     isCalendarConnected: true,
     timezone: 'America/Chicago',
   },
   viewer: {
-    id: 'usr_john',
-    internalId: 'usr_john',
-    name: 'John Smith',
-    email: 'jsmith@graceandassociates.com',
-    initials: 'JS',
+    id: 'demo|nora',
+    internalId: 'a072c861-c5f5-5928-8812-34165f5dcfaf',
+    name: 'Nora Caldwell',
+    email: 'ncaldwell@cambridgebg.com',
+    initials: 'NC',
     role: 'viewer',
     isCalendarConnected: false,
-    timezone: null,
+    timezone: 'America/Chicago',
   },
 } as const;
 

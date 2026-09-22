@@ -2,7 +2,7 @@ import AssistantPage from '../assistant/page';
 import { CommandCenter } from '../dashboard/CommandCenter';
 
 /**
- * Default landing (operator decision, 2026-08): you arrive on Gracie the
+ * Default landing (operator decision, 2026-08): you arrive on the assistant, the
  * assistant — ready to talk immediately — with the #83 Daily Command Center
  * tiles kept alongside. On `xl`+ the assistant is the wide main column and the
  * tiles sit in a right rail; below `xl` they stack (assistant first, so you can

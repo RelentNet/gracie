@@ -34,7 +34,7 @@ export const FREE_EMAIL_DOMAINS: ReadonlySet<string> = new Set([
 ]);
 
 /** Fallback internal domain when `settings.internal_email_domains` is unset. */
-export const DEFAULT_INTERNAL_DOMAINS: readonly string[] = ['graceandassociates.com'];
+export const DEFAULT_INTERNAL_DOMAINS: readonly string[] = ['cambridgebg.com'];
 
 /** Extract the lower-cased domain from an email address, or null. */
 export function emailDomain(email: string | null | undefined): string | null {

@@ -204,5 +204,5 @@ export async function getGaCompanyDescription(): Promise<string> {
   if (error !== null) throw new Error(`chat: getGaCompanyDescription: ${error.message}`);
   return typeof data?.value === 'string'
     ? data.value
-    : 'Grace & Associates — a federal healthcare consulting firm.';
+    : 'Cambridge Building Group — a commercial general contractor in Middle Tennessee.';
 }
