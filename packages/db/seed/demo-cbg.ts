@@ -194,22 +194,122 @@ interface DocContext {
   readonly items: readonly string[];
 }
 
+// Paragraphs that differ per meeting. Retrieval surfaces several records side by
+// side, and the chat model reliably flags identical wording across them as templated
+// ("the identical phrasing may reflect boilerplate"). So every paragraph is chosen per
+// MEETING from a pool keyed by the client's trend, and transcripts carry the same
+// tone the analysis describes — otherwise the model points out the contradiction.
+const lc = (t: string): string => t.charAt(0).toLowerCase() + t.slice(1);
+
+/** Deterministic per-meeting pick, so re-seeding reproduces the same text. */
+function vary<T>(c: DocContext, salt: string, xs: readonly T[]): T {
+  const h = createHash('sha1').update(`${salt}|${c.client.key}|${c.kind}|${c.when.toISOString()}`).digest();
+  return xs[h[0]! % xs.length]!;
+}
+
+function riskParagraph(c: DocContext): string {
+  const item = c.items[0] === undefined ? 'the open submittals' : lc(c.items[0]);
+  const pools = {
+    declining: [
+      `The date is under real pressure. The item most likely to move substantial completion is: ${item}. The owner wants an answer before the next meeting and we should treat that as a hard deadline.`,
+      `We lost about four days of float since the last meeting. Recovering it depends on one thing: ${item}.`,
+      `Two trades are now stacked in the same week. If ${item} slips again the sequence breaks and we are into recovery overtime.`,
+    ],
+    improving: [
+      `Schedule is holding with float to spare. The only item with any bearing on the critical path is: ${item}.`,
+      `Ahead of the baseline by roughly a week. Keep it that way by closing out ${item} before it turns into a constraint.`,
+      `No schedule concerns raised. The one thing worth watching is ${item}, and it has a clear owner.`,
+    ],
+    stable: [
+      `Nothing discussed moves the completion date yet. Watch one item: ${item}. If that slips past next week it starts eating float.`,
+      `On schedule, with no margin to give back. ${item.charAt(0).toUpperCase() + item.slice(1)} is the item that decides whether that holds.`,
+      `The look-ahead is realistic. The dependency to protect is ${item}.`,
+    ],
+  } as const;
+  return vary(c, 'risk', pools[c.client.trend]);
+}
+
+function relationshipParagraph(c: DocContext): string {
+  const who = c.client.contact;
+  const pools = {
+    declining: [
+      `${who} pushed on the change-order total twice and asked for a cost-to-complete by Friday. Get ahead of that conversation before it becomes a dispute.`,
+      `${who} was noticeably shorter with the team than last time and wanted to know why the budget number had moved. Bring the backup, not just the total.`,
+      `${who} asked directly whether the schedule is still real. Answer that with the recovery plan in hand at the next meeting.`,
+    ],
+    improving: [
+      `${who} is engaged and making decisions in the room. This is the strongest the relationship has been.`,
+      `${who} complimented the field team on site cleanliness and signed off two items on the spot.`,
+      `Good meeting. ${who} is starting to talk about the next phase, which is the signal we want.`,
+    ],
+    stable: [
+      `Steady. ${who} wants fewer emails and more decisions made live, so bring options rather than questions.`,
+      `${who} was businesslike and quick. No friction, no enthusiasm — keep delivering and it stays that way.`,
+      `${who} raised nothing new. The relationship is fine; the risk is complacency on our side.`,
+    ],
+  } as const;
+  return vary(c, 'rel', pools[c.client.trend]);
+}
+
+function teamNote(c: DocContext): string {
+  const last = c.items[c.items.length - 1];
+  const item = last === undefined ? 'the look-ahead' : lc(last);
+  return vary(c, 'team', [
+    `${c.lead.name} owns the follow-up on: ${item}. Raise it in the Monday coordination call if it is not closed by then.`,
+    `Action for the field: ${item}. ${c.lead.name} to confirm it is done before the next owner meeting.`,
+    `${c.lead.name} to chase ${item} this week and report back in the internal channel.`,
+  ]);
+}
+
+function emailCloser(c: DocContext): string {
+  return vary(c, 'close', [
+    'We will have the updated schedule over to you by Friday.',
+    'Updated look-ahead to follow early next week.',
+    'We will send drawings and the revised schedule together once the open submittal is back.',
+  ]);
+}
+
+/** Owner lines for the transcript — the same tone the analysis reports. */
+function ownerLines(c: DocContext): { opener: string; closer: string } {
+  const item = c.items[0] === undefined ? 'the last open item' : lc(c.items[0]);
+  switch (c.client.trend) {
+    case 'declining':
+      return vary(c, 'owner', [
+        { opener: `Before we start — why has the change-order total moved again? I need a cost-to-complete by Friday.`, closer: `I'll be honest, we need to have the budget conversation this week.` },
+        { opener: `I want to understand whether the schedule is still real, because I'm hearing different things.`, closer: `Send me the recovery plan before next week, please.` },
+        { opener: `Where are we on ${item}? That was promised last time.`, closer: `Okay. I need that closed, not another update.` },
+      ]);
+    case 'improving':
+      return vary(c, 'owner', [
+        { opener: `First, the site looked great on Tuesday — thank the crew for me.`, closer: `Good meeting. Let's start talking about phase three soon.` },
+        { opener: `Happy with where we are. Just walk me through ${item}.`, closer: `Approved, go ahead. Same time next week.` },
+        { opener: `No real concerns from our side this week.`, closer: `Great, thanks everyone.` },
+      ]);
+    default:
+      return vary(c, 'owner', [
+        { opener: `Before we do — where did we land on ${item}?`, closer: `Nothing else from me. Same time next week.` },
+        { opener: `Let's keep this quick, I have a hard stop at the hour.`, closer: `Fine by me. Thanks.` },
+        { opener: `Just the look-ahead and the open RFIs today, please.`, closer: `Okay. Same time next week.` },
+      ]);
+  }
+}
+
 function docBody(docType: string, c: DocContext): string {
   const when = c.when.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   const bullets = c.items.map((i) => `- ${i}`).join('\n');
   switch (docType) {
     case 'post_meeting_analysis':
-      return `# Post-meeting analysis — ${c.client.name}\n\n**${c.kind} · ${when} · Lead: ${c.lead.name}**\n\n## What we covered\n\n${c.client.job}. ${c.kind} ran the full hour with the owner group present.\n\n${bullets}\n\n## Where the risk sits\n\nThe critical path still runs through long-lead procurement. Nothing discussed today moves the substantial completion date, but two items below need an answer this week or they will.\n\n## Read on the relationship\n\nThe owner is engaged and decisions are landing in the room rather than by email. Keep the current cadence.\n`;
+      return `# Post-meeting analysis — ${c.client.name}\n\n**${c.kind} · ${when} · Lead: ${c.lead.name}**\n\n## What we covered\n\n${c.client.job}. ${c.kind} ran the full hour with the owner group present.\n\n${bullets}\n\n## Where the risk sits\n\n${riskParagraph(c)}\n\n## Read on the relationship\n\n${relationshipParagraph(c)}\n`;
     case 'internal_memo':
-      return `# Internal memo — ${c.client.name}\n\n**${when} · prepared for the project team**\n\nFor the field and the office, not for distribution to the owner.\n\n${bullets}\n\n## What the team should do differently\n\nCurtis to hold the subcontractor coordination call 30 minutes earlier so RFI answers reach the field before the morning stretch-and-flex.\n`;
+      return `# Internal memo — ${c.client.name}\n\n**${when} · prepared for the project team**\n\nFor the field and the office, not for distribution to the owner.\n\n${bullets}\n\n## Follow-up\n\n${teamNote(c)}\n`;
     case 'client_summary':
-      return `# Meeting summary — ${c.client.name}\n\n**${c.kind} · ${when}**\n\nThank you for the time today. Here is our record of what was discussed and agreed.\n\n${bullets}\n\n## Next steps\n\nWe will circulate updated drawings and the revised three-week look-ahead by end of week. [VERIFY: confirm the owner wants the look-ahead weekly rather than biweekly.]\n\n— ${c.lead.name}, Cambridge Building Group\n`;
+      return `# Meeting summary — ${c.client.name}\n\n**${c.kind} · ${when}**\n\nThank you for the time today. Here is our record of what was discussed and agreed.\n\n${bullets}\n\n## Next steps\n\nWe will circulate the revised three-week look-ahead by end of week, with the first item above closed or a date attached to it.\n\n— ${c.lead.name}, Cambridge Building Group\n`;
     case 'task_checklist':
       return `# Task checklist — ${c.client.name}\n\n**Extracted from ${c.kind.toLowerCase()}, ${when}**\n\n${c.items.map((i) => `- [ ] ${i}`).join('\n')}\n`;
     case 'internal_email_draft':
       return `**To:** Project team\n**Subject:** ${c.client.name} — ${c.kind.toLowerCase()} recap, ${when}\n\nTeam,\n\nQuick recap from today so everyone is working off the same list.\n\n${bullets}\n\nShout if any of this conflicts with what you heard in the room.\n\n${c.lead.name}\n`;
     case 'client_email_draft':
-      return `**To:** ${c.client.contact} <${c.client.contactEmail}>\n**Subject:** ${c.client.name} — recap and next steps\n\n${c.client.contact.split(' ')[0]},\n\nThanks for the time today. Summarising what we agreed so nothing sits in anyone's inbox:\n\n${bullets}\n\nWe will have the updated schedule over to you by Friday. [VERIFY: confirm Friday is achievable with the current submittal turnaround.]\n\nBest regards,\n${c.lead.name}\nCambridge Building Group\n`;
+      return `**To:** ${c.client.contact} <${c.client.contactEmail}>\n**Subject:** ${c.client.name} — recap and next steps\n\n${c.client.contact.split(' ')[0]},\n\nThanks for the time today. Summarising what we agreed so nothing sits in anyone's inbox:\n\n${bullets}\n\n${emailCloser(c)}\n\nBest regards,\n${c.lead.name}\nCambridge Building Group\n`;
     default:
       return `# ${docType}\n\n${bullets}\n`;
   }
@@ -217,16 +317,17 @@ function docBody(docType: string, c: DocContext): string {
 
 function transcriptBody(c: DocContext): string {
   const t = (m: number): string => `00:${String(m).padStart(2, '0')}:00`;
+  const owner = ownerLines(c);
   const lines = [
     `${t(0)}  ${c.lead.name}: Alright, we're recording. ${c.kind} for ${c.client.name}, let's get through the look-ahead first.`,
-    `${t(3)}  ${c.client.contact}: Before we do — where did we land on the item from last week?`,
+    `${t(3)}  ${c.client.contact}: ${owner.opener}`,
     `${t(4)}  ${c.lead.name}: ${c.items[0] ?? 'Still open, we owe you an answer.'}`,
     `${t(9)}  Curtis Vaughn: Field side, we're clear through next Tuesday. After that it depends on the submittal coming back.`,
     `${t(14)}  ${c.client.contact}: Understood. What do you need from us?`,
     `${t(15)}  ${c.lead.name}: ${c.items[1] ?? 'Just the sign-off, and we can keep moving.'}`,
     `${t(24)}  Alicia Brandt: I'll get the RFI log updated and circulated this afternoon.`,
     `${t(31)}  ${c.lead.name}: ${c.items[2] ?? 'Good. Anything else for the good of the order?'}`,
-    `${t(38)}  ${c.client.contact}: Nothing from me. Same time next week.`,
+    `${t(38)}  ${c.client.contact}: ${owner.closer}`,
     `${t(39)}  ${c.lead.name}: Same time next week. Thanks everyone.`,
   ];
   return lines.join('\n\n');
