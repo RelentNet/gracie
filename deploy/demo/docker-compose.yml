@@ -12,7 +12,7 @@ services:
   db:
     # Supabase's Postgres build: ships pgvector and the anon / authenticated /
     # service_role / authenticator roles PostgREST switches between.
-    image: public.ecr.aws/supabase/postgres:17.6.1.167
+    image: supabase/postgres:17.6.1.167
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -26,7 +26,7 @@ services:
       retries: 30
 
   rest:
-    image: public.ecr.aws/supabase/postgrest:v16.2
+    image: postgrest/postgrest:latest
     restart: unless-stopped
     depends_on:
       db: { condition: service_healthy }
