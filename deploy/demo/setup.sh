@@ -68,7 +68,7 @@ fi
 
 docker run --rm --network demo_internal \
   -e MC_HOST_local="http://${S3_ACCESS_KEY_ID}:${S3_SECRET_ACCESS_KEY}@minio:9000" \
-  minio/mc mb --ignore-existing local/demo
+  quay.io/minio/mc mb --ignore-existing local/demo
 
 docker compose up -d --build
 echo "stack up — see README.md for seeding"
