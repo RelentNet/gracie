@@ -13,8 +13,8 @@
  * morning of the demo: "today's meetings" is computed from the anchor, so a stale
  * seed puts every meeting in the past and empties the dashboard.
  *
- * SAFETY: refuses to run against anything but a local Supabase. This wipes the
- * content tables, so it must never be pointed at a real instance.
+ * SAFETY: wipes the content tables, so `assertDemoTarget` (demo-guard.ts) allows only
+ * a local Supabase, or a demo server named explicitly in `DEMO_SEED_TARGET`.
  *
  * Deterministic: ids are uuid-v5-ish hashes of stable keys and all variation comes
  * from a seeded PRNG, so re-running produces the same world (no duplicate rows,
@@ -25,17 +25,13 @@ import { createHash } from 'node:crypto';
 import { putObject } from '../../shared/src/storage/index.js';
 import { getServerClient } from '../src/index.js';
 
+import { assertDemoTarget } from './demo-guard.js';
+
 // ---------------------------------------------------------------------------
 // Safety + determinism
 // ---------------------------------------------------------------------------
 
-const url = process.env.SUPABASE_URL ?? '';
-if (!/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(url)) {
-  throw new Error(
-    `Refusing to run: SUPABASE_URL is "${url}". This seed WIPES content tables and ` +
-      'is only ever allowed against a local Supabase (127.0.0.1 / localhost).',
-  );
-}
+assertDemoTarget();
 
 function uuid(key: string): string {
   const h = createHash('sha1').update('cbg-demo:' + key).digest('hex');

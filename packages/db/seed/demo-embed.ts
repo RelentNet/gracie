@@ -17,17 +17,17 @@
  * Embeddings go through `getEmbedder()`, so this uses whichever route the app would
  * (OpenAI key first, else OpenRouter) and the same pinned 1536-dim model.
  *
- * SAFETY: local Supabase only — it replaces every row in `embeddings`.
+ * SAFETY: replaces every row in `embeddings`, so it runs only where `assertDemoTarget`
+ * (demo-guard.ts) allows: local, or a demo host named in `DEMO_SEED_TARGET`.
  */
 import { EMBEDDING_DIMENSIONS } from '../../shared/src/index.js';
 import { getObjectBytes } from '../../shared/src/storage/index.js';
 import { chunkText } from '../../../apps/worker/src/lib/chunk.js';
 import { getEmbedder, getServerClient } from '../src/index.js';
 
-const url = process.env.SUPABASE_URL ?? '';
-if (!/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(url)) {
-  throw new Error(`Refusing to run: SUPABASE_URL is "${url}". Local Supabase only.`);
-}
+import { assertDemoTarget } from './demo-guard.js';
+
+assertDemoTarget();
 
 /** Chunks per provider request — same bound as the pipeline's EMBED_BATCH_SIZE. */
 const BATCH = 96;
