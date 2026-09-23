@@ -10,13 +10,22 @@ expose it without that.
 
 ## First deploy
 
-From the repo on your machine:
+The app image is built on a workstation and shipped — never on the Unraid box. A
+`pnpm install` + `next build` there drove it to load 250 with ~200 MB free, next to
+Emby, Ollama and the rest. Running the image costs a few hundred MB.
+
+From the repo on your machine (`core.autocrlf=false` keeps Windows line endings out
+of the shell script and SQL the server runs):
 
 ```bash
-git archive --format=tar HEAD | ssh unraid 'mkdir -p /mnt/user/appdata/demo/src && tar -x -C /mnt/user/appdata/demo/src'
+git -c core.autocrlf=false archive --format=tar HEAD | ssh unraid 'mkdir -p /mnt/user/appdata/demo/src && tar -x -C /mnt/user/appdata/demo/src'
 scp deploy/demo/docker-compose.yml deploy/demo/gateway.conf deploy/demo/setup.sh unraid:/mnt/user/appdata/demo/
+docker build -f apps/web/Dockerfile -t demo-web:latest .
+docker save demo-web:latest | gzip | ssh unraid 'gunzip | docker load'
 ssh unraid 'cd /mnt/user/appdata/demo && bash setup.sh'
 ```
+
+The `src/` copy on the server is only for the schema and migrations `setup.sh` applies.
 
 ## Seed (and re-seed on the morning of a demo)
 
@@ -38,8 +47,9 @@ stored encrypted in the database and survives re-seeding.
 
 ## Update the app
 
-Extracts over the existing source (no delete), then rebuilds only the app:
+Rebuild and ship the image, then recreate the container:
 
 ```bash
-git archive --format=tar HEAD | ssh unraid 'tar -x -C /mnt/user/appdata/demo/src && cd /mnt/user/appdata/demo && docker compose up -d --build web'
+docker build -f apps/web/Dockerfile -t demo-web:latest .
+docker save demo-web:latest | gzip | ssh unraid 'gunzip | docker load && cd /mnt/user/appdata/demo && docker compose up -d web'
 ```

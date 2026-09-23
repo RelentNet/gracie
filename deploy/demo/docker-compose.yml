@@ -60,9 +60,10 @@ services:
 
   web:
     container_name: demo-web
-    build:
-      context: ./src
-      dockerfile: apps/web/Dockerfile
+    # Built on a workstation and shipped over (see README). Do NOT build on the
+    # Unraid box: `pnpm install` + `next build` drove it to load 250 with ~200 MB free
+    # and would have pushed it into the OOM killer. Running the image is cheap.
+    image: demo-web:latest
     restart: unless-stopped
     depends_on: [gateway, minio]
     env_file: .env

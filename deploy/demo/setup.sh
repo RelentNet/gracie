@@ -8,7 +8,7 @@
 # 2. Starts Postgres + MinIO, gives PostgREST's login role its password.
 # 3. Applies the schema + every migration — only on a fresh database.
 # 4. Creates the storage bucket.
-# 5. Builds and starts everything.
+# 5. Starts everything (the app image is built elsewhere — see README.md).
 #
 # It does NOT seed data or set the AI key — see README.md for those.
 set -euo pipefail
@@ -74,5 +74,9 @@ docker run --rm --network demo_internal \
   -e MC_HOST_local="http://${S3_ACCESS_KEY_ID}:${S3_SECRET_ACCESS_KEY}@minio:9000" \
   quay.io/minio/mc mb --ignore-existing local/demo
 
-docker compose up -d --build
+if ! docker image inspect demo-web:latest >/dev/null 2>&1; then
+  echo "demo-web:latest not loaded yet — build and ship it first (README.md), then re-run."
+  exit 1
+fi
+docker compose up -d
 echo "stack up — see README.md for seeding"
