@@ -52,8 +52,12 @@ done
 echo
 
 psql_db() { docker compose exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d postgres "$@"; }
+# Supabase's Postgres build reserves `authenticator`; only its real superuser,
+# supabase_admin, may change it. Everything else runs as `postgres` so objects get
+# the default grants the API roles rely on.
+psql_admin() { docker compose exec -T db psql -v ON_ERROR_STOP=1 -U supabase_admin -d postgres "$@"; }
 
-psql_db -q -c "alter role authenticator with password '${POSTGRES_PASSWORD}';"
+psql_admin -q -c "alter role authenticator with password '${POSTGRES_PASSWORD}';"
 
 if [ "$(psql_db -tAc "select to_regclass('public.clients') is not null")" = "t" ]; then
   echo "schema already present — skipping"
