@@ -6,8 +6,9 @@
  * never the OpenAI SDK; D9/D11) → write `embeddings` rows (`source_type='upload'`,
  * 1536-dim) → update `documents.status`.
  *
- * Failure handling (docs/06 §8): unsupported type or no extractable text →
- * `needs_review` (terminal, no point retrying). Transient errors (MinIO/provider)
+ * Failure handling (docs/06 §8): unsupported type or no extractable text → the
+ * file stays `ready` (still viewable/downloadable), just not searchable — terminal,
+ * no point retrying. Transient errors (MinIO/provider)
  * throw so BullMQ retries with backoff; after the attempt budget the job lands in
  * the failed set for inspection.
  */
@@ -76,15 +77,13 @@ export function createIngestProcessor(
     const { text, unsupported } = await extractText(bytes, fileName, mimeType);
 
     if (unsupported) {
-      log.warn('ingest: unsupported file type — flagging needs_review');
-      await markDocument(db, documentId, 'needs_review');
+      log.warn('ingest: unsupported file type — not indexed');
       return { documentId, chunks: 0, embeddings: 0, status: 'unsupported' };
     }
 
     const chunks = chunkText(text);
     if (chunks.length === 0) {
-      log.warn('ingest: no extractable text — flagging needs_review');
-      await markDocument(db, documentId, 'needs_review');
+      log.warn('ingest: no extractable text — not indexed');
       return { documentId, chunks: 0, embeddings: 0, status: 'empty' };
     }
 
