@@ -28,7 +28,6 @@ import {
 import { resolveSubtype } from '@/lib/upload-subtypes';
 import { enqueueIngest } from '@/lib/queue';
 
-
 // bullmq/ioredis are Node-only — force the Node.js runtime (not edge).
 export const runtime = 'nodejs';
 
