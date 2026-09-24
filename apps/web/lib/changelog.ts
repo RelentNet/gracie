@@ -31,6 +31,21 @@ export interface Release {
 /** Newest first. */
 export const CHANGELOG: readonly Release[] = [
   {
+    version: '0.4.6',
+    date: '2026-09-24',
+    title: 'No more "Requires Review" badges',
+    stage: 'Alpha',
+    sections: [
+      {
+        heading: 'Improved',
+        items: [
+          'Uploaded files and meeting summaries are simply Ready — the "Requires Review" badge is gone, since there was no way to act on it.',
+          'The upload window no longer asks for a Status.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.4.5',
     date: '2026-09-16',
     title: 'A Support tab for everyone',

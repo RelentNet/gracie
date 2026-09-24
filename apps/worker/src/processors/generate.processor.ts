@@ -840,7 +840,7 @@ async function persistDocuments(
       file_name: fileName,
       file_size: Buffer.byteLength(doc.content, 'utf8'),
       requires_review: doc.spec.requiresReview,
-      status: doc.spec.requiresReview ? 'needs_review' : 'ready',
+      status: 'ready',
     };
     const { data, error } = await db.from('documents').insert(insert).select('id').single();
     if (error !== null) throw new Error(`generate: insert document ${doc.type}: ${error.message}`);

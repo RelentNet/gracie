@@ -10,7 +10,7 @@ import { UPLOAD_SUBTYPES, type UploadSubtypeValue } from '@/lib/upload-subtypes'
 
 /**
  * Upload modal (docs/08 §8; p2fix §1). Collects file(s), a destination subtype
- * (which folder to file into), an optional title override, and a status, then
+ * (which folder to file into) and an optional title override, then
  * POSTs multipart to `/api/upload`. The frontend never holds MinIO creds — the
  * bytes are sent to the server (docs/01 §2). Client assignment is required only
  * when no client context is set (the global view with no client selected).
@@ -62,7 +62,6 @@ export function UploadModal({
   const [clientId, setClientId] = useState<string>(fixedClientId ?? '');
   const [subtype, setSubtype] = useState<UploadSubtypeValue>(defaultSubtype);
   const [title, setTitle] = useState<string>('');
-  const [status, setStatus] = useState<'ready' | 'needs_review'>('ready');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -81,7 +80,6 @@ export function UploadModal({
     setClientId(fixedClientId ?? '');
     setSubtype(defaultSubtype);
     setTitle('');
-    setStatus('ready');
     setError(null);
     if (fileInputRef.current !== null) fileInputRef.current.value = '';
     onClose();
@@ -104,7 +102,6 @@ export function UploadModal({
       const body = new FormData();
       body.set('clientId', resolvedClientId);
       body.set('subtype', subtype);
-      body.set('status', status);
       if (targetFolderId !== null) body.set('folderId', targetFolderId);
       if (singleFile && title.trim() !== '') body.set('title', title.trim());
       for (const file of Array.from(files)) body.append('file', file);
@@ -201,18 +198,6 @@ export function UploadModal({
             onChange={(event: ChangeEvent<HTMLInputElement>): void => setTitle(event.target.value)}
             placeholder="Override the display name"
           />
-        </Field>
-
-        <Field label="Status">
-          <select
-            className={INPUT_CLASS}
-            style={inputStyle}
-            value={status}
-            onChange={(event): void => setStatus(event.target.value as 'ready' | 'needs_review')}
-          >
-            <option value="ready">Ready</option>
-            <option value="needs_review">Requires Review</option>
-          </select>
         </Field>
 
         {error !== null ? (

@@ -28,7 +28,6 @@ import {
 import { resolveSubtype } from '@/lib/upload-subtypes';
 import { enqueueIngest } from '@/lib/queue';
 
-import type { DocumentStatus } from '@gracie/shared';
 
 // bullmq/ioredis are Node-only — force the Node.js runtime (not edge).
 export const runtime = 'nodejs';
@@ -86,8 +85,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // the document-type subtype, which only picks a default Uploads folder.
     const targetFolderId = readString(form.get('folderId'));
     const subtype = resolveSubtype(readString(form.get('subtype')));
-    const status: DocumentStatus =
-      readString(form.get('status')) === 'needs_review' ? 'needs_review' : 'ready';
     const titleOverride = readString(form.get('title'));
 
     const client = await getClient(clientId);
@@ -157,7 +154,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         r2Key: objectKey,
         fileName,
         fileSize: bytes.byteLength,
-        status,
         uploadedByUserId,
       });
       const jobId = await enqueueIngest({
