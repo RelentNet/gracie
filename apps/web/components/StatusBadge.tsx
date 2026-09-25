@@ -24,6 +24,11 @@ const STATUS_STYLES: Readonly<Record<BadgeStatus, StatusStyle>> = {
     bg: 'var(--color-amber-100)',
     fg: 'var(--color-amber-600)',
   },
+  'not-admitted': {
+    label: 'Not Admitted',
+    bg: 'var(--color-red-100)',
+    fg: 'var(--color-red-600)',
+  },
   overdue: { label: 'Overdue', bg: 'var(--color-red-100)', fg: 'var(--color-red-600)' },
 };
 
