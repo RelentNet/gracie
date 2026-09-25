@@ -76,7 +76,8 @@ docker run --rm --network "container:$(docker compose ps -q minio)" \
   -e MC_HOST_local="http://${S3_ACCESS_KEY_ID}:${S3_SECRET_ACCESS_KEY}@localhost:9000" \
   quay.io/minio/mc mb --ignore-existing local/demo
 
-web_image=$(docker compose config --images web)
+# The app image (demo-web / hq-web) is built elsewhere and shipped, never pulled.
+web_image=$(docker compose config --images | grep -e '-web:')
 if ! docker image inspect "$web_image" >/dev/null 2>&1; then
   echo "$web_image not loaded yet — build and ship it first (README.md), then re-run."
   exit 1

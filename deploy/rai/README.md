@@ -16,7 +16,9 @@ From the repo root on your machine:
 ```bash
 ssh relentnet 'sudo -n install -d -o brandon -g brandon /opt/hq/src'
 git -c core.autocrlf=false archive --format=tar HEAD | ssh relentnet 'tar -x -C /opt/hq/src'
-scp deploy/rai/docker-compose.yml deploy/demo/gateway.conf deploy/demo/setup.sh relentnet:/opt/hq/
+# From the archive, not the working copy: on Windows the working copy has CRLF
+# line endings, which break setup.sh on the server.
+ssh relentnet 'cd /opt/hq && cp src/deploy/rai/docker-compose.yml src/deploy/demo/gateway.conf src/deploy/demo/setup.sh .'
 docker build -f apps/web/Dockerfile -t hq-web:latest .
 docker save hq-web:latest | gzip | ssh relentnet 'gunzip | docker load'
 ssh relentnet 'cd /opt/hq && bash setup.sh'
