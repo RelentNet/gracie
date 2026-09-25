@@ -16,11 +16,11 @@ export function toBadgeStatus(status: PipelineStatus): BadgeStatus {
       return 'processing';
     case 'complete':
       return 'complete';
-    // `not_admitted` is a real "someone must look at this" state, not a silent skip;
-    // the calendar's badge vocabulary has no dedicated slot, so it rides needs-review.
     case 'needs_attention':
-    case 'not_admitted':
       return 'needs-review';
+    // Gracie waited outside and nobody let her in — say so, not "needs review".
+    case 'not_admitted':
+      return 'not-admitted';
     case 'cancelled':
       return 'overdue';
   }

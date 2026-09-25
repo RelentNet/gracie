@@ -191,6 +191,7 @@ export const BADGE_STATUSES = [
   'processing',
   'complete',
   'needs-review',
+  'not-admitted',
   'overdue',
 ] as const;
 export type BadgeStatus = (typeof BADGE_STATUSES)[number];

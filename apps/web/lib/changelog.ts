@@ -31,6 +31,20 @@ export interface Release {
 /** Newest first. */
 export const CHANGELOG: readonly Release[] = [
   {
+    version: '0.4.7',
+    date: '2026-09-25',
+    title: 'Calendar says when Gracie wasn’t let in',
+    stage: 'Alpha',
+    sections: [
+      {
+        heading: 'Fixed',
+        items: [
+          'Meetings where nobody admitted Gracie from the waiting room now show “Not Admitted” on the calendar instead of “Needs Review”.',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.4.6',
     date: '2026-09-24',
     title: 'No more "Requires Review" badges',
