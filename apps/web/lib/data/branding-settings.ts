@@ -17,7 +17,6 @@ import 'server-only';
 
 import { getServerClient } from '@gracie/db';
 
-import { resolveBrandPreset } from '../brand-presets';
 
 const BRAND_LOGO_KEY = 'brand_logo_key';
 const BRAND_LOGO_DARK_KEY = 'brand_logo_dark_key';
@@ -101,15 +100,3 @@ export function setBrandProductName(name: string, updatedByUserId: string | null
   return writeKey(BRAND_PRODUCT_NAME, name, updatedByUserId);
 }
 
-/**
- * The product name in force: the override when set, else the selected preset's own
- * name. The single source for both the root layout and any server component that
- * needs to name the product in copy.
- */
-export async function getActiveProductName(): Promise<string> {
-  const [presetId, override] = await Promise.all([
-    getBrandPresetId().catch(() => null),
-    getBrandProductName().catch(() => null),
-  ]);
-  return override ?? resolveBrandPreset(presetId).productName;
-}
