@@ -80,7 +80,7 @@ const inputClass = 'w-full rounded-lg border bg-white px-3 py-2';
 const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body } as const;
 
 export function BotSettingsPanel(): React.JSX.Element {
-  const { can } = useAuth();
+  const { can, productName } = useAuth();
   const [config, setConfig] = useState<BotConfigView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -221,7 +221,7 @@ export function BotSettingsPanel(): React.JSX.Element {
     >
       <h3 style={TYPE.bodyStrong}>Meeting dispatch</h3>
       <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-        Team-wide switches for when and how Gracie’s bot joins meetings.
+        Team-wide switches for when and how {productName}’s bot joins meetings.
       </span>
       <SettingToggle
         getUrl="/api/calendar/settings"
@@ -237,7 +237,7 @@ export function BotSettingsPanel(): React.JSX.Element {
         responseKey="enabled"
         defaultValue={false}
         label="On-demand meeting join"
-        description="When on, staff can paste a meeting link on the Calendar and have Gracie join and record it immediately. Independent of the auto-join switch — this is an explicit, per-meeting action."
+        description={`When on, staff can paste a meeting link on the Calendar and have ${productName} join and record it immediately. Independent of the auto-join switch — this is an explicit, per-meeting action.`}
       />
     </section>
   ) : null;
@@ -316,7 +316,7 @@ export function BotSettingsPanel(): React.JSX.Element {
           <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
             When on, a host can say <em>“Hey Gracie, leave the meeting”</em> to make the bot leave,
             or <em>“Hey Gracie, stop listening for 5 minutes”</em> to pause the recording (it resumes
-            on its own). Gracie always posts a short chat note before acting, so nothing happens
+            on its own). {productName} always posts a short chat note before acting, so nothing happens
             silently. Only the meeting <strong>host</strong> is obeyed — guests and clients are
             ignored.
           </span>
@@ -345,7 +345,7 @@ export function BotSettingsPanel(): React.JSX.Element {
             ariaLabel="Show bot avatar tile"
           />
           <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-            Gracie appears as a video tile showing this image (like tl;dv). JPEG, 16:9, ~1280×720,
+            {productName} appears as a video tile showing this image (like tl;dv). JPEG, 16:9, ~1280×720,
             ≤1.3 MB.
           </span>
           <div className="flex items-center gap-4">
@@ -410,7 +410,7 @@ export function BotSettingsPanel(): React.JSX.Element {
         <fieldset className="flex flex-col gap-2">
           <legend style={TYPE.bodyStrong}>Auto-leave</legend>
           <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-            When Gracie should give up and leave, in seconds. Leave blank to use Recall’s default
+            When {productName} should give up and leave, in seconds. Leave blank to use Recall’s default
             (shown in each box). Prevents a bot lingering in an empty call.
           </span>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -449,15 +449,15 @@ export function BotSettingsPanel(): React.JSX.Element {
           <span style={{ ...TYPE.secondary, color: 'var(--text-primary)' }}>
             {voiceCommands ? (
               <>
-                <strong>Observe-only, with one exception.</strong> Gracie never speaks aloud or joins
-                the conversation. The only thing she ever posts is a one-line chat note confirming a
+                <strong>Observe-only, with one exception.</strong> {productName} never speaks aloud or joins
+                the conversation. The only thing it ever posts is a one-line chat note confirming a
                 host’s voice command (leaving or pausing) — turned on by “Let hosts control Gracie by
-                voice” above. Turn that off to keep her fully silent.
+                voice” above. Turn that off to keep it fully silent.
               </>
             ) : (
               <>
-                <strong>Observe-only.</strong> Gracie never chats, speaks, or reacts in a meeting —
-                she only records for notes, so she can never disrupt or engage your customers.
+                <strong>Observe-only.</strong> {productName} never chats, speaks, or reacts in a meeting —
+                it only records for notes, so it can never disrupt or engage your customers.
               </>
             )}
           </span>

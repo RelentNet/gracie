@@ -153,7 +153,7 @@ export default function ClientIntelligencePage(): React.JSX.Element {
             <p style={TYPE.sectionHeader}>Ask about {client.name}</p>
             <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)', maxWidth: '32rem' }}>
               Answers are grounded in this client’s documents. Toggle the Knowledge Base to also
-              draw on Grace &amp; Associates’ shared reference material.
+              draw on your firm’s shared reference material.
             </p>
           </Card>
         }

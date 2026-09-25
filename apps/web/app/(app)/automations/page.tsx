@@ -22,7 +22,7 @@ import type { AutomationClientView } from './types';
  * read-only. Admins also get the advanced-requests inbox.
  */
 export default function AutomationsPage(): React.JSX.Element {
-  const { can, user } = useAuth();
+  const { can, user, productName } = useAuth();
   const canView = can('automations.view');
   const canEdit = can('automations.edit');
   const isAdmin = user.role === 'admin';
@@ -65,9 +65,9 @@ export default function AutomationsPage(): React.JSX.Element {
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Automations</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          Recurring reports and tasks Gracie runs for you — from hourly digests to a brief before each
-          client meeting. Ask Gracie in the Assistant to create one (“email me a portfolio digest every
-          Monday”, “brief me 15 minutes before every client meeting”) — she’ll propose it and you confirm
+          Recurring reports and tasks {productName} runs for you — from hourly digests to a brief before each
+          client meeting. Ask {productName} in the Assistant to create one (“email me a portfolio digest every
+          Monday”, “brief me 15 minutes before every client meeting”) — it’ll propose it and you confirm
           it here or in chat. {showAll ? 'You’re viewing everyone’s automations.' : 'You’re viewing your automations.'}
         </p>
       </header>
@@ -75,7 +75,7 @@ export default function AutomationsPage(): React.JSX.Element {
       {isAdmin ? (
         <CollapsibleSection
           title="Advanced requests"
-          description="Things teammates asked Gracie to automate that aren’t available yet."
+          description={`Things teammates asked ${productName} to automate that aren’t available yet.`}
           storageKey="automations-advanced-requests"
           defaultOpen={false}
         >
@@ -90,10 +90,10 @@ export default function AutomationsPage(): React.JSX.Element {
       ) : automations.length === 0 ? (
         <EmptyState
           title="No automations yet"
-          description="Open the Assistant and ask Gracie to set one up — for example, “send me a client report for Acme every Friday morning” or “brief me 15 minutes before every client meeting.”"
+          description={`Open the Assistant and ask ${productName} to set one up — for example, “send me a client report for Acme every Friday morning” or “brief me 15 minutes before every client meeting.”`}
           action={
             <span className="inline-flex items-center gap-1" style={{ ...TYPE.secondary, color: 'var(--color-blue-700)' }}>
-              <Sparkles size={14} aria-hidden="true" /> Ask Gracie in the Assistant
+              <Sparkles size={14} aria-hidden="true" /> Ask {productName} in the Assistant
             </span>
           }
         />

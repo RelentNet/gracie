@@ -79,7 +79,7 @@ export function UsersPanel(): React.JSX.Element {
   // Calendar-connection controls gate on the same permission the calendar page
   // used (admin-tier). Settings is already admin-only; this preserves the exact
   // Sync-now / full-roster gating for a settings-admin who lacks it.
-  const { can } = useAuth();
+  const { can, productName } = useAuth();
   const isAdmin = can('calendar.configure');
 
   const [users, setUsers] = useState<readonly UserRow[] | null>(null);
@@ -181,7 +181,7 @@ export function UsersPanel(): React.JSX.Element {
     roster = (
       <EmptyState
         title="No users yet"
-        description="Users appear here after they first sign in to Gracie."
+        description={`Users appear here after they first sign in to ${productName}.`}
       />
     );
   } else {

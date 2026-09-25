@@ -9,6 +9,7 @@ import { apiClient } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/format';
 import { supportCategoryLabel, type SupportRequestView } from '@/lib/support';
 import { TYPE } from '@/lib/typography';
+import { useAuth } from '@/lib/auth';
 
 /**
  * Settings → Support — every request staff filed from the Support tab, open first,
@@ -16,6 +17,7 @@ import { TYPE } from '@/lib/typography';
  * Mark done / Reopen action.
  */
 export function SupportInboxPanel(): React.JSX.Element {
+  const { productName } = useAuth();
   const [requests, setRequests] = useState<readonly SupportRequestView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export function SupportInboxPanel(): React.JSX.Element {
             {r.message}
           </p>
           <p className="break-words" style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-            Page {r.pageUrl ?? '—'} · Gracie {r.appVersion ?? '—'} · {r.screen ?? '—'}
+            Page {r.pageUrl ?? '—'} · {productName} {r.appVersion ?? '—'} · {r.screen ?? '—'}
             <br />
             {r.browser ?? '—'}
           </p>

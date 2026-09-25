@@ -13,9 +13,10 @@ import 'server-only';
 
 import { getServerClient } from '@gracie/db';
 import type { ServerClient } from '@gracie/db';
+import { DEFAULT_INTERNAL_DOMAINS } from '@gracie/shared';
 
-/** GA floor shown when `email_allowed_domains` is unset (mirrors the worker floor). */
-const DEFAULT_ALLOWED_DOMAINS: readonly string[] = ['cambridgebg.com'];
+/** Floor shown when `email_allowed_domains` is unset (mirrors the worker floor). */
+const DEFAULT_ALLOWED_DOMAINS = DEFAULT_INTERNAL_DOMAINS;
 
 /** Setting keys behind each toggle (must match the worker's readers exactly). */
 const KEYS = {

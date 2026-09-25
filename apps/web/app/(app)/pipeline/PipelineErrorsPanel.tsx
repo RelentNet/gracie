@@ -19,6 +19,7 @@ import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { apiClient } from '@/lib/api-client';
 import type { FleetReason, FleetState } from '@/lib/pipeline-reason';
 import { TYPE } from '@/lib/typography';
+import { useAuth } from '@/lib/auth';
 
 interface FleetRowView {
   readonly id: string;
@@ -108,6 +109,7 @@ function fmtDuration(seconds: number | null): string {
 }
 
 export function PipelineErrorsPanel(): React.JSX.Element {
+  const { productName } = useAuth();
   const [runs, setRuns] = useState<readonly FleetRowView[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -189,7 +191,7 @@ export function PipelineErrorsPanel(): React.JSX.Element {
     filter === 'needs_attention'
       ? 'Nothing needs attention. Every meeting either generated its notes or is still processing.'
       : filter === 'not_admitted'
-        ? 'Gracie was let into every meeting she was invited to. Nothing was missed.'
+        ? `${productName} was let into every meeting it was invited to. Nothing was missed.`
       : filter === 'errors'
         ? 'No failed or partial runs.'
         : filter === 'in_progress'
@@ -213,10 +215,10 @@ export function PipelineErrorsPanel(): React.JSX.Element {
         </button>
       </div>
       <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-        Every meeting Gracie tried to write notes for — done, in progress, or stuck. “Needs attention”
+        Every meeting {productName} tried to write notes for — done, in progress, or stuck. “Needs attention”
         meetings were recorded but never generated their notes; re-run to create them from the recording.
-        “Never admitted” meetings are different: Gracie was never let in, so there is no recording and
-        nothing to re-run — admit her when she asks to join, or turn on automatic admission.
+        “Never admitted” meetings are different: {productName} was never let in, so there is no recording and
+        nothing to re-run — admit it when it asks to join, or turn on automatic admission.
       </span>
 
       {/* Status filter */}

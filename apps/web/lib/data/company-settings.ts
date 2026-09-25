@@ -16,14 +16,15 @@
 import 'server-only';
 
 import { getServerClient } from '@gracie/db';
-import { DEFAULT_INTERNAL_DOMAINS, isFreeEmailDomain, parseInternalDomains } from '@gracie/shared';
+import {
+  DEFAULT_COMPANY_DESCRIPTION,
+  DEFAULT_INTERNAL_DOMAINS,
+  isFreeEmailDomain,
+  parseInternalDomains,
+} from '@gracie/shared';
 
 const COMPANY_DESCRIPTION_KEY = 'ga_company_description';
 const INTERNAL_DOMAINS_KEY = 'internal_email_domains';
-
-/** Mirrors the fallback in `chat-retrieval.getGaCompanyDescription`. */
-const DEFAULT_COMPANY_DESCRIPTION =
-  'Cambridge Building Group — a commercial general contractor in Middle Tennessee.';
 
 const MAX_DESCRIPTION_LEN = 5000;
 /** Basic hostname shape: labels of a–z/0–9/-, a dot, a ≥2-char TLD; no '@'/spaces. */

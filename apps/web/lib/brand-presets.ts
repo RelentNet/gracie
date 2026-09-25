@@ -32,6 +32,39 @@ export interface BrandPreset {
 
 export const BRAND_PRESETS: readonly BrandPreset[] = [
   {
+    // relentnet-brandkit/relentnet-tokens.css: black ground, gold accent, warm
+    // neutrals. Light mode darkens the gold (#cbab45 is ~2:1 on white) to keep
+    // text and links AA; dark mode uses the brand gold as-is.
+    id: 'relentnet',
+    productName: 'RelentNet',
+    tagline: 'Black and gold — RelentNet house style',
+    swatch: '#cbab45',
+    light: {
+      '--brand': '#7a6524',
+      '--brand-ink': '#6b5a24',
+      '--brand-soft': 'rgba(203, 171, 69, 0.16)',
+      '--color-blue-500': '#7a6524',
+      '--color-blue-600': '#6b5a24',
+      '--color-blue-700': '#5c4d1e',
+      '--color-navy-900': '#050505',
+      '--color-navy-800': '#171614',
+      '--color-navy-700': '#171614',
+      '--bg-0': '#efece5',
+    },
+    dark: {
+      '--brand': '#cbab45',
+      '--brand-ink': '#dfac0a',
+      '--brand-soft': 'rgba(203, 171, 69, 0.16)',
+      '--color-blue-500': '#cbab45',
+      '--color-blue-600': '#b8983a',
+      '--color-blue-700': '#dfac0a',
+      '--color-navy-900': '#050505',
+      '--color-navy-800': '#171614',
+      '--color-navy-700': '#171614',
+      '--bg-0': '#050505',
+    },
+  },
+  {
     id: 'cam',
     productName: 'Cam',
     tagline: 'Cambridge navy and amber — your brand',
@@ -153,7 +186,7 @@ export const BRAND_PRESETS: readonly BrandPreset[] = [
   },
 ];
 
-export const DEFAULT_BRAND_PRESET_ID = 'cam';
+export const DEFAULT_BRAND_PRESET_ID = 'relentnet';
 
 /** Resolve a stored preset id to its preset; unknown/absent → the default. */
 export function resolveBrandPreset(id: string | null | undefined): BrandPreset {

@@ -355,7 +355,7 @@ export function CompanySettingsPanel(): React.JSX.Element {
           aria-label="Company description"
         />
         <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
-          Used by the Assistant and Gracie’s note generation to describe who Grace &amp; Associates is.
+          Used by the Assistant and {productName}’s note generation to describe who your company is.
         </span>
       </label>
 

@@ -27,7 +27,12 @@ import 'server-only';
 
 import { getEmbedder, getServerClient } from '@gracie/db';
 import type { ServerClient } from '@gracie/db';
-import { filterChunksForRole, type RetrievedChunk, type Role } from '@gracie/shared';
+import {
+  DEFAULT_COMPANY_DESCRIPTION,
+  filterChunksForRole,
+  type RetrievedChunk,
+  type Role,
+} from '@gracie/shared';
 
 /** Client chunks kept in the prompt after the role gate. */
 const CLIENT_TOP_K = 6;
@@ -204,5 +209,5 @@ export async function getGaCompanyDescription(): Promise<string> {
   if (error !== null) throw new Error(`chat: getGaCompanyDescription: ${error.message}`);
   return typeof data?.value === 'string'
     ? data.value
-    : 'Cambridge Building Group — a commercial general contractor in Middle Tennessee.';
+    : DEFAULT_COMPANY_DESCRIPTION;
 }

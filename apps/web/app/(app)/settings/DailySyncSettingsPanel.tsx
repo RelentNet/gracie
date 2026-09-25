@@ -22,6 +22,7 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
+import { useAuth } from '@/lib/auth';
 
 interface EditableText {
   readonly default: string;
@@ -44,6 +45,7 @@ const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body } as cons
 const numClass = 'w-24 rounded-lg border bg-white px-3 py-2';
 
 export function DailySyncSettingsPanel(): React.JSX.Element {
+  const { productName } = useAuth();
   const [ds, setDs] = useState<DailySyncSettings | null>(null);
   const [notif, setNotif] = useState<NotifSubset | null>(null);
   const [templateText, setTemplateText] = useState('');
@@ -308,7 +310,7 @@ export function DailySyncSettingsPanel(): React.JSX.Element {
       {/* 3 — AI briefing */}
       <div className="flex flex-col gap-2">
         <Row
-          label="Gracie’s AI briefing"
+          label={`${productName}’s AI briefing`}
           description="Compose a narrative from your own data. Off by default."
           checked={ds.aiEnabled}
           disabled={busy}
@@ -319,7 +321,7 @@ export function DailySyncSettingsPanel(): React.JSX.Element {
         />
         <span style={{ ...TYPE.label, color: 'var(--text-secondary)' }}>
           When on, add the <span className="font-data">{'{ai_brief}'}</span> shortcode to your template where you want it.
-          Composed <strong>only</strong> from your own meeting data — Gracie never uses outside information here.
+          Composed <strong>only</strong> from your own meeting data — {productName} never uses outside information here.
         </span>
         {ds.aiEnabled && !templateHasAiShortcode ? (
           <span

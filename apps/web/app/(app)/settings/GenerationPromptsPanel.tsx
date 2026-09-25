@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
+import { useAuth } from '@/lib/auth';
 
 interface GenerationPromptDoc {
   readonly type: string;
@@ -35,6 +36,7 @@ const inputClass = 'w-full rounded-lg border bg-white px-3 py-2';
 const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body } as const;
 
 export function GenerationPromptsPanel(): React.JSX.Element {
+  const { productName } = useAuth();
   const [docs, setDocs] = useState<GenerationPromptDoc[]>([]);
   // Editable text per doc type (keyed by type).
   const [text, setText] = useState<Record<string, string>>({});
@@ -91,7 +93,7 @@ export function GenerationPromptsPanel(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-6">
       <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-        These are the instructions Gracie follows to write each document after a meeting. Edit any of
+        These are the instructions {productName} follows to write each document after a meeting. Edit any of
         them to change tone or content — changes apply to the next meeting processed, no deploy needed.
       </p>
 

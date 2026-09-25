@@ -30,6 +30,7 @@ import type {
   DailySyncTodo,
   DailySyncYesterday,
 } from '@gracie/shared';
+import { DEFAULT_COMPANY_DESCRIPTION } from '@gracie/shared';
 
 import { buildBriefContent, type BriefMeeting } from '../lib/brief.js';
 import { buildAiBriefSource, composeAiBrief } from '../lib/daily-sync-ai.js';
@@ -302,7 +303,7 @@ async function getGaCompanyDescription(db: ServerClient): Promise<string> {
   const { data } = await db.from('settings').select('value').eq('key', 'ga_company_description').maybeSingle();
   return typeof data?.value === 'string' && data.value.trim() !== ''
     ? data.value
-    : 'Cambridge Building Group — a commercial general contractor in Middle Tennessee.';
+    : DEFAULT_COMPANY_DESCRIPTION;
 }
 
 // --- Briefs -------------------------------------------------------------------

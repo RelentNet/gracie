@@ -21,6 +21,7 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { ClientAvatar } from '@/components/ClientAvatar';
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
+import { useAuth } from '@/lib/auth';
 
 const CONSENT_URL = '/api/settings/contact-import-consent';
 
@@ -37,6 +38,7 @@ interface ConsentData {
 }
 
 export function ContactsSettingsPanel(): React.JSX.Element {
+  const { productName } = useAuth();
   const [data, setData] = useState<ConsentData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // mailbox currently saving
@@ -97,7 +99,7 @@ export function ContactsSettingsPanel(): React.JSX.Element {
       <Card className="p-6">
         <CardHeader
           title="Outlook contact import"
-          description="Only mailboxes allowed here can be imported from Outlook (Contacts → Import from Outlook). Off by default — Gracie never reads a mailbox that hasn’t opted in."
+          description={`Only mailboxes allowed here can be imported from Outlook (Contacts → Import from Outlook). Off by default — ${productName} never reads a mailbox that hasn’t opted in.`}
         />
 
         <div className="flex flex-col divide-y" style={{ borderColor: 'var(--border-subtle)' }}>

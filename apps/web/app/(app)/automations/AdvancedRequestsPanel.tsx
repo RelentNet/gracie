@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { LoadingState } from '@/components/ui/StateViews';
 import { TYPE } from '@/lib/typography';
 import { formatDateTime } from '@/lib/format';
+import { useAuth } from '@/lib/auth';
 
 import type { AutomationRequestClientView } from './types';
 
@@ -17,6 +18,7 @@ import type { AutomationRequestClientView } from './types';
  * rendered for admins.
  */
 export function AdvancedRequestsPanel(): React.JSX.Element {
+  const { productName } = useAuth();
   const [requests, setRequests] = useState<AutomationRequestClientView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export function AdvancedRequestsPanel(): React.JSX.Element {
       {requests.length === 0 ? (
         <div className="flex items-center gap-2" style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
           <Inbox size={16} aria-hidden="true" />
-          No advanced requests right now. When Gracie is asked for something she can&rsquo;t build yet, it appears here.
+          No advanced requests right now. When {productName} is asked for something it can&rsquo;t build yet, it appears here.
         </div>
       ) : (
         <ul className="flex flex-col gap-2">

@@ -8,6 +8,7 @@ import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { useAuth } from '@/lib/auth';
 
 import { orgTypeLabel } from '../lib/calendar-meeting';
 import type { JoinMeetingResponse, JoinOrgOption } from '../types';
@@ -40,6 +41,7 @@ export function JoinMeetingModal({
   readonly onClose: () => void;
   readonly onJoined: () => void;
 }): React.JSX.Element {
+  const { productName } = useAuth();
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
   const [clientId, setClientId] = useState(''); // '' = Unassigned (external)
@@ -114,7 +116,7 @@ export function JoinMeetingModal({
           Back
         </Button>
         <Button variant="primary" onClick={submit} disabled={submitting}>
-          {submitting ? 'Sending Gracie…' : 'Join & record now'}
+          {submitting ? `Sending ${productName}…` : 'Join & record now'}
         </Button>
       </>
     ) : (
@@ -138,7 +140,7 @@ export function JoinMeetingModal({
             style={{ color: 'var(--color-emerald-500)' }}
           />
           <div className="flex flex-col gap-1">
-            <span style={TYPE.bodyStrong}>Gracie is joining “{joined.title}”.</span>
+            <span style={TYPE.bodyStrong}>{productName} is joining “{joined.title}”.</span>
             <span style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
               A notetaker bot has been dispatched. The meeting appears on today’s calendar now, and
               its notes, docs, and tasks generate automatically once it ends.
@@ -213,7 +215,7 @@ export function JoinMeetingModal({
                 style={{ color: 'var(--color-blue-600)', marginTop: 2 }}
               />
               <span style={{ ...TYPE.secondary, color: 'var(--text-primary)' }}>
-                Gracie will join and record this meeting. A real notetaker bot joins immediately and
+                {productName} will join and record this meeting. A real notetaker bot joins immediately and
                 is visible to attendees.
               </span>
             </div>

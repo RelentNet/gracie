@@ -21,6 +21,7 @@ import {
   type SupportRequestView,
 } from '@/lib/support';
 import { TYPE } from '@/lib/typography';
+import { useAuth } from '@/lib/auth';
 
 /** Context captured from the browser at submit time (shown to the user first). */
 interface Context {
@@ -52,6 +53,7 @@ function captureContext(fromPath: string | null): Context {
  * screen/zoom are attached automatically; admins work requests in Settings → Support.
  */
 export default function SupportPage(): React.JSX.Element {
+  const { productName } = useAuth();
   // Read `?from=` after mount (no useSearchParams → no Suspense requirement at build).
   const [fromPath, setFromPath] = useState<string | null>(null);
   useEffect(() => {
@@ -100,7 +102,7 @@ export default function SupportPage(): React.JSX.Element {
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>Support</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          Something not working, or Gracie couldn’t do what you asked? Tell us here — the team sees it right away.
+          Something not working, or {productName} couldn’t do what you asked? Tell us here — the team sees it right away.
         </p>
       </header>
 
@@ -149,7 +151,7 @@ export default function SupportPage(): React.JSX.Element {
 
             {context !== null ? (
               <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-                We’ll also include: page <strong>{context.pageUrl}</strong> · Gracie {context.appVersion} ·{' '}
+                We’ll also include: page <strong>{context.pageUrl}</strong> · {productName} {context.appVersion} ·{' '}
                 {context.browser.split(' — ')[0]} · {context.screen}
               </p>
             ) : null}

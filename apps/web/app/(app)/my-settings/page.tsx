@@ -4,6 +4,7 @@ import { PageContainer } from '@/components/ui/PageContainer';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { SettingToggle } from '@/components/ui/SettingToggle';
 import { TYPE } from '@/lib/typography';
+import { useAuth } from '@/lib/auth';
 
 /**
  * My Settings — a minimal per-user preferences page (any logged-in role, NOT
@@ -15,6 +16,7 @@ import { TYPE } from '@/lib/typography';
  * from the session and ignores any address in the request body.
  */
 export default function MySettingsPage(): React.JSX.Element {
+  const { productName } = useAuth();
   return (
     <PageContainer className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
@@ -27,14 +29,14 @@ export default function MySettingsPage(): React.JSX.Element {
       <Card className="p-6">
         <CardHeader
           title="Outlook contacts"
-          description="Let Gracie pull your Outlook / Office 365 contacts into the shared contacts list. Off by default — nothing is imported until you turn this on."
+          description={`Let ${productName} pull your Outlook / Office 365 contacts into the shared contacts list. Off by default — nothing is imported until you turn this on.`}
         />
         <SettingToggle
           getUrl="/api/me/contact-import-consent"
           patchUrl="/api/me/contact-import-consent"
           responseKey="allowed"
           defaultValue={false}
-          label="Allow Gracie to import my Outlook contacts"
+          label={`Allow ${productName} to import my Outlook contacts`}
           description="You can turn this off any time. It only affects your own mailbox."
         />
       </Card>

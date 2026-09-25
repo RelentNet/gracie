@@ -31,6 +31,7 @@ import {
 } from '@gracie/db';
 import type { Database, ServerClient } from '@gracie/db';
 import {
+  DEFAULT_COMPANY_DESCRIPTION,
   AI_FAILURE_HEADLINE,
   AI_FAILURE_TITLE,
   classifyAiFailure,
@@ -1262,8 +1263,7 @@ export function createGenerateProcessor(
       // 5. Generate the 6 docs sequentially via the reusable core (D7).
       const { provider, model } = await getActiveProvider();
       const gaCompanyDescription =
-        (await getSettingString(db, 'ga_company_description')) ??
-        'Cambridge Building Group — a commercial general contractor in Middle Tennessee.';
+        (await getSettingString(db, 'ga_company_description')) ?? DEFAULT_COMPANY_DESCRIPTION;
       // Editable generation prompts (PE): admin overrides from Settings, else the
       // shared defaults. Tolerates the key being absent/malformed → all defaults.
       const prompts = resolveGenerationPrompts(

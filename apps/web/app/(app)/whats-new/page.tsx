@@ -2,6 +2,7 @@ import { Card } from '@/components/ui/Card';
 import { PageContainer } from '@/components/ui/PageContainer';
 import { CHANGELOG } from '@/lib/changelog';
 import { TYPE } from '@/lib/typography';
+import { useAuth } from '@/lib/auth';
 
 /**
  * What's New — the in-app changelog (any signed-in role). Rendered from
@@ -20,12 +21,13 @@ function formatDate(iso: string): string {
 }
 
 export default function WhatsNewPage(): React.JSX.Element {
+  const { productName } = useAuth();
   return (
     <PageContainer width="md" className="flex flex-col gap-6">
       <header className="flex flex-col gap-1">
         <h1 style={TYPE.pageTitle}>What’s New</h1>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          Every update to Gracie, newest first.
+          Every update to {productName}, newest first.
         </p>
       </header>
 

@@ -13,6 +13,7 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
+import { useAuth } from '@/lib/auth';
 
 interface NotificationTiming {
   readonly dailySyncHourEt: number;
@@ -58,6 +59,7 @@ const inputClass = 'w-32 rounded-lg border bg-white px-3 py-2';
 const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body } as const;
 
 export function NotificationSettingsPanel(): React.JSX.Element {
+  const { productName } = useAuth();
   const [settings, setSettings] = useState<NotificationSettings | null>(null);
   const [timingStr, setTimingStr] = useState<Record<TimingField, string>>({
     dailySyncHourEt: '',
@@ -224,7 +226,7 @@ export function NotificationSettingsPanel(): React.JSX.Element {
       >
         <ShieldCheck size={16} aria-hidden="true" style={{ color: 'var(--color-emerald-600)', marginTop: 2 }} />
         <span style={{ ...TYPE.secondary, color: 'var(--text-primary)' }}>
-          <strong>Gracie only ever emails:</strong>{' '}
+          <strong>{productName} only ever emails:</strong>{' '}
           <span className="font-data">{settings.allowedDomains.join(', ')}</span>. She never contacts
           your clients or customers by email. This allowlist is fixed here on purpose — widening it is a
           deliberate, escalation-only change.

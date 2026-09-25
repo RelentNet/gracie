@@ -34,7 +34,15 @@ export const FREE_EMAIL_DOMAINS: ReadonlySet<string> = new Set([
 ]);
 
 /** Fallback internal domain when `settings.internal_email_domains` is unset. */
-export const DEFAULT_INTERNAL_DOMAINS: readonly string[] = ['cambridgebg.com'];
+export const DEFAULT_INTERNAL_DOMAINS: readonly string[] = ['relentnet.com'];
+
+/**
+ * Fallback firm description (the AI's "who we are" layer) when
+ * `settings.ga_company_description` is unset. Editable in Settings → Company; this is
+ * only what a fresh instance says before anyone sets it.
+ */
+export const DEFAULT_COMPANY_DESCRIPTION =
+  'RelentNet — a two-person software studio (Brandon Harris and Daniel Velez). We design, build and host custom software for our clients, and prove it earns its place.';
 
 /** Extract the lower-cased domain from an email address, or null. */
 export function emailDomain(email: string | null | undefined): string | null {

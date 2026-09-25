@@ -8,6 +8,7 @@ import { TYPE } from '@/lib/typography';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { FormError, SelectField, TextField } from '@/components/ui/Field';
+import { useAuth } from '@/lib/auth';
 
 /**
  * Import-from-Outlook modal (admin-only). Pick a connected mailbox (or type one),
@@ -48,7 +49,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** Turn a completed job result into a plain-language sentence. */
-function describeResult(r: ImportResult): { message: string; tone: 'ok' | 'warn' } {
+function describeResult(r: ImportResult, productName: string): { message: string; tone: 'ok' | 'warn' } {
   if (r.ok) {
     const parts = [
       `Imported ${r.imported ?? 0} new contact${r.imported === 1 ? '' : 's'}`,
@@ -74,7 +75,7 @@ function describeResult(r: ImportResult): { message: string; tone: 'ok' | 'warn'
         tone: 'warn',
       };
     case 'mailbox_not_found':
-      return { message: 'That mailbox wasn’t found, or Gracie isn’t allowed to read it.', tone: 'warn' };
+      return { message: `That mailbox wasn’t found, or ${productName} isn’t allowed to read it.`, tone: 'warn' };
     case 'graph_not_configured':
       return { message: 'Microsoft 365 isn’t connected yet.', tone: 'warn' };
     case 'no_mailbox':
@@ -89,6 +90,7 @@ export function ImportOutlookModal({
   onClose,
   onImported,
 }: ImportOutlookModalProps): React.JSX.Element {
+  const { productName } = useAuth();
   const [mailbox, setMailbox] = useState('');
   const [connected, setConnected] = useState<readonly string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -146,7 +148,7 @@ export function ImportOutlookModal({
       // A rejection before enqueue (e.g. mailbox not consented) comes back inline
       // with no job — show it and stop, nothing to poll.
       if (post.result !== undefined) {
-        setOutcome(describeResult(post.result));
+        setOutcome(describeResult(post.result, productName));
         setBusy(false);
         return;
       }
@@ -157,7 +159,7 @@ export function ImportOutlookModal({
         if (cancelled.current) return;
         const status = await apiClient.get<JobStatus>(`/api/contacts/import?jobId=${encodeURIComponent(jobId)}`);
         if (status.state === 'completed' && status.result !== null) {
-          const described = describeResult(status.result);
+          const described = describeResult(status.result, productName);
           setOutcome(described);
           if (status.result.ok) onImported();
           setBusy(false);
@@ -212,7 +214,7 @@ export function ImportOutlookModal({
     >
       <div className="flex flex-col gap-4">
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-          Pull a colleague’s Outlook / Office 365 contacts into Gracie. Existing contacts (matched by
+          Pull a colleague’s Outlook / Office 365 contacts into {productName}. Existing contacts (matched by
           email) are updated, not duplicated, so this is safe to run again.
         </p>
 

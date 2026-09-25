@@ -17,6 +17,7 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { ErrorState, LoadingState } from '@/components/ui/StateViews';
 import { apiClient } from '@/lib/api-client';
 import { TYPE } from '@/lib/typography';
+import { useAuth } from '@/lib/auth';
 
 interface AutomationsSettings {
   readonly externalSendEnabled: boolean;
@@ -28,6 +29,7 @@ const inputClass = 'w-40 rounded-lg border bg-white px-3 py-2';
 const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body } as const;
 
 export function AutomationsSettingsPanel(): React.JSX.Element {
+  const { productName } = useAuth();
   const [settings, setSettings] = useState<AutomationsSettings | null>(null);
   const [intervalStr, setIntervalStr] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -129,12 +131,12 @@ export function AutomationsSettingsPanel(): React.JSX.Element {
           <span style={{ ...TYPE.secondary, color: 'var(--text-primary)' }}>
             {enabled ? (
               <>
-                <strong>External sending is ON.</strong> Gracie can email approved external recipients when an
+                <strong>External sending is ON.</strong> {productName} can email approved external recipients when an
                 admin confirms it. Every internal (team) email still goes only to your own domain.
               </>
             ) : (
               <>
-                <strong>External sending is OFF.</strong> Gracie only ever emails your own team
+                <strong>External sending is OFF.</strong> {productName} only ever emails your own team
                 (<span className="font-data">@graceandassociates.com</span>). No automation can reach a client
                 by email while this is off.
               </>
