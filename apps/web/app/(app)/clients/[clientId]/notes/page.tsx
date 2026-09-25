@@ -1,6 +1,7 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router';
 import { Pencil, Trash2 } from 'lucide-react';
 import type { ClientNote } from '@gracie/shared';
 
@@ -29,12 +30,8 @@ interface NoteResponse {
   readonly note: ClientNote;
 }
 
-export default function ClientNotesPage({
-  params,
-}: {
-  readonly params: Promise<{ clientId: string }>;
-}): React.JSX.Element {
-  const { clientId } = use(params);
+export default function ClientNotesPage(): React.JSX.Element {
+  const { clientId } = useParams() as { clientId: string };
   const { canEdit } = useAuth();
   const editable = canEdit();
 

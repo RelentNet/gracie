@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { Link } from 'react-router';
 import { useCallback, useState } from 'react';
 import { AlertTriangle, Building2, Link2, Lock, Video, VideoOff, X } from 'lucide-react';
 import type {
@@ -107,7 +107,7 @@ function OrgChip({
       }}
     >
       <Link
-        href={`/clients/${org.id}`}
+        to={`/clients/${org.id}`}
         className="inline-flex items-center gap-1"
         style={{ color: fg }}
       >
@@ -330,7 +330,7 @@ function MeetingCard({
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-0.5">
           <Link
-            href={`/meetings/${m.id}`}
+            to={`/meetings/${m.id}`}
             className="w-fit hover:underline"
             style={TYPE.bodyStrong}
           >

@@ -1,6 +1,7 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router';
 import { Pencil } from 'lucide-react';
 import type { Client, Meeting, Task } from '@gracie/shared';
 
@@ -32,12 +33,8 @@ interface OverviewResponse {
   readonly topTasks: readonly Task[];
 }
 
-export default function ClientOverviewPage({
-  params,
-}: {
-  readonly params: Promise<{ clientId: string }>;
-}): React.JSX.Element {
-  const { clientId } = use(params);
+export default function ClientOverviewPage(): React.JSX.Element {
+  const { clientId } = useParams() as { clientId: string };
   const { can, canEdit, healthScoresVisible } = useAuth();
   const editable = canEdit();
 

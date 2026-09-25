@@ -1,6 +1,7 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router';
 import { ArrowDownRight, ArrowRight, ArrowUpRight, AlertTriangle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Client, ClientNote, MasterRecordEntry } from '@gracie/shared';
@@ -37,12 +38,8 @@ const TREND_ICON: Readonly<Record<'up' | 'flat' | 'down', LucideIcon>> = {
   down: ArrowDownRight,
 };
 
-export default function ClientStrategyPage({
-  params,
-}: {
-  readonly params: Promise<{ clientId: string }>;
-}): React.JSX.Element {
-  const { clientId } = use(params);
+export default function ClientStrategyPage(): React.JSX.Element {
+  const { clientId } = useParams() as { clientId: string };
   const { healthScoresVisible } = useAuth();
 
   const [data, setData] = useState<StrategyResponse | null>(null);

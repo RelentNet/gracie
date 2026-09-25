@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router';
 import {
   AlertTriangle,
   Bell,
@@ -58,7 +58,7 @@ const TYPE_ICON: Record<string, LucideIcon> = {
 };
 
 export function NotificationBell(): React.JSX.Element {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationView[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -168,9 +168,9 @@ export function NotificationBell(): React.JSX.Element {
   const onItemClick = useCallback(
     (item: NotificationView): void => {
       setOpen(false);
-      if (item.link !== null && item.link !== '') router.push(item.link);
+      if (item.link !== null && item.link !== '') navigate(item.link);
     },
-    [router],
+    [navigate],
   );
 
   return (

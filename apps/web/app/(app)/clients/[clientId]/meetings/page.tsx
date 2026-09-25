@@ -1,24 +1,23 @@
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router';
 import { CalendarClock } from 'lucide-react';
 
 import type { Meeting } from '@gracie/shared';
 
 import { StateChip } from '@/components/meetings/StateChip';
 import { Card, CardHeader } from '@/components/ui/Card';
-import { EmptyState } from '@/components/ui/StateViews';
-import { getClientMeetings } from '@/lib/data/client-detail';
-import { listAssignableUsers } from '@/lib/data/users';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
+import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/lib/auth';
 import { formatEasternDateTime } from '@/lib/format';
 import { deriveOccurrenceState, splitClientMeetings } from '@/lib/meeting-occurrence';
-import { getSessionUser } from '@/lib/session-user';
 import { TYPE } from '@/lib/typography';
 
 /**
  * Client tab — Meetings. The 2 nearest upcoming and 6 most-recent previous
  * meetings for this client, each linking to its occurrence page (`/meetings/[id]`).
- * Server component: reads the existing per-client meetings data layer directly
- * (scoped by the primary `client_id`, like the rest of client-detail). Display-only
- * — the `(app)` layout already gates auth and all staff see all clients.
+ * Reads GET /api/clients/:clientId/meetings (scoped by the primary `client_id`, like
+ * the rest of client-detail). Display-only — all staff see all clients.
  */
 function MeetingRow({
   meeting,
@@ -31,7 +30,7 @@ function MeetingRow({
 }): React.JSX.Element {
   return (
     <Link
-      href={`/meetings/${meeting.id}`}
+      to={`/meetings/${meeting.id}`}
       className="flex items-center justify-between gap-3 rounded-lg border p-3 hover:underline"
       style={{ borderColor: 'var(--border-subtle)' }}
     >
@@ -55,19 +54,32 @@ function MeetingRow({
   );
 }
 
-export default async function ClientMeetingsPage({
-  params,
-}: {
-  readonly params: Promise<{ clientId: string }>;
-}): Promise<React.JSX.Element> {
-  const { clientId } = await params;
-  const [meetings, users, viewer] = await Promise.all([
-    getClientMeetings(clientId),
-    listAssignableUsers(),
-    getSessionUser().catch(() => null),
-  ]);
+interface LoadedData {
+  readonly meetings: readonly Meeting[];
+  readonly users: readonly { readonly id: string; readonly name: string }[];
+}
+
+export default function ClientMeetingsPage(): React.JSX.Element {
+  const { clientId } = useParams() as { clientId: string };
+  const { user: viewer } = useAuth();
+  const [data, setData] = useState<LoadedData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    setData(null);
+    setError(null);
+    Promise.all([
+      apiClient.get<{ meetings: Meeting[] }>(`/api/clients/${clientId}/meetings`),
+      apiClient.get<{ users: LoadedData['users'] }>('/api/users'),
+    ])
+      .then(([m, u]) => setData({ meetings: m.meetings, users: u.users }))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load meetings.'));
+  }, [clientId]);
+  if (error !== null) return <ErrorState title="Could not load meetings" description={error} />;
+  if (data === null) return <LoadingState />;
+
+  const { meetings, users } = data;
   const { upcoming, previous } = splitClientMeetings(meetings);
-  const timeZone = viewer?.timezone;
+  const timeZone = viewer.timezone;
 
   const nameById = new Map(users.map((u) => [u.id, u.name]));
   const leadNameOf = (m: Meeting): string | null =>

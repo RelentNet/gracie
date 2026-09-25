@@ -1,5 +1,5 @@
 {
-  "extends": "@gracie/config/tsconfig/base.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
     "rootDir": "src"

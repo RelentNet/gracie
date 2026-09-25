@@ -10,7 +10,7 @@
  * silently open up.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRefresh } from '@/lib/refresh';
 import { Lock, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
@@ -41,7 +41,7 @@ const inputStyle = { borderColor: 'var(--border-subtle)', ...TYPE.body } as cons
  * One brand-logo upload + preview control, for a single theme variant. Rendered
  * twice by the panel below — the main (light) logo and the optional dark-theme
  * variant — so the upload/remove/preview logic lives in one place. Admin-only
- * (the API enforces it); the nav re-hydrates via `router.refresh()` on change.
+ * (the API enforces it); the nav re-hydrates via `refresh()` on change.
  */
 function LogoField({
   variant,
@@ -57,7 +57,7 @@ function LogoField({
   /** Shown on the preview swatch when this variant is unset. */
   readonly emptyPreview: React.ReactNode;
 }): React.JSX.Element {
-  const router = useRouter();
+  const { refresh } = useRefresh();
   // Local mirror for instant preview; the nav re-hydrates from the server on refresh.
   const [logoKey, setLogoKey] = useState<string | null>(initialKey);
   const [busy, setBusy] = useState(false);
@@ -93,7 +93,7 @@ function LogoField({
           if (!res.ok) throw new Error(payload?.error?.message ?? `Upload failed: ${res.status}`);
           setLogoKey(payload?.brandLogoKey ?? null);
           setNote({ text: 'Logo updated.', ok: true });
-          router.refresh(); // re-hydrate the nav with the new logo
+          refresh(); // re-hydrate the nav with the new logo
         })
         .catch((e: unknown) => setNote({ text: e instanceof Error ? e.message : 'Upload failed.', ok: false }))
         .finally(() => {
@@ -101,7 +101,7 @@ function LogoField({
           if (fileInputRef.current !== null) fileInputRef.current.value = '';
         });
     },
-    [router, variant],
+    [refresh, variant],
   );
 
   const remove = useCallback((): void => {
@@ -112,11 +112,11 @@ function LogoField({
       .then(() => {
         setLogoKey(null);
         setNote({ text: 'Reset to the default.', ok: true });
-        router.refresh();
+        refresh();
       })
       .catch((e: unknown) => setNote({ text: e instanceof Error ? e.message : 'Remove failed.', ok: false }))
       .finally(() => setBusy(false));
-  }, [router, variant]);
+  }, [refresh, variant]);
 
   return (
     <fieldset className="flex flex-col gap-2">
@@ -173,7 +173,7 @@ function LogoField({
 
 export function CompanySettingsPanel(): React.JSX.Element {
   const { brandLogoKey, brandLogoDarkKey } = useAuth();
-  const router = useRouter();
+  const { refresh } = useRefresh();
 
   const [floorDomains, setFloorDomains] = useState<readonly string[]>([]);
   const [description, setDescription] = useState('');
@@ -216,7 +216,7 @@ export function CompanySettingsPanel(): React.JSX.Element {
         .then((d) => {
           setTaskBoardVisible(d.visible);
           setTbNote({ text: 'Saved.', ok: true });
-          router.refresh(); // re-hydrate the nav so the Task Board item updates now
+          refresh(); // re-hydrate the nav so the Task Board item updates now
         })
         .catch((e: unknown) => {
           setTaskBoardVisible(!next); // revert on failure
@@ -224,7 +224,7 @@ export function CompanySettingsPanel(): React.JSX.Element {
         })
         .finally(() => setTbSaving(false));
     },
-    [router],
+    [refresh],
   );
 
   const hydrate = useCallback((s: CompanySettings): void => {

@@ -13,7 +13,7 @@
  */
 import 'server-only';
 
-import type { LogtoContext } from '@logto/next';
+import type { LogtoContext } from '@logto/node';
 
 import { getServerClient } from '@gracie/db';
 import type { Role } from '@gracie/shared';

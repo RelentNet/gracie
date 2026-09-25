@@ -1,10 +1,8 @@
-import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
-
-import { getLogtoContext, handleSignIn } from '@logto/next/server-actions';
+import { getContext } from 'hono/context-storage';
+import { deleteCookie, getCookie } from 'hono/cookie';
 
 import { upsertUserFromLogto } from '@/lib/data/users';
-import { baseUrl, isLogtoConfigured, logtoConfig } from '@/lib/logto';
+import { baseUrl, handleSignInCallback, isLogtoConfigured, logtoConfig } from '@/lib/logto';
 import { RETURN_TO_COOKIE, safeReturnPath } from '@/lib/return-path';
 
 /**
@@ -13,21 +11,27 @@ import { RETURN_TO_COOKIE, safeReturnPath } from '@/lib/return-path';
  * (docs/01 §4), then redirects into the app (docs/07 §5). When Logto is not
  * configured it simply redirects so the route resolves during scaffold dev.
  */
-export async function GET(request: Request): Promise<NextResponse> {
+export async function GET(request: Request): Promise<Response> {
   if (isLogtoConfigured()) {
-    await handleSignIn(logtoConfig, new URL(request.url).searchParams);
-    const context = await getLogtoContext(logtoConfig, { fetchUserInfo: true });
+    // The callback URL is rebuilt on the public origin: Logto checks it matches the
+    // redirect URI it issued, and behind the proxy request.url is internal.
+    const context = await handleSignInCallback(
+      logtoConfig,
+      `${baseUrl}/callback${new URL(request.url).search}`,
+      { fetchUserInfo: true },
+    );
     if (context.isAuthenticated) {
       await upsertUserFromLogto(context);
     }
   }
+
   // Build the redirect from the app's known public origin, NOT request.url —
   // behind the Traefik/NPM proxy request.url is the internal http://localhost:3000,
   // which would bounce the browser to a dead localhost address after sign-in.
   // Back to the page the user was on when their session expired (set by /sign-in),
   // re-validated here; otherwise home.
-  const jar = await cookies();
-  const returnTo = safeReturnPath(jar.get(RETURN_TO_COOKIE)?.value);
-  jar.delete(RETURN_TO_COOKIE);
-  return NextResponse.redirect(new URL(returnTo ?? '/home', baseUrl));
+  const c = getContext();
+  const returnTo = safeReturnPath(getCookie(c, RETURN_TO_COOKIE));
+  deleteCookie(c, RETURN_TO_COOKIE, { path: '/' });
+  return Response.redirect(new URL(returnTo ?? '/home', baseUrl), 307);
 }

@@ -1,20 +1,16 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useRouteError } from 'react-router';
 
 import { ErrorState } from '@/components/ui/StateViews';
 
 /**
- * Root error boundary (App Router). Catches render/runtime errors and offers a
- * recovery action. Logs with context for debugging (global standard).
+ * Root error boundary (the router's errorElement). Catches render/runtime errors and
+ * offers a recovery action. Logs with context for debugging (global standard).
  */
-export default function RootError({
-  error,
-  reset,
-}: {
-  readonly error: Error & { digest?: string };
-  readonly reset: () => void;
-}): React.JSX.Element {
+export default function RootError(): React.JSX.Element {
+  const error = useRouteError();
   useEffect(() => {
     console.error('Unhandled UI error:', error);
   }, [error]);
@@ -27,7 +23,7 @@ export default function RootError({
         action={
           <button
             type="button"
-            onClick={reset}
+            onClick={(): void => window.location.reload()}
             className="rounded-lg px-4 py-2"
             style={{
               backgroundColor: 'var(--color-blue-500)',

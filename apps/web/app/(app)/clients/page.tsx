@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { Link } from 'react-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Calendar, CalendarClock, Lock, Plus, Search } from 'lucide-react';
 import type { Client, ClientType } from '@gracie/shared';
@@ -167,7 +167,7 @@ export default function ClientsPage(): React.JSX.Element {
         </div>
         {internalOrg !== null ? (
           <Link
-            href={`/clients/${internalOrg.id}`}
+            to={`/clients/${internalOrg.id}`}
             className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5"
             style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)', ...TYPE.bodyStrong }}
           >
@@ -259,7 +259,7 @@ function ClientCard({
   const health = client.relationshipHealth;
 
   return (
-    <Link href={`/clients/${client.id}`} className="block h-full rounded-lg">
+    <Link to={`/clients/${client.id}`} className="block h-full rounded-lg">
       <Card className="flex h-full flex-col gap-4 p-5 transition-shadow hover:shadow-md">
         <div className="flex items-start gap-3">
           <ClientAvatar

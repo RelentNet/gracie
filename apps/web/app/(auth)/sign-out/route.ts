@@ -1,8 +1,4 @@
-import { NextResponse } from 'next/server';
-
-import { signOut } from '@logto/next/server-actions';
-
-import { baseUrl, isLogtoConfigured, logtoConfig } from '@/lib/logto';
+import { baseUrl, isLogtoConfigured, logtoConfig, signOutUrl } from '@/lib/logto';
 
 /**
  * Signs the user out of Logto, clears the session, and returns to /login
@@ -10,9 +6,7 @@ import { baseUrl, isLogtoConfigured, logtoConfig } from '@/lib/logto';
  */
 export async function GET(request: Request): Promise<Response> {
   if (!isLogtoConfigured()) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    return Response.redirect(new URL('/login', request.url), 307);
   }
-  await signOut(logtoConfig, baseUrl);
-  // signOut() performs the redirect; this is unreachable but satisfies the type.
-  return NextResponse.redirect(new URL('/login', request.url));
+  return Response.redirect(await signOutUrl(logtoConfig, baseUrl), 307);
 }

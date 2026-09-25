@@ -1,10 +1,8 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { use, useEffect, useState } from 'react';
+import { Link, Outlet, useLocation, useParams } from 'react-router';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, Upload } from 'lucide-react';
-import type { ReactNode } from 'react';
 
 import type { Client, Permission } from '@gracie/shared';
 
@@ -52,16 +50,10 @@ const CLIENT_TABS: readonly ClientTab[] = [
   { label: 'Intelligence', segment: 'intelligence' },
 ] as const;
 
-export default function ClientDetailLayout({
-  children,
-  params,
-}: {
-  readonly children: ReactNode;
-  readonly params: Promise<{ clientId: string }>;
-}): React.JSX.Element {
-  const { clientId } = use(params);
+export default function ClientDetailLayout(): React.JSX.Element {
+  const { clientId } = useParams() as { clientId: string };
   const { can } = useAuth();
-  const pathname = usePathname();
+  const { pathname } = useLocation();
 
   const [client, setClient] = useState<Client | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +84,7 @@ export default function ClientDetailLayout({
   return (
     <PageContainer className="flex flex-col gap-6">
       <Link
-        href="/clients"
+        to="/clients"
         className="inline-flex items-center gap-1.5"
         style={{ ...TYPE.secondary, color: 'var(--color-blue-700)' }}
       >
@@ -143,7 +135,7 @@ export default function ClientDetailLayout({
             return (
               <li key={tab.segment} className="shrink-0">
                 <Link
-                  href={href}
+                  to={href}
                   aria-current={isActive ? 'page' : undefined}
                   className="inline-block whitespace-nowrap px-4 py-2"
                   style={{
@@ -162,7 +154,9 @@ export default function ClientDetailLayout({
         </ul>
       </nav>
 
-      <div>{children}</div>
+      <div>
+        <Outlet />
+      </div>
     </PageContainer>
   );
 }

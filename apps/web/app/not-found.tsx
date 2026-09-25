@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { Link } from 'react-router';
 
 import { TYPE } from '@/lib/typography';
 
@@ -10,7 +10,7 @@ export default function NotFound(): React.JSX.Element {
         The page you are looking for does not exist or has moved.
       </p>
       <Link
-        href="/home"
+        to="/home"
         className="rounded-lg px-4 py-2"
         style={{
           backgroundColor: 'var(--color-blue-500)',

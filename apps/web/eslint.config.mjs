@@ -5,12 +5,7 @@ export default [
   // The roadmap module is generated from docs/roadmap.html (scripts/gen-roadmap.mjs)
   // and holds one large inlined HTML string — not hand-authored source to lint.
   {
-    ignores: [
-      '.next/**',
-      'node_modules/**',
-      'next-env.d.ts',
-      'app/roadmap/roadmap-html.generated.ts',
-    ],
+    ignores: ['dist/**', 'node_modules/**', 'app/roadmap/roadmap-html.generated.ts'],
   },
   ...baseConfig,
   {

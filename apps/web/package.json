@@ -3,41 +3,46 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "GA App web — Next.js App Router UI + light API routes.",
+  "description": "GA App web — Vite React SPA + a Hono server for the API, auth and the built app.",
   "scripts": {
-    "dev": "next dev",
+    "dev": "pnpm run \"/^dev:/\"",
+    "dev:ui": "vite",
+    "dev:server": "node --watch --import tsx --conditions=react-server --env-file-if-exists=.env.local server/dev.ts",
     "gen:roadmap": "node scripts/gen-roadmap.mjs",
-    "build": "node scripts/gen-roadmap.mjs && next build",
-    "start": "next start",
+    "build": "node scripts/gen-roadmap.mjs && vite build",
+    "start": "tsx --conditions=react-server server/index.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
-    "test": "tsx --test \"lib/**/*.test.ts\""
+    "test": "tsx --test \"lib/**/*.test.ts\" \"server/**/*.test.ts\""
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.1.1",
     "@fontsource/ibm-plex-sans": "^5.1.1",
     "@gracie/db": "workspace:*",
     "@gracie/shared": "workspace:*",
-    "@logto/next": "^4.2.10",
+    "@hono/node-server": "^2.1.1",
+    "@logto/node": "3.1.10",
     "bullmq": "^5.34.0",
+    "hono": "^4.13.9",
     "ioredis": "^5.4.2",
     "lucide-react": "^0.471.1",
-    "next": "^15.1.6",
     "posthog-js": "^1.418.14",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "server-only": "^0.0.1"
+    "react-router": "^8.4.0",
+    "server-only": "^0.0.1",
+    "tsx": "^4.19.2"
   },
   "devDependencies": {
     "@gracie/config": "workspace:*",
-    "@tailwindcss/postcss": "^4.0.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^6.1.1",
     "eslint": "^9.18.0",
-    "eslint-config-next": "^15.1.6",
     "tailwindcss": "^4.0.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vite": "^8.3.1"
   }
 }
