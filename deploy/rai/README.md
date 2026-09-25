@@ -44,6 +44,10 @@ who reaches the app is the seeded admin.
    (authenticator app).
 3. **Create the app** (Applications → Create application → *Traditional Web*, name
    `hq`):
+   - Create it under **My apps**, NOT *Third-party apps*. A third-party app may only
+     request scopes users consent to, so sign-in fails with `invalid_scope` ("requested
+     scope is not allowed") and the callback returns a 500. The flag can't be changed
+     in the console afterwards.
    - Redirect URI: `http://10.200.200.44:3000/callback`
    - Post sign-out redirect URI: `http://10.200.200.44:3000`
    - Save, then keep the page open for its App ID and App secret.
