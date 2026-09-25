@@ -1,9 +1,10 @@
 # RelentNet instance (hq) on rai — interim, until Coolify owns the deploy (REL-290).
 #
 # Same stack as deploy/demo (Postgres + PostgREST + a one-route nginx + MinIO + the
-# app), minus the Unraid reverse proxy. The app is published on rai's LAN address
-# only. It runs WITHOUT a login (everyone is the seeded admin) until REL-291 lands,
-# so never publish it beyond the LAN.
+# app), minus the Unraid reverse proxy, plus Logto for sign-in. The app and the Logto
+# sign-in pages are published on rai's LAN address only; the Logto admin console on
+# rai's loopback only. Until the Logto app credentials are in .env, .env carries
+# ALLOW_MOCK_AUTH=true and everyone is the seeded admin — never publish it then.
 #
 # Deploy + operate: see ./README.md. Setup is deploy/demo/setup.sh.
 name: hq
@@ -70,9 +71,53 @@ services:
       S3_FORCE_PATH_STYLE: 'true'
       APP_BASE_URL: http://10.200.200.44:3000
       NEXT_PUBLIC_APP_URL: http://10.200.200.44:3000
+      LOGTO_BASE_URL: http://10.200.200.44:3000
+      LOGTO_ENDPOINT: http://10.200.200.44:3001
+      # LOGTO_APP_ID / LOGTO_APP_SECRET / LOGTO_COOKIE_SECRET live in .env.
       TZ: America/Chicago
     # LAN address only — not 0.0.0.0 (ufw would not filter a Docker-published port).
     ports: ['10.200.200.44:3000:3000']
+    networks: [internal]
+
+  # Sign-in (REL-291). Its own Postgres: identity data stays apart from app data,
+  # and Logto's seed needs role privileges the Supabase image keeps for itself.
+  logto-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: logto
+      POSTGRES_PASSWORD: ${LOGTO_DB_PASSWORD}
+      POSTGRES_DB: logto
+    volumes:
+      - ./data/logto-db:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'logto']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  logto:
+    image: svhd/logto:1.43.0
+    restart: unless-stopped
+    depends_on:
+      logto-db: { condition: service_healthy }
+    # Seeds on first start, no-op after (--swe: skip when already seeded).
+    entrypoint: ['sh', '-c', 'npm run cli db seed -- --swe && npm start']
+    environment:
+      TRUST_PROXY_HEADER: 1
+      DB_URL: postgres://logto:${LOGTO_DB_PASSWORD}@logto-db:5432/logto
+      # Sign-in pages, on the LAN like the app. The browser AND the app container
+      # both call this URL, so it must be one address both can reach.
+      ENDPOINT: http://10.200.200.44:3001
+      # Admin console: rai's loopback only, reached through an SSH tunnel
+      # (README). Never on the LAN, never public. 127.0.0.1, not `localhost`:
+      # production Logto refuses CORS to a `localhost` admin origin, which breaks
+      # every console action.
+      ADMIN_ENDPOINT: http://127.0.0.1:3002
+    ports:
+      - '10.200.200.44:3001:3001'
+      - '127.0.0.1:3002:3002'
     networks: [internal]
 
 networks:

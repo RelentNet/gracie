@@ -23,7 +23,7 @@ export async function GET(request: Request): Promise<Response> {
     setCookie(getContext(), RETURN_TO_COOKIE, returnTo, {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      secure: logtoConfig.cookieSecure,
       path: '/',
       maxAge: 600,
     });

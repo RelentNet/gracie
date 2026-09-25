@@ -1,26 +1,24 @@
 import { TYPE } from '@/lib/typography';
 
 /**
- * Login (Module 10, docs/08 §8). Centered card, GA wordmark, "Sign in with
- * Microsoft", over the themed gradient ground (inherited from <body>, so it
- * flips light/dark like the rest of the app).
+ * Login (Module 10, docs/08 §8). Centered card, product name, one sign-in button,
+ * over the themed gradient ground (inherited from <body>, so it flips light/dark
+ * like the rest of the app).
  *
- * Phase 1B: the button initiates the Logto → Microsoft Entra sign-in flow
- * (docs/07 §5). In Phase 1A it links into the app shell so the scaffold is
- * navigable without auth wired.
+ * The button starts the Logto sign-in; which methods appear (email + password,
+ * Google, Microsoft…) is Logto's sign-in experience, not this page's. The name is
+ * the tab title, which index.html sets from the last known brand before paint —
+ * this page is outside the signed-in bootstrap, so it has no other source.
  */
 export default function LoginPage(): React.JSX.Element {
   return (
     <main className="flex min-h-dvh items-center justify-center p-6">
-      <div
-        className="flex w-full max-w-sm flex-col items-center gap-6 rounded-lg bg-white p-8 shadow-xl"
-      >
-        <span style={{ ...TYPE.sectionHeaderLg }}>GA App</span>
+      <div className="flex w-full max-w-sm flex-col items-center gap-6 rounded-lg bg-white p-8 shadow-xl">
+        <span style={{ ...TYPE.sectionHeaderLg }}>{document.title}</span>
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)', textAlign: 'center' }}>
-          Grace &amp; Associates internal platform. Sign in with your Microsoft account to continue.
+          Sign in to continue.
         </p>
-        {/* Initiates Logto → Microsoft sign-in (no-op redirect to the app until
-            Logto is configured). A plain <a>: /sign-in is a server route. */}
+        {/* A plain <a>: /sign-in is a server route (redirects to Logto). */}
         <a
           href="/sign-in"
           className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5"
@@ -31,7 +29,7 @@ export default function LoginPage(): React.JSX.Element {
             fontWeight: 600,
           }}
         >
-          Sign in with Microsoft
+          Sign in
         </a>
       </div>
     </main>

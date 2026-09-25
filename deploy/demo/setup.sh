@@ -41,6 +41,18 @@ else
   echo ".env exists — keeping it"
 fi
 
+# Sign-in secrets, added once (rai runs Logto; unused elsewhere). The app refuses to
+# start in production without Logto, so until the Logto app exists ALLOW_MOCK_AUTH
+# keeps it running with no login — rai's logto-connect.sh removes it.
+if ! grep -q '^LOGTO_DB_PASSWORD=' .env; then
+  {
+    echo "LOGTO_DB_PASSWORD=$(openssl rand -hex 24)"
+    echo "LOGTO_COOKIE_SECRET=$(openssl rand -hex 32)"
+    grep -q '^LOGTO_APP_ID=' .env || echo 'ALLOW_MOCK_AUTH=true'
+  } >> .env
+  echo "added sign-in secrets to .env (not shown)"
+fi
+
 # shellcheck disable=SC1091
 set -a; . ./.env; set +a
 

@@ -14,7 +14,24 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { contextStorage } from 'hono/context-storage';
 
+import { isLogtoConfigured } from '@/lib/logto';
+
 import { mountRoutes } from './routes';
+
+// Fail closed: without Logto every visitor is the mock admin. That is the point in
+// local dev, and a deliberate choice for a demo behind another gate (Authelia on
+// Unraid sets ALLOW_MOCK_AUTH=true) — never an accident in production.
+if (
+  process.env.NODE_ENV === 'production' &&
+  !isLogtoConfigured() &&
+  process.env.ALLOW_MOCK_AUTH !== 'true'
+) {
+  console.error(
+    'Refusing to start: LOGTO_ENDPOINT, LOGTO_APP_ID, LOGTO_APP_SECRET and LOGTO_COOKIE_SECRET ' +
+      'must be set in production (or ALLOW_MOCK_AUTH=true to run without sign-in on purpose).',
+  );
+  process.exit(1);
+}
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = path.join(webDir, 'dist');

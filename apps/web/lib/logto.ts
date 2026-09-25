@@ -64,7 +64,10 @@ export const logtoConfig: LogtoAppConfig = {
   appSecret: appSecret ?? '',
   baseUrl,
   cookieSecret: cookieSecret ?? '',
-  cookieSecure: process.env.NODE_ENV === 'production',
+  // Follows the app's own scheme, not NODE_ENV: a production build served over plain
+  // HTTP on a LAN would otherwise mark the session cookie Secure, the browser would
+  // drop it, and every sign-in would loop back to /login.
+  cookieSecure: baseUrl.startsWith('https://'),
   scopes: ['profile', 'email', 'roles', 'custom_data'],
 };
 

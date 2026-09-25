@@ -78,6 +78,8 @@ services:
       # CBG is in Nashville. The seed places meetings in local time, and a container
       # defaults to UTC — without this the 8am meeting lands at 3am.
       TZ: America/Chicago
+      # No app login on purpose: Authelia gates the whole site (see README).
+      ALLOW_MOCK_AUTH: 'true'
     # `internal` for its dependencies; `reverse-proxy` so SWAG can reach it by name.
     networks: [internal, reverse-proxy]
 
