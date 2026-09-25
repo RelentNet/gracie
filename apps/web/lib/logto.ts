@@ -142,6 +142,16 @@ export async function signOutUrl(config: LogtoAppConfig, postSignOutUri: string)
   return url;
 }
 
+/**
+ * Where a failed sign-in lands: the login page with a message, never a bare 500.
+ * A misconfigured Logto app, an unreachable Logto, a cancelled or expired sign-in
+ * all end here; the cause goes to the server log.
+ */
+export function signInFailedResponse(stage: string, error: unknown): Response {
+  console.error(`sign-in failed (${stage}):`, error);
+  return Response.redirect(new URL('/login?error=sign_in_failed', baseUrl), 307);
+}
+
 /** An unauthenticated context — what we degrade to when the session can't be resolved. */
 const UNAUTHENTICATED_CONTEXT: LogtoContext = { isAuthenticated: false };
 

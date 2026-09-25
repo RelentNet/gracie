@@ -2,7 +2,13 @@ import { getContext } from 'hono/context-storage';
 import { deleteCookie, getCookie } from 'hono/cookie';
 
 import { upsertUserFromLogto } from '@/lib/data/users';
-import { baseUrl, handleSignInCallback, isLogtoConfigured, logtoConfig } from '@/lib/logto';
+import {
+  baseUrl,
+  handleSignInCallback,
+  isLogtoConfigured,
+  logtoConfig,
+  signInFailedResponse,
+} from '@/lib/logto';
 import { RETURN_TO_COOKIE, safeReturnPath } from '@/lib/return-path';
 
 /**
@@ -12,16 +18,22 @@ import { RETURN_TO_COOKIE, safeReturnPath } from '@/lib/return-path';
  * configured it simply redirects so the route resolves during scaffold dev.
  */
 export async function GET(request: Request): Promise<Response> {
+  const c = getContext();
   if (isLogtoConfigured()) {
-    // The callback URL is rebuilt on the public origin: Logto checks it matches the
-    // redirect URI it issued, and behind the proxy request.url is internal.
-    const context = await handleSignInCallback(
-      logtoConfig,
-      `${baseUrl}/callback${new URL(request.url).search}`,
-      { fetchUserInfo: true },
-    );
-    if (context.isAuthenticated) {
-      await upsertUserFromLogto(context);
+    try {
+      // The callback URL is rebuilt on the public origin: Logto checks it matches the
+      // redirect URI it issued, and behind the proxy request.url is internal.
+      const context = await handleSignInCallback(
+        logtoConfig,
+        `${baseUrl}/callback${new URL(request.url).search}`,
+        { fetchUserInfo: true },
+      );
+      if (context.isAuthenticated) {
+        await upsertUserFromLogto(context);
+      }
+    } catch (error) {
+      deleteCookie(c, RETURN_TO_COOKIE, { path: '/' });
+      return signInFailedResponse('callback', error);
     }
   }
 
@@ -30,7 +42,6 @@ export async function GET(request: Request): Promise<Response> {
   // which would bounce the browser to a dead localhost address after sign-in.
   // Back to the page the user was on when their session expired (set by /sign-in),
   // re-validated here; otherwise home.
-  const c = getContext();
   const returnTo = safeReturnPath(getCookie(c, RETURN_TO_COOKIE));
   deleteCookie(c, RETURN_TO_COOKIE, { path: '/' });
   return Response.redirect(new URL(returnTo ?? '/home', baseUrl), 307);

@@ -1,7 +1,13 @@
 import { getContext } from 'hono/context-storage';
 import { setCookie } from 'hono/cookie';
 
-import { baseUrl, isLogtoConfigured, logtoConfig, signInUrl } from '@/lib/logto';
+import {
+  baseUrl,
+  isLogtoConfigured,
+  logtoConfig,
+  signInFailedResponse,
+  signInUrl,
+} from '@/lib/logto';
 import { RETURN_TO_COOKIE, safeReturnPath } from '@/lib/return-path';
 
 /**
@@ -29,5 +35,9 @@ export async function GET(request: Request): Promise<Response> {
     });
   }
 
-  return Response.redirect(await signInUrl(logtoConfig, `${baseUrl}/callback`), 307);
+  try {
+    return Response.redirect(await signInUrl(logtoConfig, `${baseUrl}/callback`), 307);
+  } catch (error) {
+    return signInFailedResponse('sign-in', error);
+  }
 }

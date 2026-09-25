@@ -1,3 +1,5 @@
+import { useSearchParams } from 'react-router';
+
 import { TYPE } from '@/lib/typography';
 
 /**
@@ -11,6 +13,9 @@ import { TYPE } from '@/lib/typography';
  * this page is outside the signed-in bootstrap, so it has no other source.
  */
 export default function LoginPage(): React.JSX.Element {
+  // Set by /sign-in and /callback when Logto fails (the cause is in the server log).
+  const [params] = useSearchParams();
+  const failed = params.get('error') === 'sign_in_failed';
   return (
     <main className="flex min-h-dvh items-center justify-center p-6">
       <div className="flex w-full max-w-sm flex-col items-center gap-6 rounded-lg bg-white p-8 shadow-xl">
@@ -18,6 +23,15 @@ export default function LoginPage(): React.JSX.Element {
         <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)', textAlign: 'center' }}>
           Sign in to continue.
         </p>
+        {failed ? (
+          <p
+            role="alert"
+            style={{ ...TYPE.secondary, color: 'var(--color-red-500)', textAlign: 'center' }}
+          >
+            Sign-in didn&rsquo;t complete. Try again — if it keeps failing, an admin can check the
+            server log.
+          </p>
+        ) : null}
         {/* A plain <a>: /sign-in is a server route (redirects to Logto). */}
         <a
           href="/sign-in"
