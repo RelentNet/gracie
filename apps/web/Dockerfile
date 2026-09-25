@@ -1,6 +1,7 @@
-# Web (Next.js) — build from the monorepo root as context.
+# Web (Vite SPA + Hono server) — build from the monorepo root as context.
 #   docker build -f apps/web/Dockerfile -t gracie-web .
-# NEXT_PUBLIC_* are inlined at build time, so they arrive as build args.
+# NEXT_PUBLIC_* are inlined into the browser bundle at build time (Vite's envPrefix
+# keeps the old names), so they arrive as build args.
 FROM node:24-bookworm-slim
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH NODE_ENV=production
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
@@ -14,7 +15,7 @@ COPY packages/db/package.json packages/db/package.json
 COPY apps/web/package.json apps/web/package.json
 RUN pnpm install --frozen-lockfile
 
-# Build the Next.js app (workspace TS packages are transpiled by Next).
+# Build the SPA into apps/web/dist. The server runs from TypeScript source via tsx.
 COPY . .
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -22,6 +23,7 @@ ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 RUN pnpm --filter web build
 
+# One process: the API, Logto sign-in and the built app, on :3000.
 ENV PORT=3000
 EXPOSE 3000
 CMD ["pnpm", "--filter", "web", "start"]
