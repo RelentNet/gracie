@@ -16,10 +16,11 @@
 
 ## D1 — Backend topology
 
-✅ **Monorepo (pnpm workspaces): `apps/web` (Next.js App Router) + `apps/worker` (Fastify) + `packages/*` shared.**
+✅ **Monorepo (pnpm workspaces): `apps/web` (Vite React SPA + Hono server; Next.js App Router until 2026-09) + `apps/worker` (Fastify) + `packages/*` shared.**
 
 - **Rationale:** Document generation can take 60+ seconds (6 sequential AI calls + embedding + file writes). That does **not** belong in serverless Next.js API routes (timeout + cold-start risk). A dedicated long-running Fastify worker with a job queue is the correct home. A monorepo keeps types, the DB client, and the AI-provider interface shared across both without publishing packages.
 - **Alternatives:** Single Next.js app (rejected — long jobs); separate repos (rejected — friction sharing types/contracts).
+- **2026-09 — web left Next.js.** An internal, signed-in tool has no SEO or first-paint-for-strangers need, so server rendering bought nothing but a second runtime to reason about. `apps/web` is now a client-rendered SPA (Vite + React Router) served by a small Hono server that also runs every `app/**/route.ts` unchanged (same URLs, same handler signature) and the Logto sign-in routes (same session cookie, so nobody was signed out).
 - **Override:** _______________________________________________
 
 ---
@@ -129,7 +130,7 @@
 | Redis (BullMQ) | Microsoft Graph (calendar — Microsoft's API) |
 | n8n + its Postgres | Resend (email — SaaS) |
 | MinIO (file storage — replaces R2, see D16) | |
-| web (Next.js) + worker (Fastify) | |
+| web (Vite SPA + Hono) + worker (Fastify) | |
 
 - **Rationale:** Compliance/data-residency. All client data at rest (DB rows, transcripts, generated docs, identity) lives on owned infrastructure. External services are unavoidable processors (cover via BAA/DPA where applicable).
 - **Override:** _______________________________________________

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRefresh } from '@/lib/refresh';
 import { RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/Button';
@@ -13,7 +13,7 @@ import { TYPE } from '@/lib/typography';
  * short delay so the freshly-written row appears. Mirrors the calendar "Sync now".
  */
 export function GenerateSyncButton(): React.JSX.Element {
-  const router = useRouter();
+  const { refresh } = useRefresh();
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -31,7 +31,7 @@ export function GenerateSyncButton(): React.JSX.Element {
       }
       setMessage('Generating… this refreshes shortly.');
       // The worker writes the row asynchronously; give it a moment, then refresh.
-      setTimeout(() => startTransition(() => router.refresh()), 4000);
+      setTimeout(() => startTransition(() => refresh()), 4000);
     } catch (err) {
       setIsError(true);
       setMessage(err instanceof Error ? err.message : 'Could not start the sync.');

@@ -1,11 +1,13 @@
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { CalendarClock, FileText, Sunrise } from 'lucide-react';
 
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader } from '@/components/ui/Card';
-import { easternDateString, getDailySync } from '@/lib/data/daily-sync';
+import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/lib/auth';
+import type { TodayYesterdaySyncs } from '@/lib/data/daily-sync';
 import { todayEastern } from '@/lib/format';
-import { getSessionUser } from '@/lib/session-user';
 import { TYPE } from '@/lib/typography';
 import type { DailySyncBrief, DailySyncContent, DailySyncMeeting } from '@gracie/shared';
 
@@ -37,7 +39,7 @@ function TileLink({
 }): React.JSX.Element {
   return (
     <Link
-      href={href}
+      to={href}
       className="shrink-0"
       style={{ ...TYPE.secondary, color: 'var(--color-blue-700)' }}
     >
@@ -60,7 +62,7 @@ function DailySyncBanner({
       : 'Today’s briefing generates around 6:00 AM Eastern.';
 
   return (
-    <Link href="/daily-sync" className="block rounded-lg transition-opacity hover:opacity-90">
+    <Link to="/daily-sync" className="block rounded-lg transition-opacity hover:opacity-90">
       <Card>
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-start gap-3">
@@ -111,7 +113,7 @@ function TodayMeetingsTile({
                 style={{ borderColor: 'var(--border-subtle)' }}
               >
                 <Link
-                  href={`/meetings/${m.meetingId}`}
+                  to={`/meetings/${m.meetingId}`}
                   className="flex items-center justify-between gap-3 py-2 hover:underline"
                 >
                   <span className="flex min-w-0 flex-col">
@@ -172,7 +174,7 @@ function PreMeetingBriefsTile({
               style={{ borderColor: 'var(--border-subtle)' }}
             >
               <Link
-                href={`/meetings/${b.meetingId}`}
+                to={`/meetings/${b.meetingId}`}
                 className="flex flex-col gap-0.5 py-2 hover:underline"
               >
                 <span style={TYPE.bodyStrong} className="truncate">
@@ -206,19 +208,23 @@ function PreMeetingBriefsTile({
  *   beside the chat — the page header is dropped (the chat owns the landing). The
  *   home page bounds this rail's height and lets it scroll on its own.
  */
-export async function CommandCenter({
+export function CommandCenter({
   variant = 'grid',
 }: {
   readonly variant?: 'grid' | 'rail';
-}): Promise<React.JSX.Element> {
-  // Both sources are loaded best-effort: one read blip must never turn the landing
-  // page into a 500. A failed source degrades to its own tile's empty state.
-  const [sync, viewer] = await Promise.all([
-    getDailySync(easternDateString(new Date())).catch(() => null),
-    getSessionUser().catch(() => null),
-  ]);
+}): React.JSX.Element | null {
+  const { user: viewer } = useAuth();
+  // undefined = loading. Best-effort: a read blip degrades to the tiles' empty
+  // states, never an error page.
+  const [content, setContent] = useState<DailySyncContent | null | undefined>(undefined);
+  useEffect(() => {
+    apiClient
+      .get<TodayYesterdaySyncs>('/api/daily-sync')
+      .then((syncs) => setContent(syncs.today?.content ?? null))
+      .catch(() => setContent(null));
+  }, []);
+  if (content === undefined) return null;
 
-  const content = sync?.content ?? null;
   const meetings = content?.todayMeetings ?? [];
   const briefs = content?.briefs ?? [];
 
@@ -230,12 +236,12 @@ export async function CommandCenter({
         <header className="flex flex-col gap-1">
           <h1 style={TYPE.pageTitle}>Daily Command Center</h1>
           <p style={{ ...TYPE.secondary, color: 'var(--text-secondary)' }}>
-            {todayEastern(viewer?.timezone)}
+            {todayEastern(viewer.timezone)}
           </p>
         </header>
       )}
       <div className={rail ? 'grid grid-cols-1 gap-4' : 'grid grid-cols-1 gap-6 lg:grid-cols-2'}>
-        <TodayMeetingsTile meetings={meetings} timeZone={viewer?.timezone} />
+        <TodayMeetingsTile meetings={meetings} timeZone={viewer.timezone} />
         <PreMeetingBriefsTile briefs={briefs} />
       </div>
     </div>

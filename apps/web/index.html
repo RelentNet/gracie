@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Correct mobile scaling: the responsive shell sizes to the device viewport. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Grace &amp; Associates — internal meeting-intelligence platform."
+    />
+    <title>GA App</title>
+    <!--
+      No-flash theme init. Runs before first paint: applies the saved theme
+      (localStorage) or the OS preference so `data-theme` is already on <html> when
+      the CSS resolves — no light→dark flip on load. The in-app toggle (next to the
+      notification bell) owns the value afterwards.
+    -->
+    <script>
+      (function () {
+        try {
+          var d = document.documentElement,
+            t = localStorage.getItem('theme');
+          if (t !== 'light' && t !== 'dark') {
+            t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          d.setAttribute('data-theme', t);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <!-- `overflow-x-hidden` is the global guard against horizontal body scroll; `min-w-0`
+       lets flex descendants shrink so wide content scrolls inside its own container. -->
+  <body class="min-w-0 overflow-x-hidden">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

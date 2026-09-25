@@ -1,12 +1,12 @@
 # 03 — Project Structure
 
-> Monorepo layout (pnpm workspaces), where shared contracts live, and how Figma's component list maps into the Next.js app.
+> Monorepo layout (pnpm workspaces), where shared contracts live, and how Figma's component list maps into the web app.
 
 ---
 
 ## 1. Monorepo rationale
 
-A single repo with **pnpm workspaces** holds the Next.js app, the Fastify worker, and shared packages. This lets `apps/web` and `apps/worker` import the **same** types, DB client, and AI-provider interface without publishing npm packages. One install, one type-check, one source of truth for contracts.
+A single repo with **pnpm workspaces** holds the web app, the Fastify worker, and shared packages. This lets `apps/web` and `apps/worker` import the **same** types, DB client, and AI-provider interface without publishing npm packages. One install, one type-check, one source of truth for contracts.
 
 **Toolchain (verified):** Node 24, pnpm 10.33. Use `pnpm` for all workspace commands.
 
@@ -17,7 +17,7 @@ A single repo with **pnpm workspaces** holds the Next.js app, the Fastify worker
 ```
 gracie/
 ├── apps/
-│   ├── web/                  # Next.js (App Router) — UI + light API routes
+│   ├── web/                  # Vite React SPA + Hono server — UI + light API routes
 │   └── worker/               # Fastify + BullMQ — long-running pipeline jobs
 ├── packages/
 │   ├── shared/               # Types, AI-provider interface, constants, zod schemas
@@ -34,13 +34,21 @@ gracie/
 
 ---
 
-## 3. `apps/web` — Next.js frontend + light API
+## 3. `apps/web` — React SPA + light API
+
+Folders under `app/` keep the old Next.js layout, so a page or endpoint lives where it always did:
+
+- **Pages** (`page.tsx`, `layout.tsx`) are plain client components. The URL → page table is `src/main.tsx` (React Router); a new page is a new folder **plus one line there**. Route params come from `useParams()`, navigation from `react-router`, and `useRefresh()` (lib/refresh.ts) replaces `router.refresh()`.
+- **Endpoints** (`route.ts`) are mounted by `server/routes.ts` from their folder path, exactly as Next did (`[id]` → `:id`, `(group)` dropped, static beats dynamic, wrong method → 405). They still import `NextResponse`/`NextRequest` from `next/server`, which tsconfig maps to the small shim in `server/next-compat.ts`.
+- **Signed-in data** the old root layout loaded on the server comes from `GET /api/bootstrap` (user + firm-wide settings); a 401 there sends the SPA to /login.
+- **Dev:** `pnpm --filter web dev` runs Vite on :3000 and the server on :3002 (`API_PORT`; the worker keeps :3001), with Vite proxying `/api`, `/sign-in`, `/sign-out`, `/callback` and `/roadmap`. **Prod:** `build` writes `dist/`; `start` runs one server on :3000 that serves both.
 
 ```
 apps/web/
 ├── app/
 │   ├── (auth)/
 │   │   ├── login/page.tsx                 # Module 10 — Login
+│   │   ├── sign-in/ sign-out/ route.ts    # Logto redirects (server)
 │   │   └── callback/route.ts              # Logto callback handler
 │   ├── (app)/                             # authenticated shell (sidebar layout)
 │   │   ├── layout.tsx                     # Sidebar + role-based nav filtering
@@ -93,8 +101,14 @@ apps/web/
 ├── styles/
 │   ├── theme.css                         # color tokens, base styles
 │   └── fonts.css                         # IBM Plex Sans & Mono
-├── public/
-├── next.config.ts
+├── server/
+│   ├── index.ts                          # Hono: API + auth + serves dist/ (SPA fallback)
+│   ├── routes.ts                         # mounts every app/**/route.ts
+│   ├── next-compat.ts                    # `next/server` shim for route handlers
+│   └── dev.ts                            # dev entry (listens on API_PORT)
+├── src/main.tsx                          # SPA entry + route table + bootstrap gate
+├── index.html
+├── vite.config.ts
 └── package.json
 ```
 

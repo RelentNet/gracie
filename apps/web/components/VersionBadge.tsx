@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { Link, useLocation } from 'react-router';
 import { Sparkles } from 'lucide-react';
 
 import { CURRENT_RELEASE } from '@/lib/changelog';
@@ -35,7 +34,7 @@ function writeSeen(version: string): void {
  * record.
  */
 export function VersionBadge(): React.JSX.Element {
-  const pathname = usePathname();
+  const { pathname } = useLocation();
   const { version, stage } = CURRENT_RELEASE;
   // Start "seen" so SSR and first paint match; the effect reveals the dot if needed.
   const [unseen, setUnseen] = useState(false);
@@ -52,7 +51,7 @@ export function VersionBadge(): React.JSX.Element {
   const label = `v${version} · ${stage}`;
   return (
     <Link
-      href="/whats-new"
+      to="/whats-new"
       title={unseen ? `${label} — see what’s new` : label}
       aria-label={unseen ? `${label}, new updates` : `${label}, what’s new`}
       aria-current={pathname === '/whats-new' ? 'page' : undefined}

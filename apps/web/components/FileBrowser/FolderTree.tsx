@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router';
 import {
   BookOpen,
   ChevronDown,
@@ -254,7 +254,7 @@ function FolderRow({
 
       {node.href !== undefined ? (
         <Link
-          href={node.href}
+          to={node.href}
           className={rowClass}
           style={{ color: 'var(--text-primary)', ...TYPE.body }}
         >

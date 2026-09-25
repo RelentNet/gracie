@@ -10,7 +10,7 @@
  * meeting — it replaces prior output, it doesn't duplicate).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router';
 import { RefreshCw, RotateCw } from 'lucide-react';
 
 import { Badge } from '@/components/ui/Badge';
@@ -283,7 +283,7 @@ export function PipelineErrorsPanel(): React.JSX.Element {
                     <Td>
                       {r.meetingId !== null ? (
                         <Link
-                          href={`/meetings/${r.meetingId}`}
+                          to={`/meetings/${r.meetingId}`}
                           style={{ ...TYPE.body, color: 'var(--text-link, var(--text-primary))', textDecoration: 'underline' }}
                         >
                           {r.title ?? 'Untitled meeting'}

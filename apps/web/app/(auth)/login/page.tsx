@@ -1,5 +1,3 @@
-import Link from 'next/link';
-
 import { TYPE } from '@/lib/typography';
 
 /**
@@ -22,10 +20,9 @@ export default function LoginPage(): React.JSX.Element {
           Grace &amp; Associates internal platform. Sign in with your Microsoft account to continue.
         </p>
         {/* Initiates Logto → Microsoft sign-in (no-op redirect to the app until
-            Logto is configured). prefetch disabled: it is a route handler. */}
-        <Link
+            Logto is configured). A plain <a>: /sign-in is a server route. */}
+        <a
           href="/sign-in"
-          prefetch={false}
           className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5"
           style={{
             backgroundColor: 'var(--color-blue-500)',
@@ -35,7 +32,7 @@ export default function LoginPage(): React.JSX.Element {
           }}
         >
           Sign in with Microsoft
-        </Link>
+        </a>
       </div>
     </main>
   );

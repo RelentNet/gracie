@@ -1,9 +1,7 @@
-import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
+import { getContext } from 'hono/context-storage';
+import { setCookie } from 'hono/cookie';
 
-import { signIn } from '@logto/next/server-actions';
-
-import { baseUrl, isLogtoConfigured, logtoConfig } from '@/lib/logto';
+import { baseUrl, isLogtoConfigured, logtoConfig, signInUrl } from '@/lib/logto';
 import { RETURN_TO_COOKIE, safeReturnPath } from '@/lib/return-path';
 
 /**
@@ -17,11 +15,12 @@ import { RETURN_TO_COOKIE, safeReturnPath } from '@/lib/return-path';
  */
 export async function GET(request: Request): Promise<Response> {
   if (!isLogtoConfigured()) {
-    return NextResponse.redirect(new URL('/home', request.url));
+    return Response.redirect(new URL('/home', request.url), 307);
   }
+
   const returnTo = safeReturnPath(new URL(request.url).searchParams.get('returnTo'));
   if (returnTo !== null) {
-    (await cookies()).set(RETURN_TO_COOKIE, returnTo, {
+    setCookie(getContext(), RETURN_TO_COOKIE, returnTo, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
@@ -29,7 +28,6 @@ export async function GET(request: Request): Promise<Response> {
       maxAge: 600,
     });
   }
-  await signIn(logtoConfig, { redirectUri: `${baseUrl}/callback` });
-  // signIn() performs the redirect; this is unreachable but satisfies the type.
-  return NextResponse.redirect(new URL('/login', request.url));
+
+  return Response.redirect(await signInUrl(logtoConfig, `${baseUrl}/callback`), 307);
 }

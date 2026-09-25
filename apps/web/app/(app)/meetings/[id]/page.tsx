@@ -1,8 +1,10 @@
+import { useEffect, useState } from 'react';
 import { ArrowLeft, CalendarClock, CheckSquare, FileText, ScrollText, Video } from 'lucide-react';
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { Link, useParams } from 'react-router';
 
-import type { Document, MasterRecordEntry, Meeting, Role, Task } from '@gracie/shared';
+import type { Document, MasterRecordEntry, Meeting, Task } from '@gracie/shared';
+
+import NotFound from '@/app/not-found';
 
 import { FileList } from '@/components/FileBrowser/FileList';
 import { LiveTranscript } from '@/components/meetings/LiveTranscript';
@@ -12,38 +14,20 @@ import { StateChip } from '@/components/meetings/StateChip';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { PageContainer } from '@/components/ui/PageContainer';
-import { EmptyState } from '@/components/ui/StateViews';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
+import { useAuth } from '@/lib/auth';
 import { taskStatusLabel } from '@/lib/client-display';
-import { getClient } from '@/lib/data/clients';
-import { getClientMeetings } from '@/lib/data/client-detail';
-import { filterVisibleDocuments, filterVisibleFolders, listFolders } from '@/lib/data/documents';
-import {
-  getLatestPipelineRun,
-  getMeetingById,
-  getMeetingDocuments,
-  getMeetingMasterRecord,
-  getMeetingMedia,
-  getMeetingStills,
-  getMeetingTasks,
-  resolveMeetingPlayback,
-  type MeetingPlayback,
-  type MeetingStill,
-} from '@/lib/data/meeting-occurrence';
+import type { MeetingPipelineRun, MeetingPlayback, MeetingStill } from '@/lib/data/meeting-occurrence';
 import { formatEasternDate, formatEasternDateTime } from '@/lib/format';
-import {
-  deriveMeetingFleetState,
-  deriveOccurrenceState,
-  selectPriorMeetings,
-} from '@/lib/meeting-occurrence';
+import { deriveMeetingFleetState, deriveOccurrenceState } from '@/lib/meeting-occurrence';
 import { describePipelineState } from '@/lib/pipeline-reason';
-import { getCurrentUser } from '@/lib/server-auth';
 import { TYPE } from '@/lib/typography';
 
 /** One prior-meeting link (the "last 3 summaries" cockpit). */
 function PriorMeetingLink({ meeting }: { readonly meeting: Meeting }): React.JSX.Element {
   return (
     <Link
-      href={`/meetings/${meeting.id}`}
+      to={`/meetings/${meeting.id}`}
       className="flex items-center justify-between gap-3 rounded-lg border p-3 hover:underline"
       style={{ borderColor: 'var(--border-subtle)' }}
     >
@@ -254,23 +238,28 @@ function RecordingCard({
   );
 }
 
-/** Content for a meeting that has ended / been recorded. */
-async function EndedView({ meeting, role }: { readonly meeting: Meeting; readonly role: Role }): Promise<React.JSX.Element> {
-  const [rawDocs, allFolders, tasks, masterRecord, run, media, stills] = await Promise.all([
-    getMeetingDocuments(meeting.id),
-    listFolders(),
-    getMeetingTasks(meeting.id),
-    getMeetingMasterRecord(meeting.id),
-    getLatestPipelineRun(meeting.id),
-    getMeetingMedia(meeting.id),
-    getMeetingStills(meeting.id, role),
-  ]);
+/** GET /api/meetings/:id — see that route for what each part holds and how it's filtered. */
+interface EndedData {
+  readonly documents: readonly Document[];
+  readonly tasks: readonly Task[];
+  readonly masterRecord: readonly MasterRecordEntry[];
+  readonly run: MeetingPipelineRun | null;
+  readonly stills: readonly MeetingStill[];
+  readonly playback: MeetingPlayback | null;
+}
+interface OccurrenceResponse {
+  readonly meeting: Meeting;
+  readonly client: { readonly id: string; readonly name: string } | null;
+  readonly ended: EndedData | null;
+  readonly prior: readonly Meeting[];
+}
 
-  // ACCESS CONTROL: same rule as the Documents area — hide restricted folders/docs
-  // (e.g. the admin-only Transcripts folder) via the shared resolver before anything
-  // reaches a non-admin (docs/plan §4.4, D14).
-  const visibleFolders = filterVisibleFolders(allFolders, role);
-  const documents = filterVisibleDocuments(rawDocs, visibleFolders, role);
+/**
+ * Content for a meeting that has ended / been recorded. Documents arrive already
+ * filtered by the Documents-area folder ACL for the caller's role (server-side).
+ */
+function EndedView({ meeting, ended }: { readonly meeting: Meeting; readonly ended: EndedData }): React.JSX.Element {
+  const { documents, tasks, masterRecord, run, stills, playback } = ended;
 
   const fleetState = deriveMeetingFleetState({
     hasRun: run !== null,
@@ -286,19 +275,13 @@ async function EndedView({ meeting, role }: { readonly meeting: Meeting; readonl
   const needsClientLink = meeting.clientId === null && documents.length === 0;
   const linkAction = needsClientLink ? (
     <Link
-      href="/calendar"
+      to="/calendar"
       className="inline-flex w-fit items-center gap-1"
       style={{ ...TYPE.label, color: 'var(--color-blue-600)' }}
     >
       Link a client on the Calendar →
     </Link>
   ) : undefined;
-
-  // Assemble the player on view: a FRESH Recall video URL (streamed directly, never
-  // stored) + transcript segments (our durable copy, else live-pull-and-cache). The
-  // page is already authenticated-staff gated; the transcript's folder ACL is enforced
-  // inside resolveMeetingPlayback.
-  const playback = hasRecording ? await resolveMeetingPlayback(meeting, media, role) : null;
 
   return (
     <>
@@ -312,15 +295,15 @@ async function EndedView({ meeting, role }: { readonly meeting: Meeting; readonl
 }
 
 /** Content for an upcoming or in-session meeting (prep material + a live indicator). */
-async function PrepView({
+function PrepView({
   meeting,
   inSession,
+  prior,
 }: {
   readonly meeting: Meeting;
   readonly inSession: boolean;
-}): Promise<React.JSX.Element> {
-  const clientMeetings = meeting.clientId !== null ? await getClientMeetings(meeting.clientId) : [];
-  const prior = selectPriorMeetings(clientMeetings, meeting.id, meeting.dateTime, 3);
+  readonly prior: readonly Meeting[];
+}): React.JSX.Element {
 
   return (
     <>
@@ -358,17 +341,33 @@ async function PrepView({
  * Documents-area rules. Later phases (live status B, video C, live transcript D,
  * live video E) are deferred.
  */
-export default async function MeetingOccurrencePage({
-  params,
-}: {
-  readonly params: Promise<{ id: string }>;
-}): Promise<React.JSX.Element> {
-  const { id } = await params;
-  const [meeting, user] = await Promise.all([getMeetingById(id), getCurrentUser()]);
-  if (meeting === null) notFound();
+export default function MeetingOccurrencePage(): React.JSX.Element {
+  const { id } = useParams() as { id: string };
+  const { user } = useAuth();
+  const [data, setData] = useState<OccurrenceResponse | null>(null);
+  const [error, setError] = useState<{ readonly status: number | null; readonly message: string } | null>(null);
+  useEffect(() => {
+    setData(null);
+    setError(null);
+    fetch(`/api/meetings/${encodeURIComponent(id)}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+          setError({ status: res.status, message: body?.error?.message ?? `Request failed: ${res.status}` });
+          return;
+        }
+        setData((await res.json()) as OccurrenceResponse);
+      })
+      .catch((err: unknown) =>
+        setError({ status: null, message: err instanceof Error ? err.message : 'Could not load the meeting.' }),
+      );
+  }, [id]);
+  if (error?.status === 404) return <NotFound />;
+  if (error !== null) return <ErrorState title="Could not load the meeting" description={error.message} />;
+  if (data === null) return <LoadingState />;
 
+  const { meeting, client, ended, prior } = data;
   const state = deriveOccurrenceState(meeting);
-  const client = meeting.clientId !== null ? await getClient(meeting.clientId) : null;
 
   const who = meeting.isInternal ? 'Internal' : (client?.name ?? 'Unassigned');
   const durationLabel =
@@ -377,7 +376,7 @@ export default async function MeetingOccurrencePage({
   return (
     <PageContainer className="flex flex-col gap-6">
       <Link
-        href="/calendar"
+        to="/calendar"
         className="inline-flex w-fit items-center gap-1"
         style={{ ...TYPE.label, color: 'var(--color-blue-600)' }}
       >
@@ -398,7 +397,7 @@ export default async function MeetingOccurrencePage({
           {durationLabel}
           {' · '}
           {client !== null ? (
-            <Link href={`/clients/${client.id}`} style={{ color: 'var(--color-blue-600)' }}>
+            <Link to={`/clients/${client.id}`} style={{ color: 'var(--color-blue-600)' }}>
               {who}
             </Link>
           ) : (
@@ -418,10 +417,12 @@ export default async function MeetingOccurrencePage({
         ) : null}
       </header>
 
-      {state === 'ended' ? (
-        <EndedView meeting={meeting} role={user.role} />
+      {/* The server decided ended vs not when it built the response; use its answer
+          so a meeting that ends while the page is open never renders half-loaded. */}
+      {ended !== null ? (
+        <EndedView meeting={meeting} ended={ended} />
       ) : (
-        <PrepView meeting={meeting} inSession={state === 'in_session'} />
+        <PrepView meeting={meeting} inSession={state === 'in_session'} prior={prior} />
       )}
     </PageContainer>
   );

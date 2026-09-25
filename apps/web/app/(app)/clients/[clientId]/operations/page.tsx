@@ -1,6 +1,7 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router';
 import { FileText } from 'lucide-react';
 import type { Meeting, Task } from '@gracie/shared';
 
@@ -51,12 +52,8 @@ const PIPELINE_STATUS_COLOR: Readonly<Record<PipelineStatus, { bg: string; fg: s
   cancelled: { bg: 'var(--color-slate-100)', fg: 'var(--color-slate-600)' },
 };
 
-export default function ClientOperationsPage({
-  params,
-}: {
-  readonly params: Promise<{ clientId: string }>;
-}): React.JSX.Element {
-  const { clientId } = use(params);
+export default function ClientOperationsPage(): React.JSX.Element {
+  const { clientId } = useParams() as { clientId: string };
   const { canEdit } = useAuth();
 
   const [data, setData] = useState<OperationsResponse | null>(null);

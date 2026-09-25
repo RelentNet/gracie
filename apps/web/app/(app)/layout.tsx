@@ -1,5 +1,4 @@
-import { redirect } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { Outlet } from 'react-router';
 
 import { NotificationBell } from '@/components/NotificationBell';
 import { SessionWatcher } from '@/components/SessionWatcher';
@@ -9,26 +8,14 @@ import { VersionBadge } from '@/components/VersionBadge';
 import { TimezoneAutoDefault } from '@/components/TimezoneAutoDefault';
 import { MobileNavToggle } from '@/components/ui/MobileNavToggle';
 import { NavCollapseProvider } from '@/components/ui/nav-collapse';
-import { isLogtoConfigured, logtoConfig, safeGetLogtoContext } from '@/lib/logto';
 
 /**
  * Authenticated app shell (docs/03 §3). Sidebar + main content region. Role
  * filtering for nav lives in the Sidebar; the same role data gates page-level
- * content. When Logto is configured, unauthenticated visitors are redirected to
- * /login here (server-side guard). Until then the scaffold renders the mock user.
+ * content. Signed-out visitors never get here: the app root (src/main.tsx) sends
+ * them to /login when the bootstrap request is refused.
  */
-export default async function AppLayout({
-  children,
-}: {
-  readonly children: ReactNode;
-}): Promise<React.JSX.Element> {
-  if (isLogtoConfigured()) {
-    // Never throws: an expired/invalid session resolves to not-authenticated → a
-    // clean redirect to /login (re-auth), never a full-page server exception.
-    const { isAuthenticated } = await safeGetLogtoContext(logtoConfig);
-    if (!isAuthenticated) redirect('/login');
-  }
-
+export default function AppLayout(): React.JSX.Element {
   return (
     // Fixed-height shell: `<main>` is the single vertical scroll container so the
     // header (and sidebar) stay put, and `overflow-hidden` guarantees no
@@ -39,8 +26,9 @@ export default async function AppLayout({
           load if unset; renders nothing. */}
       <TimezoneAutoDefault />
       {/* Detects a stale sign-in and prompts a clean re-login instead of letting
-          actions silently fail. Only meaningful with real (Logto) auth. */}
-      {isLogtoConfigured() ? <SessionWatcher /> : null}
+          actions silently fail. Without Logto its probe always succeeds, so it
+          never prompts. */}
+      <SessionWatcher />
       <div className="flex h-dvh overflow-hidden">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -58,7 +46,7 @@ export default async function AppLayout({
           {/* Sole owner of page padding (PageContainer adds none, so no doubling).
               Top is kept tighter than the sides/bottom on purpose. */}
           <main className="min-w-0 flex-1 overflow-y-auto px-4 pb-6 pt-4 sm:px-6 md:px-8 md:pb-8 md:pt-6">
-            {children}
+            <Outlet />
           </main>
         </div>
       </div>

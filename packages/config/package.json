@@ -7,8 +7,6 @@
   "exports": {
     "./eslint": "./eslint.base.mjs",
     "./tailwind": "./tailwind.preset.mjs",
-    "./tsconfig/base.json": "./tsconfig/base.json",
-    "./tsconfig/next.json": "./tsconfig/next.json",
     "./tsconfig/node.json": "./tsconfig/node.json"
   },
   "files": [

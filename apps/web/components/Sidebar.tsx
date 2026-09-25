@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { Link, useLocation } from 'react-router';
 import { ChevronLeft, ChevronRight, LogOut, UserCog, X } from 'lucide-react';
 
 import { ROLE_BADGES } from '@gracie/shared';
@@ -31,7 +30,7 @@ import { useNavCollapse } from '@/components/ui/nav-collapse';
  */
 export function Sidebar(): React.JSX.Element {
   const { user, can, taskBoardVisibleToAll, brandLogoKey, brandLogoDarkKey } = useAuth();
-  const pathname = usePathname();
+  const { pathname } = useLocation();
   const { collapsed, toggleCollapsed, mobileOpen, closeMobile } = useNavCollapse();
 
   // Task Board is admin-only until the operator reveals it to everyone (Settings →
@@ -113,7 +112,7 @@ export function Sidebar(): React.JSX.Element {
         <div className="flex min-h-0 flex-1 flex-col gap-1">
           <div className="mb-3 flex shrink-0 items-center gap-2 [@media(max-height:860px)]:mb-1">
             <Link
-              href="/home"
+              to="/home"
               aria-label="GA App — home"
               className={`flex-1 px-3 py-2 ${collapsed ? 'md:flex md:justify-center md:px-0' : ''}`}
               style={{ ...TYPE.sectionHeader, color: 'var(--text-primary)' }}
@@ -201,7 +200,7 @@ export function Sidebar(): React.JSX.Element {
                       <li key={item.href}>
                         <Link
                           // Support records which page the user came from.
-                          href={
+                          to={
                             item.href === '/support' && pathname !== '/support'
                               ? `/support?from=${encodeURIComponent(pathname)}`
                               : item.href
@@ -209,11 +208,11 @@ export function Sidebar(): React.JSX.Element {
                           // Native tooltip surfaces the label in the collapsed icon rail.
                           title={collapsed ? item.label : undefined}
                           // External targets (e.g. a raw-HTML route handler) open in a
-                          // new tab and skip prefetch/RSC navigation, which would break
+                          // new tab as a full document load — client-side routing would break
                           // on a non-page route.
                           target={item.external ? '_blank' : undefined}
                           rel={item.external ? 'noopener noreferrer' : undefined}
-                          prefetch={item.external ? false : undefined}
+                          reloadDocument={item.external}
                           aria-current={isActive ? 'page' : undefined}
                           className={`nav-item flex items-center gap-3 rounded-lg px-3 py-2 transition-colors [@media(max-height:860px)]:py-1.5 ${linkJustify}`}
                           style={{
@@ -289,7 +288,7 @@ export function Sidebar(): React.JSX.Element {
           {/* Per-user preferences (any role). Kept in the account card rather than
               the role-gated nav groups so every signed-in user can reach it. */}
           <Link
-            href="/my-settings"
+            to="/my-settings"
             title={collapsed ? 'My Settings' : undefined}
             aria-current={pathname === '/my-settings' ? 'page' : undefined}
             className={`flex items-center gap-2 rounded-lg px-3 py-2 transition-colors [@media(max-height:860px)]:py-1 ${linkJustify}`}

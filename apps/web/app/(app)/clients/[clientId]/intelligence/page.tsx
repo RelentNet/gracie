@@ -1,6 +1,7 @@
 'use client';
 
-import { use, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useParams } from 'react-router';
 import { Globe, Sparkles } from 'lucide-react';
 
 import type { Client } from '@gracie/shared';
@@ -27,12 +28,8 @@ interface OverviewResponse {
   readonly client: Client;
 }
 
-export default function ClientIntelligencePage({
-  params,
-}: {
-  readonly params: Promise<{ clientId: string }>;
-}): React.JSX.Element {
-  const { clientId } = use(params);
+export default function ClientIntelligencePage(): React.JSX.Element {
+  const { clientId } = useParams() as { clientId: string };
 
   const [client, setClient] = useState<Client | null>(null);
   const [clientError, setClientError] = useState<string | null>(null);

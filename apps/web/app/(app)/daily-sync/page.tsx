@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { AlertTriangle, CalendarClock, FileText } from 'lucide-react';
 
 import type { DailySyncContent, DailySyncMeeting } from '@gracie/shared';
@@ -6,11 +7,12 @@ import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Markdown } from '@/components/ui/Markdown';
 import { PageContainer } from '@/components/ui/PageContainer';
-import { EmptyState } from '@/components/ui/StateViews';
-import { easternDateString, getDailySync, type DailySyncRecord } from '@/lib/data/daily-sync';
-import { getHealthScoresVisible } from '@/lib/data/scoring-settings';
+import { EmptyState, ErrorState, LoadingState } from '@/components/ui/StateViews';
+import { apiClient } from '@/lib/api-client';
+import { useAuth } from '@/lib/auth';
+import type { DailySyncRecord, TodayYesterdaySyncs } from '@/lib/data/daily-sync';
 import { formatEasternDate, formatEasternDateTime } from '@/lib/format';
-import { getCurrentUser } from '@/lib/server-auth';
+import { useRefresh } from '@/lib/refresh';
 import { TYPE } from '@/lib/typography';
 
 import { GenerateSyncButton } from './GenerateSyncButton';
@@ -218,13 +220,21 @@ function DailySyncView({
 }
 
 /** Module 8 — Daily Sync (docs/08 §M8). Today's morning briefing over `daily_syncs`. */
-export default async function DailySyncPage(): Promise<React.JSX.Element> {
-  const todayDate = easternDateString(new Date());
-  const [today, user, showHealth] = await Promise.all([
-    getDailySync(todayDate),
-    getCurrentUser(),
-    getHealthScoresVisible().catch(() => true), // a read blip must never break the page
-  ]);
+export default function DailySyncPage(): React.JSX.Element {
+  const { user, healthScoresVisible: showHealth } = useAuth();
+  // `version` bumps on refresh() — e.g. after "Generate now" — and reloads the digest.
+  const { version } = useRefresh();
+  const [syncs, setSyncs] = useState<TodayYesterdaySyncs | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    apiClient
+      .get<TodayYesterdaySyncs>('/api/daily-sync')
+      .then(setSyncs)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load the Daily Sync.'));
+  }, [version]);
+  if (error !== null && syncs === null) return <ErrorState title="Could not load the Daily Sync" description={error} />;
+  if (syncs === null) return <LoadingState />;
+  const { todayDate, today } = syncs;
 
   return (
     <PageContainer className="flex flex-col gap-6">
