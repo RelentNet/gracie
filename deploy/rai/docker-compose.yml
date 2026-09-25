@@ -9,6 +9,17 @@
 # Deploy + operate: see ./README.md. Setup is deploy/demo/setup.sh.
 name: hq
 
+# Shared by the app and the worker: same database, storage, queue and clock.
+x-app-env: &app-env
+  SUPABASE_URL: http://gateway
+  S3_ENDPOINT: http://minio:9000
+  S3_BUCKET: demo
+  S3_REGION: us-east-1
+  S3_FORCE_PATH_STYLE: 'true'
+  REDIS_URL: redis://redis:6379
+  APP_BASE_URL: http://10.200.200.44:3000
+  TZ: America/Chicago
+
 services:
   db:
     image: supabase/postgres:17.6.1.167
@@ -61,22 +72,38 @@ services:
     image: hq-web:latest
     pull_policy: never
     restart: unless-stopped
-    depends_on: [gateway, minio]
+    depends_on: [gateway, minio, redis]
     env_file: .env
     environment:
-      SUPABASE_URL: http://gateway
-      S3_ENDPOINT: http://minio:9000
-      S3_BUCKET: demo
-      S3_REGION: us-east-1
-      S3_FORCE_PATH_STYLE: 'true'
-      APP_BASE_URL: http://10.200.200.44:3000
+      <<: *app-env
       NEXT_PUBLIC_APP_URL: http://10.200.200.44:3000
       LOGTO_BASE_URL: http://10.200.200.44:3000
       LOGTO_ENDPOINT: http://10.200.200.44:3001
       # LOGTO_APP_ID / LOGTO_APP_SECRET / LOGTO_COOKIE_SECRET live in .env.
-      TZ: America/Chicago
     # LAN address only — not 0.0.0.0 (ufw would not filter a Docker-published port).
     ports: ['10.200.200.44:3000:3000']
+    networks: [internal]
+
+  # The pipeline: meeting documents, embeddings, daily sync, automations, crons.
+  # Not published — its Bull Board (/admin/queues) has no auth.
+  worker:
+    container_name: hq-worker
+    image: hq-worker:latest
+    pull_policy: never
+    restart: unless-stopped
+    depends_on: [gateway, minio, redis]
+    env_file: .env
+    environment:
+      <<: *app-env
+    networks: [internal]
+
+  # The worker's job queue (BullMQ). Append-only file so queued jobs survive a restart.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - ./data/redis:/data
     networks: [internal]
 
   # Sign-in (REL-291). Its own Postgres: identity data stays apart from app data,

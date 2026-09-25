@@ -23,7 +23,8 @@ git -c core.autocrlf=false archive --format=tar HEAD | ssh relentnet 'tar -x -C 
 # line endings, which break the scripts on the server.
 ssh relentnet 'cd /opt/hq && cp src/deploy/rai/docker-compose.yml src/deploy/rai/logto-connect.sh src/deploy/demo/gateway.conf src/deploy/demo/setup.sh .'
 docker build -f apps/web/Dockerfile -t hq-web:latest .
-docker save hq-web:latest | gzip | ssh relentnet 'gunzip | docker load'
+docker build -f apps/worker/Dockerfile -t hq-worker:latest .
+docker save hq-web:latest hq-worker:latest | gzip | ssh relentnet 'gunzip | docker load'
 ssh relentnet 'cd /opt/hq && bash setup.sh'
 ```
 
@@ -65,18 +66,22 @@ who reaches the app is the seeded admin.
    ```
    It applies on the next request — no need to sign in again.
 
-## Seed
+## Data
 
-```bash
-ssh relentnet 'cd /opt/hq && docker compose exec -e DEMO_SEED_TARGET=gateway web ./apps/web/node_modules/.bin/tsx packages/db/seed/demo-cbg.ts'
-```
+The instance starts empty (REL-292) — real meetings fill it. Do **not** run the demo
+seed (`demo-cbg.ts`) here; it wipes content tables. First-run checklist, in the app:
 
-Then set the AI key in the app (Settings → AI Provider → OpenRouter) and run
-`demo-embed.ts` the same way.
+1. **Settings → Company:** company description and internal email domains
+   (defaults: RelentNet / `relentnet.com`).
+2. **Settings → Company → Branding:** the RelentNet preset is the default.
+3. **Settings → AI Provider:** OpenRouter + model (or leave the `.env` key).
+4. **Settings → Meeting Bot:** the manual-join switch and bot settings, once a
+   capture path exists (Recall is optional; botless capture is REL-313/314).
 
 ## Update the app
 
 ```bash
 docker build -f apps/web/Dockerfile -t hq-web:latest .
-docker save hq-web:latest | gzip | ssh relentnet 'gunzip | docker load && cd /opt/hq && docker compose up -d web'
+docker build -f apps/worker/Dockerfile -t hq-worker:latest .
+docker save hq-web:latest hq-worker:latest | gzip | ssh relentnet 'gunzip | docker load && cd /opt/hq && docker compose up -d web worker'
 ```
