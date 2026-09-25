@@ -22,7 +22,7 @@
    │                                                                          │
    │  ┌─────────────┐  ┌───────────────┐  ┌────────────┐  ┌────────────────┐  │
    │  │ web          │  │ worker        │  │ redis      │  │ logto          │  │
-   │  │ Next.js      │─▶│ Fastify+BullMQ│  │ (BullMQ)   │  │ (identity,     │  │
+   │  │ Vite + Hono  │─▶│ Fastify+BullMQ│  │ (BullMQ)   │  │ (identity,     │  │
    │  │ (UI + API)   │◀─│ (pipeline)    │  │            │  │  self-hosted)  │  │
    │  └─────┬───────┘  └──────┬────────┘  └────────────┘  └────────────────┘  │
    │        │                 │                                                │
@@ -44,7 +44,7 @@
 
 | Container | Purpose | Notes |
 | --- | --- | --- |
-| `web` | Next.js (App Router) — UI + light/synchronous API routes | Public via Tunnel |
+| `web` | Vite React SPA + Hono server — UI + light/synchronous API routes | Public via Tunnel |
 | `worker` | Fastify + BullMQ — long-running pipeline jobs | Internal only |
 | `redis` | BullMQ backing store | Internal only |
 | `supabase` (stack) | Postgres + pgvector + GoTrue/PostgREST/Storage/Kong/Studio | **Self-hosted** (~8 containers); internal |
@@ -130,7 +130,7 @@ Embedding pipeline               Any new automation requested
 Browser
   │  Authorization: Bearer <Logto JWT>
   ▼
-Next.js / Fastify route
+web (Hono) / Fastify route
   ▼
 Auth middleware:
   1. verifyLogtoJWT(token) → { userId, role }   (401 if invalid)
@@ -182,7 +182,7 @@ No per-user tokens. "Calendar connected" = membership in the access group.
 
 ```
 Trigger (Recall webhook | manual upload | cron)
-  → Next.js API route validates + enqueues a BullMQ job (Redis)
+  → web API route validates + enqueues a BullMQ job (Redis)
   → returns 202 immediately
   ▼
 apps/worker (Fastify) BullMQ processor:
