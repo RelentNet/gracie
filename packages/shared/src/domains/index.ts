@@ -33,16 +33,26 @@ export const FREE_EMAIL_DOMAINS: ReadonlySet<string> = new Set([
   'zoho.com',
 ]);
 
-/** Fallback internal domain when `settings.internal_email_domains` is unset. */
-export const DEFAULT_INTERNAL_DOMAINS: readonly string[] = ['relentnet.com'];
+/**
+ * The deployment's own email domains — its internal-domain floor: always internal,
+ * and the fallback when `settings.internal_email_domains` is unset. Set per deployment
+ * with `INTERNAL_DOMAINS` (comma-separated; GA: graceandassociates.com, hq:
+ * relentnet.com), so a new tenant is configuration, not a code change. Empty when
+ * unset. Read on the server only; in a browser bundle there is no `process`.
+ */
+export const DEFAULT_INTERNAL_DOMAINS: readonly string[] = (
+  typeof process !== 'undefined' ? (process.env.INTERNAL_DOMAINS ?? '') : ''
+)
+  .split(',')
+  .map((d) => d.trim().toLowerCase())
+  .filter((d) => d !== '');
 
 /**
  * Fallback firm description (the AI's "who we are" layer) when
- * `settings.ga_company_description` is unset. Editable in Settings → Company; this is
- * only what a fresh instance says before anyone sets it.
+ * `settings.ga_company_description` is unset. Deliberately generic: each deployment
+ * describes itself in Settings → Company.
  */
-export const DEFAULT_COMPANY_DESCRIPTION =
-  'RelentNet — a two-person software studio (Brandon Harris and Daniel Velez). We design, build and host custom software for our clients, and prove it earns its place.';
+export const DEFAULT_COMPANY_DESCRIPTION = 'Our company.';
 
 /** Extract the lower-cased domain from an email address, or null. */
 export function emailDomain(email: string | null | undefined): string | null {

@@ -71,9 +71,11 @@ who reaches the app is the seeded admin.
 The instance starts empty (REL-292) — real meetings fill it. Do **not** run the demo
 seed (`demo-cbg.ts`) here; it wipes content tables. First-run checklist, in the app:
 
-1. **Settings → Company:** company description and internal email domains
-   (defaults: RelentNet / `relentnet.com`).
-2. **Settings → Company → Branding:** the RelentNet preset is the default.
+1. **Settings → Company:** RelentNet's company description and internal email
+   domains. The product defaults are neutral; hq's identity is its configuration.
+   `INTERNAL_DOMAINS=relentnet.com` (compose) is the floor that is always internal.
+2. **Settings → Company → Branding:** pick the **RelentNet** preset (the default is
+   the neutral Gracie look).
 3. **Settings → AI Provider:** OpenRouter + model (or leave the `.env` key).
 4. **Settings → Meeting Bot:** the manual-join switch and bot settings, once a
    capture path exists (Recall is optional; botless capture is REL-313/314).

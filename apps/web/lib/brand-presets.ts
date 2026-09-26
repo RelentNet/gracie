@@ -32,6 +32,39 @@ export interface BrandPreset {
 
 export const BRAND_PRESETS: readonly BrandPreset[] = [
   {
+    // The product's own look — theme.css's values, restated so switching back from
+    // another preset restores them. The default: a deployment picks its brand in
+    // Settings → Company → Branding (hq: relentnet), never by changing this.
+    id: 'gracie',
+    productName: 'Gracie',
+    tagline: 'Indigo and slate — the Gracie default',
+    swatch: '#4a5fd0',
+    light: {
+      '--brand': '#4a5fd0',
+      '--brand-ink': '#3a49b8',
+      '--brand-soft': 'rgba(74, 95, 208, 0.12)',
+      '--color-blue-500': '#4a5fd0',
+      '--color-blue-600': '#4257c9',
+      '--color-blue-700': '#3a49b8',
+      '--color-navy-900': '#0f172a',
+      '--color-navy-800': '#1e293b',
+      '--color-navy-700': '#1e293b',
+      '--bg-0': '#e7ebf7',
+    },
+    dark: {
+      '--brand': '#8296ff',
+      '--brand-ink': '#a3b3ff',
+      '--brand-soft': 'rgba(130, 150, 255, 0.16)',
+      '--color-blue-500': '#5567db',
+      '--color-blue-600': '#5468dc',
+      '--color-blue-700': '#a9b7ff',
+      '--color-navy-900': '#0f172a',
+      '--color-navy-800': '#263248',
+      '--color-navy-700': '#2b3a57',
+      '--bg-0': '#0b0f1d',
+    },
+  },
+  {
     // relentnet-brandkit/relentnet-tokens.css: black ground, gold accent, warm
     // neutrals. Light mode darkens the gold (#cbab45 is ~2:1 on white) to keep
     // text and links AA; dark mode uses the brand gold as-is.
@@ -186,7 +219,7 @@ export const BRAND_PRESETS: readonly BrandPreset[] = [
   },
 ];
 
-export const DEFAULT_BRAND_PRESET_ID = 'relentnet';
+export const DEFAULT_BRAND_PRESET_ID = 'gracie';
 
 /** Resolve a stored preset id to its preset; unknown/absent → the default. */
 export function resolveBrandPreset(id: string | null | undefined): BrandPreset {
